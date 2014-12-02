@@ -113,8 +113,17 @@ class JsonSerializable {
      * @param propertyName the property to set.
      * @param value, the value of the property.
      */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     public <T extends Object> void set(String propertyName, T value) {
-        if (value instanceof Number || value instanceof Boolean || value instanceof String ||
+        if (value == null) {
+            // Sets null.
+            this.propertyBag.put(propertyName, JSONObject.NULL);
+        } else if (value instanceof Collection) {
+            // Collection.
+            JSONArray jsonArray = new JSONArray();
+            this.internalSetCollection(propertyName, (Collection)value, jsonArray);
+            this.propertyBag.put(propertyName, jsonArray);
+        } else if (value instanceof Number || value instanceof Boolean || value instanceof String ||
                 value instanceof JSONObject) {
             // JSONObject, number (includes int, float, double etc), boolean, and string.
             this.propertyBag.put(propertyName, value);
@@ -138,46 +147,39 @@ class JsonSerializable {
 
     }
 
-    /**
-     * Sets the value of a property with a collection.
-     * 
-     * @param <T> the type of the objects in the collection.
-     * @param propertyName the property to set.
-     * @param collection the value of the property.
-     */
-    public <T> void set(String propertyName, Collection<T> collection) {
-        if (this.propertyBag == null) {
-            this.propertyBag = new JSONObject();
-        }
-
-        if (collection != null) {
-            JSONArray jsonArray = new JSONArray();
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private <T> void internalSetCollection(String propertyName, Collection<T> collection, JSONArray targetArray) {
             ObjectMapper mapper = null;
 
             for (T childValue : collection) {
-                if (childValue instanceof Number || childValue instanceof Boolean || childValue instanceof String ||
+                if (childValue == null) {
+                    // Sets null.
+                    targetArray.put(JSONObject.NULL);
+                } else if (childValue instanceof Collection) {
+                    // When T is also a Collection, use recursion.
+                    JSONArray childArray = new JSONArray();
+                    this.internalSetCollection(propertyName, (Collection) childValue, childArray);
+                    targetArray.put(childArray);
+                } else if (childValue instanceof Number || childValue instanceof Boolean || childValue instanceof String ||
                         childValue instanceof JSONObject) {
                     // JSONObject, Number (includes Int, Float, Double etc), Boolean, and String.
-                    jsonArray.put(childValue);
+                    targetArray.put(childValue);
                 } else if (childValue instanceof JsonSerializable) {
                     // JsonSerializable
                     JsonSerializable castedValue = (JsonSerializable)childValue;
                     castedValue.onSave();
-                    jsonArray.put(castedValue.propertyBag != null ? castedValue.propertyBag : new JSONObject());
+                    targetArray.put(castedValue.propertyBag != null ? castedValue.propertyBag : new JSONObject());
                 } else {
                     // POJO
                     if (mapper == null) mapper = new ObjectMapper();
                     try {
-                        jsonArray.put(new JSONObject(mapper.writeValueAsString(childValue)));
+                        targetArray.put(new JSONObject(mapper.writeValueAsString(childValue)));
                     } catch (IOException e) {
                         e.printStackTrace();
                         throw new IllegalArgumentException("Can't serialize the object into the json string", e);
                     }
                 }
             }
-
-            this.propertyBag.put(propertyName, jsonArray);
-        }
     }
 
     /**
@@ -397,18 +399,18 @@ class JsonSerializable {
      * @return the POJO.
      */
     public <T extends Object> T toObject(Class<T> c) {
-    	if (JsonSerializable.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-    			Number.class.isAssignableFrom(c) || Boolean.class.isAssignableFrom(c)) {
-    		throw new IllegalArgumentException("c can only be a POJO class or JSONObject");
-    	}
-    	if (JSONObject.class.isAssignableFrom(c)) {
-    		// JSONObject
-    		if (JSONObject.class != c) {
-    			throw new IllegalArgumentException("We support JSONObject but not its sub-classes.");
-    		}
-    		return c.cast(this.propertyBag);
-    	} else {
-    		// POJO
+        if (JsonSerializable.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
+                Number.class.isAssignableFrom(c) || Boolean.class.isAssignableFrom(c)) {
+            throw new IllegalArgumentException("c can only be a POJO class or JSONObject");
+        }
+        if (JSONObject.class.isAssignableFrom(c)) {
+            // JSONObject
+            if (JSONObject.class != c) {
+                throw new IllegalArgumentException("We support JSONObject but not its sub-classes.");
+            }
+            return c.cast(this.propertyBag);
+        } else {
+            // POJO
             if (!c.isMemberClass() || !Modifier.isStatic(c.getModifiers())) {
                 throw new IllegalArgumentException(
                         "c must be a member (not an anonymous or local) and static class.");
@@ -419,7 +421,7 @@ class JsonSerializable {
                 e.printStackTrace();
                 throw new IllegalStateException("Failed to get POJO.", e);
             }
-    	}
+        }
     }
 
     /**

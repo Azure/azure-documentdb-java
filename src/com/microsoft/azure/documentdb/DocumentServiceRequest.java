@@ -266,4 +266,14 @@ final class DocumentServiceRequest {
     public void setContinuation(String continuation) {
         this.continuation = continuation;
     }
+
+    private boolean isMedia = false;
+
+    public void setIsMedia(boolean isMedia) {
+        this.isMedia = isMedia;
+    }
+
+    public boolean getIsMedia() {
+        return this.isMedia;
+    }
 }

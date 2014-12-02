@@ -1200,6 +1200,7 @@ public final class DocumentClient {
                                                                        path,
                                                                        mediaStream,
                                                                        requestHeaders);
+        request.setIsMedia(true);
         return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
     }
 
@@ -1218,7 +1219,9 @@ public final class DocumentClient {
         
         String path = DocumentClient.joinPath(mediaLink, null);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Media, path, null);
-        return new MediaResponse(this.doRead(request));
+        request.setIsMedia(true);
+        return new MediaResponse(this.doRead(request),
+                                 this.connectionPolicy.getMediaReadMode() == MediaReadMode.Buffered);
     }
 
     /**
@@ -1246,7 +1249,9 @@ public final class DocumentClient {
                                                                        path,
                                                                        mediaStream,
                                                                        requestHeaders);
-        return new MediaResponse(this.doReplace(request));
+        request.setIsMedia(true);
+        return new MediaResponse(this.doReplace(request),
+                                 this.connectionPolicy.getMediaReadMode() == MediaReadMode.Buffered);
     }
 
     /**
@@ -1751,8 +1756,8 @@ public final class DocumentClient {
 
         Map<String, String> headers = new HashMap<String, String>();
 
-        if (options.getMaxItemCount() != null) {
-            headers.put(HttpConstants.HttpHeaders.PAGE_SIZE, options.getMaxItemCount().toString());
+        if (options.getPageSize() != null) {
+            headers.put(HttpConstants.HttpHeaders.PAGE_SIZE, options.getPageSize().toString());
         }
 
         if (options.getRequestContinuation() != null) {

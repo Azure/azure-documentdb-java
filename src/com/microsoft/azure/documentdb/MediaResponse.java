@@ -1,7 +1,9 @@
 package com.microsoft.azure.documentdb;
 
+import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.util.Map;
+
 
 /**
  * Response associated with retrieving attachment content.
@@ -10,8 +12,12 @@ public final class MediaResponse {
     private InputStream media = null;
     private Map<String, String> responseHeaders = null;
 
-    MediaResponse(DocumentServiceResponse response) {
+    MediaResponse(DocumentServiceResponse response, boolean willBuffer) {
         this.media = response.getContentStream();
+        if (willBuffer) {
+            this.media = new BufferedInputStream(this.media);
+        }
+
         this.responseHeaders = response.getResponseHeaders();
     }
 

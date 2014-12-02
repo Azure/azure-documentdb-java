@@ -31,6 +31,7 @@ import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.IndexType;
 import com.microsoft.azure.documentdb.IndexingMode;
 import com.microsoft.azure.documentdb.MediaOptions;
+import com.microsoft.azure.documentdb.MediaReadMode;
 import com.microsoft.azure.documentdb.Permission;
 import com.microsoft.azure.documentdb.PermissionMode;
 import com.microsoft.azure.documentdb.RequestOptions;
@@ -110,25 +111,38 @@ public final class GatewayTests {
     @Test
     public void testJsonSerialization() throws DocumentClientException {
         Document document = new Document();
+        document.set("prop0", null);
         document.set("prop1", "abc");
         Document childDocument = new Document("{'child1Prop1': 500}");
         document.set("child1", childDocument);
         document.set("child2", new JSONObject("{'child2Prop1': '800'}"));
 
         document.set("child3", new StaticPOJOForTest());
+        // Collection of numbers.
         Collection<Integer> collection1 = new ArrayList<Integer>();
         collection1.add(101);
         collection1.add(102);
         document.set("collection1", collection1);
+        // Collection of documents.
         Collection<Document> collection2 = new ArrayList<Document>();
         collection2.add(new Document("{'foo': 'bar'}"));
         document.set("collection2", collection2);
+        // Collection of POJO.
         Collection<StaticPOJOForTest> collection3 = new ArrayList<StaticPOJOForTest>();
         collection3.add(new StaticPOJOForTest());
         document.set("collection3", collection3);
+        // Collection of collections.
+        Collection<Collection<Collection<String>>> collection4 = new ArrayList<Collection<Collection<String>>>();
+        Collection<Collection<String>> collection5 = new ArrayList<Collection<String>>();
+        Collection<String> collection6 = new ArrayList<String>();
+        collection6.add("ABCD");
+        collection5.add(collection6);
+        collection4.add(collection5);
+        document.set("collection4", collection4);
 
         Document expectedDocument = new Document(
                 "{" +
+                "  'prop0': null," +
                 "  'prop1': 'abc'," +
                 "  'child1': {" +
                 "    'child1Prop1': 500" +
@@ -141,7 +155,8 @@ public final class GatewayTests {
                 "  }," +
                 "  'collection1': [101, 102]," +
                 "  'collection2': [{'foo': 'bar'}]," +
-                "  'collection3': [{'pojoProp': '456'}]" +
+                "  'collection3': [{'pojoProp': '456'}]," +
+                "  'collection4': [[['ABCD']]]" +
                 "}");
         Assert.assertEquals(expectedDocument.toString(), document.toString());
 
@@ -568,7 +583,7 @@ public final class GatewayTests {
 
         // List all attachments.
         FeedOptions fo = new FeedOptions();
-        fo.setMaxItemCount(1);
+        fo.setPageSize(1);
         attachments = client.readAttachments(document.getSelfLink(), fo).getQueryIterable().toList();
         Assert.assertEquals(2, attachments.size());
         attachment.set("Author", "new author");
@@ -586,7 +601,14 @@ public final class GatewayTests {
         client.updateMedia(validAttachment.getMediaLink(), mediaStream, validMediaOptions);
 
         // Read attachment media after update.
-        // read media buffered.
+        // read media buffered (default).
+        mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
+        Assert.assertEquals("updated stream content", GatewayTests.getStringFromInputStream(mediaResponse));
+
+        // read media streamed, should still work.
+        ConnectionPolicy streamPolicy = new ConnectionPolicy();
+        streamPolicy.setMediaReadMode(MediaReadMode.Streamed);
+        client = new DocumentClient(HOST, MASTER_KEY, streamPolicy, ConsistencyLevel.Session);
         mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
         Assert.assertEquals("updated stream content", GatewayTests.getStringFromInputStream(mediaResponse));
 

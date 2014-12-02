@@ -41,13 +41,12 @@ final class GatewayProxy {
     private Map<String, String> defaultHeaders;
     private String masterKey;
     private Map<String, String> resourceTokens;
-    private int requestTimeout;
+    private ConnectionPolicy connectionPolicy;
     private HttpClient httpClient;
-    private int maxPoolSize;
-    private int idleConnectionTimeout;
+    private HttpClient mediaHttpClient;
 
     public GatewayProxy(URI serviceEndpoint,
-                        ConnectionPolicy policy,
+                        ConnectionPolicy connectionPolicy,
                         ConsistencyLevel consistencyLevel,
                         String masterKey,
                         Map<String, String> resourceTokens) {
@@ -65,12 +64,9 @@ final class GatewayProxy {
                                     consistencyLevel.toString());
         }
 
+        this.connectionPolicy = connectionPolicy;
         this.masterKey = masterKey;
         this.resourceTokens = resourceTokens;
-        this.requestTimeout = policy.getRequestTimeout();
-        this.maxPoolSize = policy.getMaxPoolSize();
-        this.idleConnectionTimeout = policy.getIdleConnectionTimeout();
-        this.httpClient = this.createHttpClient();
     }
 
     public DocumentServiceResponse doCreate(DocumentServiceRequest request)
@@ -111,30 +107,45 @@ final class GatewayProxy {
         return this.performPostRequest(request);
     }
 
+    private HttpClient getHttpClient(boolean isForMedia) {
+        if (isForMedia) {
+            if (this.mediaHttpClient == null) this.mediaHttpClient = this.createHttpClient(isForMedia);
+            return this.mediaHttpClient;
+        } else {
+            if (this.httpClient == null) this.httpClient = this.createHttpClient(isForMedia);
+            return this.httpClient;
+        }
+    }
+
     /**
      * Only one instance is created for the httpClient for optimization.
      * A PoolingClientConnectionManager is used with the Http client 
      * to be able to reuse connections and execute requests concurrently.
      * A timeout for closing each connection is set so that connections don't leak.
      * A timeout is set for requests to avoid deadlocks.
-     * @return
+     * @return the created HttpClient
      */
-    private HttpClient createHttpClient() {
-        if(this.httpClient == null) {
-            PoolingClientConnectionManager conMan = new PoolingClientConnectionManager( SchemeRegistryFactory.createDefault() );
-            conMan.setMaxTotal(maxPoolSize);
-            conMan.setDefaultMaxPerRoute(maxPoolSize);
-            conMan.closeIdleConnections(this.idleConnectionTimeout, TimeUnit.SECONDS);
-            this.httpClient = new DefaultHttpClient(conMan);
-            final HttpParams httpParams = httpClient.getParams();
-            HttpConnectionParams.setConnectionTimeout(httpParams, requestTimeout * 1000);
-            HttpConnectionParams.setSoTimeout(httpParams, requestTimeout * 1000);
+    private HttpClient createHttpClient(boolean isForMedia) {
+        PoolingClientConnectionManager conMan = new PoolingClientConnectionManager(
+                SchemeRegistryFactory.createDefault());
+        conMan.setMaxTotal(this.connectionPolicy.getMaxPoolSize());
+        conMan.setDefaultMaxPerRoute(this.connectionPolicy.getMaxPoolSize());
+        conMan.closeIdleConnections(this.connectionPolicy.getIdleConnectionTimeout(), TimeUnit.SECONDS);
+        HttpClient httpClient = new DefaultHttpClient(conMan);
+        HttpParams httpParams = httpClient.getParams();
+
+        if (isForMedia) {
+            HttpConnectionParams.setConnectionTimeout(httpParams,
+                                                      this.connectionPolicy.getMediaRequestTimeout() * 1000);
+            HttpConnectionParams.setSoTimeout(httpParams, this.connectionPolicy.getMediaRequestTimeout() * 1000);
+        } else {
+            HttpConnectionParams.setConnectionTimeout(httpParams, this.connectionPolicy.getRequestTimeout() * 1000);
+            HttpConnectionParams.setSoTimeout(httpParams, this.connectionPolicy.getRequestTimeout() * 1000);
         }
-        
-        return this.httpClient;
+
+        return httpClient;
     }
 
-    
     private void putMoreContentIntoDocumentServiceRequest(
         DocumentServiceRequest request,
         String httpMethod) {
@@ -181,8 +192,7 @@ final class GatewayProxy {
         }
     }
 
-    private void fillHttpRequestBaseWithHeaders(Map<String, String> headers,
-                                                HttpRequestBase httpBase) {
+    private void fillHttpRequestBaseWithHeaders(Map<String, String> headers, HttpRequestBase httpBase) {
         // Add default headers.
         for (Map.Entry<String, String> entry : this.defaultHeaders.entrySet()) {
             httpBase.setHeader(entry.getKey(), entry.getValue());
@@ -195,8 +205,7 @@ final class GatewayProxy {
         }
     }
 
-    private void maybeThrowException(HttpResponse response)
-        throws DocumentClientException {
+    private void maybeThrowException(HttpResponse response) throws DocumentClientException {
         int statusCode = response.getStatusLine().getStatusCode();
         
         if (statusCode >= HttpConstants.StatusCodes.MINIMUM_STATUSCODE_AS_ERROR_GATEWAY) {
@@ -218,14 +227,12 @@ final class GatewayProxy {
                 responseHeaders.put(header.getName(), header.getValue());
             }
 
-            throw new DocumentClientException(statusCode,
-                                              new Error(body),
-                                              responseHeaders);
+            throw new DocumentClientException(statusCode, new Error(body), responseHeaders);
         }
     }
 
     private DocumentServiceResponse performDeleteRequest(
-        DocumentServiceRequest request) throws DocumentClientException {
+            DocumentServiceRequest request) throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(
             request,
             HttpConstants.HttpMethods.DELETE);
@@ -246,9 +253,8 @@ final class GatewayProxy {
         HttpDelete httpDelete = new HttpDelete(uri);
         this.fillHttpRequestBaseWithHeaders(request.getHeaders(), httpDelete);
         HttpResponse response = null;
-        try
-        {
-            response = this.httpClient.execute(httpDelete);
+        try {
+            response = this.getHttpClient(request.getIsMedia()).execute(httpDelete);
         } catch (IOException e) {
             httpDelete.releaseConnection();
             throw new IllegalStateException("Http client execution failed.", e);
@@ -261,8 +267,7 @@ final class GatewayProxy {
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performGetRequest(
-        DocumentServiceRequest request) throws DocumentClientException {
+    private DocumentServiceResponse performGetRequest(DocumentServiceRequest request) throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(request,
                                                  HttpConstants.HttpMethods.GET);
         URI uri;
@@ -283,7 +288,7 @@ final class GatewayProxy {
         this.fillHttpRequestBaseWithHeaders(request.getHeaders(), httpGet);
         HttpResponse response = null;
         try {
-            response = this.httpClient.execute(httpGet);
+            response = this.getHttpClient(request.getIsMedia()).execute(httpGet);
         } catch (IOException e) {
             httpGet.releaseConnection();
             throw new IllegalStateException("Http client execution failed.", e);
@@ -293,8 +298,7 @@ final class GatewayProxy {
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performPostRequest(
-        DocumentServiceRequest request) throws DocumentClientException {
+    private DocumentServiceResponse performPostRequest(DocumentServiceRequest request) throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(
             request,
             HttpConstants.HttpMethods.POST);
@@ -317,7 +321,7 @@ final class GatewayProxy {
         httpPost.setEntity(request.getBody());
         HttpResponse response = null;
         try {
-            response = httpClient.execute(httpPost);
+            response = this.getHttpClient(request.getIsMedia()).execute(httpPost);
         } catch (IOException e) {
             httpPost.releaseConnection();
             throw new IllegalStateException("Http client execution failed.", e);
@@ -327,8 +331,7 @@ final class GatewayProxy {
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performPutRequest(
-        DocumentServiceRequest request) throws DocumentClientException {
+    private DocumentServiceResponse performPutRequest(DocumentServiceRequest request) throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(request,
                                                  HttpConstants.HttpMethods.PUT);
         URI uri;
@@ -351,7 +354,7 @@ final class GatewayProxy {
         HttpResponse response = null;
         try {
             httpPut.releaseConnection();
-            response = this.httpClient.execute(httpPut);
+            response = this.getHttpClient(request.getIsMedia()).execute(httpPut);
         } catch (IOException e) {
             throw new IllegalStateException("Http client execution failed.", e);
         }

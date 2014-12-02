@@ -9,24 +9,24 @@ package com.microsoft.azure.documentdb;
  */
 public final class FeedOptions {
 
-    private Integer maxItemCount;
+    private Integer pageSize;
 
     /**
      * Gets the maximum number of items to be returned in the enumeration operation.
      * 
-     * @return the max item count.
+     * @return the page size.
      */
-    public Integer getMaxItemCount() {
-        return this.maxItemCount;
+    public Integer getPageSize() {
+        return this.pageSize;
     }
 
     /**
      * Sets the maximum number of items to be returned in the enumeration operation.
      * 
-     * @param maxItemCount the max item count.
+     * @param pageSize the page size.
      */
-    public void setMaxItemCount(Integer maxItemCount) {
-        this.maxItemCount = maxItemCount;
+    public void setPageSize(Integer pageSize) {
+        this.pageSize = pageSize;
     }
 
     private String requestContinuation;
