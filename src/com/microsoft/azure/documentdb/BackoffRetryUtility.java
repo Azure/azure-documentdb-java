@@ -16,6 +16,7 @@ class BackoffRetryUtility {
             } catch (Exception e) {
                 boolean retry = retryPolicy.shouldRetry(e);
                 if (!retry) {
+                    e.printStackTrace();
                     throw new IllegalStateException("Exception not retriable", e);
                 }
 

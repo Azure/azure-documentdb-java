@@ -131,10 +131,6 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
 
         while (!this.isNullEmptyOrFalse(this.continuation) ||
                !this.hasStarted) {
-            if (!this.hasStarted) {
-                this.hasStarted = true;
-            }
-
             if (!this.isNullEmptyOrFalse(this.continuation)) {
                 request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION,
                                          this.continuation);
@@ -144,6 +140,13 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
                 response = this.client.doReadFeed(request);
             } else {
                 response = this.client.doQuery(request);
+            }
+
+            // A retriable exception may happen. "this.hasStarted" and "this.continuation" must not be set
+            // value before this line.
+
+            if (!this.hasStarted) {
+                this.hasStarted = true;
             }
 
             this.responseHeaders = response.getResponseHeaders();

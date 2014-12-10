@@ -44,6 +44,7 @@ final class GatewayProxy {
     private ConnectionPolicy connectionPolicy;
     private HttpClient httpClient;
     private HttpClient mediaHttpClient;
+    private PoolingClientConnectionManager connectionManager;
 
     public GatewayProxy(URI serviceEndpoint,
                         ConnectionPolicy connectionPolicy,
@@ -67,6 +68,12 @@ final class GatewayProxy {
         this.connectionPolicy = connectionPolicy;
         this.masterKey = masterKey;
         this.resourceTokens = resourceTokens;
+
+        // Initialize connection manager.
+        this.connectionManager = new PoolingClientConnectionManager(SchemeRegistryFactory.createDefault());
+        this.connectionManager.setMaxTotal(this.connectionPolicy.getMaxPoolSize());
+        this.connectionManager.setDefaultMaxPerRoute(this.connectionPolicy.getMaxPoolSize());
+        this.connectionManager.closeIdleConnections(this.connectionPolicy.getIdleConnectionTimeout(), TimeUnit.SECONDS);
     }
 
     public DocumentServiceResponse doCreate(DocumentServiceRequest request)
@@ -126,12 +133,7 @@ final class GatewayProxy {
      * @return the created HttpClient
      */
     private HttpClient createHttpClient(boolean isForMedia) {
-        PoolingClientConnectionManager conMan = new PoolingClientConnectionManager(
-                SchemeRegistryFactory.createDefault());
-        conMan.setMaxTotal(this.connectionPolicy.getMaxPoolSize());
-        conMan.setDefaultMaxPerRoute(this.connectionPolicy.getMaxPoolSize());
-        conMan.closeIdleConnections(this.connectionPolicy.getIdleConnectionTimeout(), TimeUnit.SECONDS);
-        HttpClient httpClient = new DefaultHttpClient(conMan);
+        HttpClient httpClient = new DefaultHttpClient(this.connectionManager);
         HttpParams httpParams = httpClient.getParams();
 
         if (isForMedia) {

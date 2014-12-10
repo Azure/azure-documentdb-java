@@ -81,7 +81,7 @@ public final class GatewayTests {
     private static String getStringFromInputStream(InputStream is) {
         BufferedReader br = null;
         StringBuilder sb = new StringBuilder();
- 
+
         String line;
         try {
             br = new BufferedReader(new InputStreamReader(is, "UTF-8"));
@@ -259,6 +259,33 @@ public final class GatewayTests {
     }
 
     @Test
+    public void testQueryIterableCrud() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+
+        List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(),
+                                                        null).getQueryIterable().toList();
+        int beforeCreateDocumentsCount = documents.size();
+
+        // Create 20 collection.
+        for (int i = 0; i < 20; ++i) {
+            Document documentDefinition = new Document("{ 'name': 'For test' }");
+            client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, false);
+        }
+
+        FeedOptions fo = new FeedOptions();
+        // Page size of "1" is for test only. Please choose a more reasonable value in practice.
+        fo.setPageSize(1);
+
+        documents = client.readDocuments(this.collectionForTest.getSelfLink(),
+                                         null).getQueryIterable().toList();
+
+        Assert.assertEquals(beforeCreateDocumentsCount + 20, documents.size());
+    }
+
+    @Test
     public void testCollectionIndexingPolicy() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
                                                    MASTER_KEY,
@@ -324,7 +351,7 @@ public final class GatewayTests {
                 collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().iterator().next().getIndexType());
         Assert.assertEquals(1, collectionWithSecondaryIndex.getIndexingPolicy().getExcludedPaths().size());
     }
-    
+
     @Test
     public void testDocumentCrud() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
@@ -384,7 +411,7 @@ public final class GatewayTests {
         // Read document.
         Document oneDocumentFromRead = client.readDocument(replacedDocument.getSelfLink(), null).getResource();
         Assert.assertEquals(replacedDocument.getId(), oneDocumentFromRead.getId());
-        
+
         AccessCondition accessCondition = new AccessCondition();
         accessCondition.setCondition(oneDocumentFromRead.getETag()) ;
         accessCondition.setType(AccessConditionType.IfNoneMatch);
@@ -409,16 +436,16 @@ public final class GatewayTests {
 
     class TestPOJOInner {
         public int intProperty;
-        
-        public TestPOJOInner(int i) { 
+
+        public TestPOJOInner(int i) {
             this.intProperty = i;
         }
     }
-    
+
     class TestPOJO {
-        
-        private String privateStringProperty; 
-        
+
+        private String privateStringProperty;
+
         public String id;
         public int intProperty;
         public String  stringProperty;
@@ -426,14 +453,14 @@ public final class GatewayTests {
         public List<String>  stringList;
         public String[]  stringArray;
 
-        public TestPOJO(int i) { 
-            this.intProperty = i; 
-            
+        public TestPOJO(int i) {
+            this.intProperty = i;
+
             this.stringList = new ArrayList<String>();
             this.stringList.add("ONE");
             this.stringList.add("TWO");
             this.stringList.add("THREE");
-            
+
             this.stringArray = new String[] { "One", "Two", "Three" };
         }
 
@@ -444,27 +471,27 @@ public final class GatewayTests {
             this.privateStringProperty = value;
         }
     }
-    
+
     @Test
     public void testPOJODocumentCrud() throws DocumentClientException {
-       
-       
+
+
         DocumentClient client = new DocumentClient(HOST,
                                                    MASTER_KEY,
                                                    ConnectionPolicy.GetDefault(),
                                                    ConsistencyLevel.Session);
-        
+
         TestPOJO testPojo = new TestPOJO(10);
         testPojo.id= "MyPojoObejct" + GatewayTests.getUID();
         testPojo.stringProperty = "testString";
         testPojo.objectProperty = new TestPOJOInner(100);
         testPojo.setPrivateStringProperty("testStringAccess");
-        
+
         Document document = client.createDocument(this.collectionForTest.getSelfLink(),
                                                   testPojo,
                                                   null,
                                                   false).getResource();
-        
+
         Assert.assertEquals(document.getInt("intProperty").intValue(), testPojo.intProperty);
 
         Assert.assertEquals(document.getString("stringProperty"), testPojo.stringProperty);
@@ -487,7 +514,7 @@ public final class GatewayTests {
         testPojo.stringProperty = "updatedTestString";
         document = client.replaceDocument(document.getSelfLink(), testPojo, null).getResource();
         Assert.assertEquals(document.getString("stringProperty"), testPojo.stringProperty);
-        
+
     }
 
     @Test
@@ -807,7 +834,7 @@ public final class GatewayTests {
         // POJO
         class TempPOJO {
             @SuppressWarnings("unused")
-            public String temp = "so2"; 
+            public String temp = "so2";
         }
         TempPOJO tempPOJO = new TempPOJO();
         StoredProcedure sproc4 = new StoredProcedure(
@@ -969,7 +996,7 @@ public final class GatewayTests {
                                                             null).getQueryIterable().toList();
         Assert.assertEquals(1, permissions.size());
 
-        // Replace permission. 
+        // Replace permission.
         permission.setId("replaced permission");
         Permission replacedPermission = client.replacePermission(
             permission, null).getResource();
@@ -997,12 +1024,12 @@ public final class GatewayTests {
                                                    MASTER_KEY,
                                                    ConnectionPolicy.GetDefault(),
                                                    ConsistencyLevel.Session);
-     
+
         DatabaseAccount dba = client.getDatabaseAccount();
-        Assert.assertNotNull("dba Address link works", dba.getAddressesLink()); 
+        Assert.assertNotNull("dba Address link works", dba.getAddressesLink());
         Assert.assertTrue("provision storage must larger than 10000MB",
                           dba.getProvisionedDocumentStorageInMB() > 10000);
-        
+
         if (dba.getConsistencyPolicy().getDefaultConsistencyLevel() == ConsistencyLevel.BoundedStaleness) {
             Assert.assertTrue("StaleInternal should be larger than 5 seconds",
                               dba.getConsistencyPolicy().getMaxStalenessIntervalInSeconds() >= 5);
@@ -1044,7 +1071,7 @@ public final class GatewayTests {
                 "  'permissionMode': 'Read'," +
                 "  'resource': '%s'" +
                 "}", collectionForTest.getSelfLink()));
-        // Create permission for collectionForTest 
+        // Create permission for collectionForTest
         Permission permission1 = client.createPermission(user1.getSelfLink(),
                                                          permission1Definition,
                                                          null).getResource();
