@@ -41,7 +41,9 @@ Dependencies will be added automatically if Maven is used. Otherwise, please dow
 
 To use this SDK to call Azure DocumentDB, you need to first [create an account](http://azure.microsoft.com/en-us/documentation/articles/documentdb-create-account/).
 
-Samples are provided in the unit tests.
+You can follow this [tutorial](http://azure.microsoft.com/en-us/documentation/articles/documentdb-java-application/) to help you get started.
+
+Additional samples are provided in the unit tests.
 
 ##Need Help?
 
