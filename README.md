@@ -1,4 +1,4 @@
-#Microsoft Azure DocumentDB Java SDK
+#Microsoft Azure DocumentDB SDK for Java
 
 This project provides a client library in Java that makes it easy to interact with Azure DocumentDB. For documentation please see the Microsoft Azure [Java Developer Center](http://azure.microsoft.com/en-us/develop/java/) and the [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc).
 
