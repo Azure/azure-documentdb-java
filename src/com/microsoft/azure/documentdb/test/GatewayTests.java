@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,6 +29,7 @@ import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.FeedOptions;
+import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.IndexType;
 import com.microsoft.azure.documentdb.IndexingMode;
 import com.microsoft.azure.documentdb.MediaOptions;
@@ -44,8 +46,8 @@ import com.microsoft.azure.documentdb.User;
 import com.microsoft.azure.documentdb.UserDefinedFunction;
 
 public final class GatewayTests {
-    static final String HOST = "[YOUR_ENDPOINT_HERE]";
-    static final String MASTER_KEY = "[YOUR_KEY_HERE]";
+	static final String HOST = "[YOUR_ENDPOINT_HERE]";
+	static final String MASTER_KEY = "[YOUR_KEY_HERE]";
 
     private Database databaseForTest;
     private DocumentCollection collectionForTest;
@@ -258,32 +260,61 @@ public final class GatewayTests {
         }
     }
 
-    @Test
-    public void testQueryIterableCrud() throws DocumentClientException {
-        DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+	@Test
+	public void testQueryIterableCrud() throws DocumentClientException {
+		DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(), ConsistencyLevel.Session);
+		List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
+		int beforeCreateDocumentsCount = documents.size();
+		int noOfDocuments = 10;
 
-        List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(),
-                                                        null).getQueryIterable().toList();
-        int beforeCreateDocumentsCount = documents.size();
+		// Create 10 documents.
+		for (int i = 0; i < noOfDocuments; ++i) {
+			Document documentDefinition = new Document("{ 'name': 'For paging test' }");
+			client.createDocument(this.collectionForTest.getSelfLink(),	documentDefinition, null, false);
+		}
 
-        // Create 20 collection.
-        for (int i = 0; i < 20; ++i) {
-            Document documentDefinition = new Document("{ 'name': 'For test' }");
-            client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, false);
-        }
+		int noOfDocumentsPerPage = noOfDocuments / 5;
+		FeedOptions fo = new FeedOptions();
+		fo.setPageSize(noOfDocumentsPerPage);
+		FeedResponse<Document> feedResponse;
+		Iterator<Document> iterator;
+		int i = 0;
+		String continuationToken = null;
 
-        FeedOptions fo = new FeedOptions();
-        // Page size of "1" is for test only. Please choose a more reasonable value in practice.
-        fo.setPageSize(1);
+		List<String> currentPage = new ArrayList<String>();
+		List<String> previousPage = new ArrayList<String>();
+		do {
+			currentPage.clear();
+			fo.setRequestContinuation(continuationToken);
+			feedResponse = client.readDocuments(this.collectionForTest.getSelfLink(), fo);
+			iterator = feedResponse.getQueryIterator();
+			i = 0;
+			while (iterator.hasNext()) {
+				i++;
+				Document document = iterator.next();
+				currentPage.add(document.getId());
+				if (i == noOfDocumentsPerPage) {
+					break;
+				}
+			}
+			continuationToken = feedResponse.getResponseContinuation();
+			for (String idFromCurrentPage : currentPage) {
+				if (previousPage.contains(idFromCurrentPage)) {
+					Assert.fail("Both pages contain same id " + idFromCurrentPage);
+				}
+			}
+			previousPage.clear();
+			previousPage.addAll(currentPage);
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				
+			}
+		} while (continuationToken != null);
 
-        documents = client.readDocuments(this.collectionForTest.getSelfLink(),
-                                         null).getQueryIterable().toList();
-
-        Assert.assertEquals(beforeCreateDocumentsCount + 20, documents.size());
-    }
+		documents = client.readDocuments(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
+		Assert.assertEquals(beforeCreateDocumentsCount + noOfDocuments,	documents.size());
+	}
 
     @Test
     public void testCollectionIndexingPolicy() throws DocumentClientException {

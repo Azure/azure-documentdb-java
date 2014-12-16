@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * 
  * The template class for iterable resources.
@@ -25,15 +27,21 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private Map<String, String> responseHeaders;
 
     QueryIterable(DocumentClient client,
-                         DocumentServiceRequest request,
-                         ReadType readType,
-                         Class<T> classT) {
-        this.client = client;
-        this.retryPolicy = new ResourceThrottleRetryPolicy(
-            client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
-        this.request = request;
-        this.readType = readType;
-        this.classT = classT;
+    		DocumentServiceRequest request,
+    		ReadType readType,
+    		Class<T> classT) {
+    	this.client = client;
+    	this.retryPolicy = new ResourceThrottleRetryPolicy(
+    			client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
+    	this.request = request;
+    	this.readType = readType;
+    	this.classT = classT;
+    	if (this.request != null && this.request.getHeaders() != null) {
+    		String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
+    		if (!StringUtils.isBlank(continuationToken)) {
+    			this.continuation = continuationToken;
+    		}
+    	}
     }
 
     /**
@@ -43,6 +51,15 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      */
     Map<String, String> getResponseHeaders() {
         return this.responseHeaders;
+    }
+
+    /**
+     * Gets the continuation token.
+     * 
+     * @return the continuation token.
+     */
+    String getContinuation() {
+        return this.continuation;
     }
 
     /**

@@ -219,7 +219,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the response continuation.
      */
     public String getResponseContinuation() {
-        return this.responseHeaders.get(HttpConstants.HttpHeaders.CONTINUATION);
+    	return this.inner.getContinuation();
     }
 
     /**
