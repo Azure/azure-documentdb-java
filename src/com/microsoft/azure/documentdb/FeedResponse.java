@@ -179,7 +179,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the max resource quota.
      */
     public String getMaxResourceQuota() {
-        return this.responseHeaders.get(HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
     }
 
     /**
@@ -188,7 +188,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the current resource quota usage.
      */
     public String getCurrentResourceQuotaUsage() {
-        return this.responseHeaders.get(HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
     }
 
     /**
@@ -210,7 +210,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the activity id.
      */
     public String getActivityId() {
-        return this.responseHeaders.get(HttpConstants.HttpHeaders.ACTIVITY_ID);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.ACTIVITY_ID);
     }
 
     /**
@@ -219,7 +219,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the response continuation.
      */
     public String getResponseContinuation() {
-    	return this.inner.getContinuation();
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.CONTINUATION);
     }
 
     /**
@@ -228,7 +228,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the session token.
      */
     public String getSessionToken() {
-        return this.responseHeaders.get(HttpConstants.HttpHeaders.SESSION_TOKEN);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.SESSION_TOKEN);
     }
 
     /**
@@ -319,5 +319,12 @@ public final class FeedResponse<T extends Resource> {
                                       Long.valueOf(headerCurrentUsageWords[i + 1]));
             }
         }
+    }
+    
+    private static String getValueOrNull(Map<String, String> map, String key) {
+        if (map != null) {
+        return map.get(key);
+        }
+        return null;
     }
 }
