@@ -27,21 +27,25 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private Map<String, String> responseHeaders;
 
     QueryIterable(DocumentClient client,
-    		DocumentServiceRequest request,
-    		ReadType readType,
-    		Class<T> classT) {
-    	this.client = client;
-    	this.retryPolicy = new ResourceThrottleRetryPolicy(
-    			client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
-    	this.request = request;
-    	this.readType = readType;
-    	this.classT = classT;
-    	if (this.request != null && this.request.getHeaders() != null) {
-    		String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
-    		if (!StringUtils.isBlank(continuationToken)) {
-    			this.continuation = continuationToken;
-    		}
-    	}
+            DocumentServiceRequest request,
+            ReadType readType,
+            Class<T> classT) {
+        this.client = client;
+        this.retryPolicy = new ResourceThrottleRetryPolicy(
+                client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
+        this.request = request;
+        this.readType = readType;
+        this.classT = classT;
+        this.reset();
+    }
+
+    private void reset() {
+    if (this.request != null && this.request.getHeaders() != null) {
+            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
+            if (!StringUtils.isBlank(continuationToken)) {
+                this.continuation = continuationToken;
+            }
+        }
     }
 
     /**
@@ -183,4 +187,5 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private boolean isNullEmptyOrFalse(String s) {
         return s == null || s.isEmpty() || s == "false" || s == "False";
     }
+
 }
