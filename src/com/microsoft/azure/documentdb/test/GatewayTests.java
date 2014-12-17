@@ -45,8 +45,8 @@ import com.microsoft.azure.documentdb.User;
 import com.microsoft.azure.documentdb.UserDefinedFunction;
 
 public final class GatewayTests {
-    static final String HOST = "https://amberrddocdb.documents.azure.com/";
-    static final String MASTER_KEY = "qaA+OWUQpaO2tgJ3OV81aleFN+pe/AZPqiaWufVDwiy8t38lzLtkhIbYjf+UJC6myF1tHir4K/4i/NiNlr3vKw==";
+    static final String HOST = "[YOUR_ENDPOINT_HERE]";
+    static final String MASTER_KEY = "[YOUR_KEY_HERE]";
 
     private Database databaseForTest;
     private DocumentCollection collectionForTest;
