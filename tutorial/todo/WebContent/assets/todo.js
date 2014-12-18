@@ -87,7 +87,7 @@ var todoApp = {
       // Call api to update todo items.
       $.each(todoApp.ui_updateId(), function(index, value) {
         todoApp.updateTodoItem(value.name, value.value);
-        value.remove();
+        $(value).remove();
       });
 
       // Re-enable button.
@@ -100,8 +100,8 @@ var todoApp = {
 
   bindUpdateCheckboxes: function() {
     todoApp.ui_table().on("click", ".isComplete", function(event) {
-      var checkboxElement = $(event.toElement);
-      var rowElement = $(event.toElement).parents('tr');
+      var checkboxElement = $(event.currentTarget);
+      var rowElement = $(event.currentTarget).parents('tr');
       var id = checkboxElement.attr('id');
       var isComplete = checkboxElement.is(':checked');
 
