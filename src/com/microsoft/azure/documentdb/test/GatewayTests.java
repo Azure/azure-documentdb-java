@@ -14,7 +14,10 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
 
 import com.microsoft.azure.documentdb.AccessCondition;
 import com.microsoft.azure.documentdb.AccessConditionType;
@@ -50,6 +53,81 @@ public final class GatewayTests {
 
     private Database databaseForTest;
     private DocumentCollection collectionForTest;
+    private static final String databaseForTestId = "GatewayTests_database0";
+    private static final String databaseForTestAlternativeId1 = "GatewayTests_database1";
+    private static final String databaseForTestAlternativeId2 = "GatewayTests_database2";
+
+    public class Retry implements TestRule {
+        private int retryCount;
+
+        public Retry(int retryCount) {
+            this.retryCount = retryCount;
+        }
+
+        public Statement apply(Statement base, Description description) {
+            return statement(base, description);
+        }
+
+        private Statement statement(final Statement base, final Description description) {
+            return new Statement() {
+                @Override
+                public void evaluate() throws Throwable {
+                    Throwable caughtThrowable = null;
+
+                    // implement retry logic here
+                    for (int i = 0; i < retryCount; i++) {
+                        try {
+                            base.evaluate();
+                            return;
+                        } catch (java.lang.IllegalStateException exception) {
+                            Throwable cause = exception.getCause();
+                            if (cause instanceof javax.net.ssl.SSLPeerUnverifiedException ||
+                                    cause.getCause() instanceof javax.net.ssl.SSLPeerUnverifiedException) {
+                                // We will retry on SSLPeerUnverifiedException. This is an inconsistent and random
+                                // failure that only occasionally happen in non-production environment.
+                                // TODO: remove this hack after figuring out the reason of this failure.
+                                caughtThrowable = exception;
+                                System.err.println(description.getDisplayName() + ": run " + (i+1) + " failed");
+                            } else {
+                                throw exception;
+                            }
+                        } catch (Throwable t) {
+                            // Everything else is fatal.
+                            throw t;
+                        }
+                    }
+                    System.err.println(description.getDisplayName() + ": giving up after " + retryCount + " failures");
+                    throw caughtThrowable;
+                }
+            };
+        }
+    }
+
+    @Rule
+    public Retry retry = new Retry(3);
+
+    void cleanUpGeneratedDatabases() throws DocumentClientException {
+        // If one of databaseForTestId, databaseForTestAlternativeId1, or databaseForTestAlternativeId2 already exists,
+        // deletes them.
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        String[] allDatabaseIds = {
+                GatewayTests.databaseForTestId,
+                GatewayTests.databaseForTestAlternativeId1,
+                GatewayTests.databaseForTestAlternativeId2
+        };
+
+        for (String id : allDatabaseIds) {
+            Database database = client.queryDatabases(String.format("SELECT * FROM root r WHERE r.id='%s'", id),
+                                                      null).getQueryIterable().iterator().next();
+            if (database != null) {
+                client.deleteDatabase(database.getSelfLink(), null);
+            }
+        }
+    }
 
     @Before
     public void setUp() throws DocumentClientException {
@@ -58,9 +136,12 @@ public final class GatewayTests {
                                                    ConnectionPolicy.GetDefault(),
                                                    ConsistencyLevel.Session);
 
+        // Clean up before setting up in case a previous running fails to tear down.
+        this.cleanUpGeneratedDatabases();
+
         // Create the database for test.
         Database databaseDefinition = new Database();
-        databaseDefinition.setId(GatewayTests.getUID());
+        databaseDefinition.setId(GatewayTests.databaseForTestId);
         this.databaseForTest = client.createDatabase(databaseDefinition, null).getResource();
         // Create the collection for test.
         DocumentCollection collectionDefinition = new DocumentCollection();
@@ -72,11 +153,7 @@ public final class GatewayTests {
 
     @After
     public void tearDown() throws DocumentClientException {
-        DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
-        client.deleteDatabase(databaseForTest.getSelfLink(), null);
+        this.cleanUpGeneratedDatabases();
     }
 
     private static String getStringFromInputStream(InputStream is) {
@@ -184,7 +261,7 @@ public final class GatewayTests {
         // Create a database.
         int beforeCreateDatabasesCount = databases.size();
         Database databaseDefinition = new Database();
-        databaseDefinition.setId(GatewayTests.getUID());
+        databaseDefinition.setId(GatewayTests.databaseForTestAlternativeId1);
 
         Database createdDb = client.createDatabase(databaseDefinition, null).getResource();
         Assert.assertEquals(databaseDefinition.getId(), createdDb.getId());
@@ -199,11 +276,10 @@ public final class GatewayTests {
         // number of results for the query should be > 0.
         Assert.assertTrue(databases.size() > 0);
         // replace database.
-        final String alternativeDatabaseId = GatewayTests.getUID();
-        createdDb.setId(alternativeDatabaseId);
+        createdDb.setId(GatewayTests.databaseForTestAlternativeId2);
         Database replacedDb = client.replaceDatabase(createdDb, null).getResource();
         // Db id should change.
-        Assert.assertEquals(alternativeDatabaseId, replacedDb.getId());
+        Assert.assertEquals(GatewayTests.databaseForTestAlternativeId2, replacedDb.getId());
         // Read database.
         Database oneDbFromRead = client.readDatabase(replacedDb.getSelfLink(), null).getResource();
         Assert.assertEquals(replacedDb.getId(), oneDbFromRead.getId());
