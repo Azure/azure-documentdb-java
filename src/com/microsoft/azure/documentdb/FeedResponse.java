@@ -15,7 +15,6 @@ import org.apache.commons.lang3.StringUtils;
 public final class FeedResponse<T extends Resource> {
 
     private QueryIterable<T> inner;
-    private Map<String, String> responseHeaders;
     private Map<String, Long> usageHeaders;
     private Map<String, Long> quotaHeaders;
 
@@ -167,7 +166,6 @@ public final class FeedResponse<T extends Resource> {
 
     FeedResponse(QueryIterable<T> result) {
         this.inner = result;
-        this.responseHeaders = result.getResponseHeaders();
         this.usageHeaders = new HashMap<String, Long>();
         this.quotaHeaders = new HashMap<String, Long>();
     }
@@ -179,7 +177,8 @@ public final class FeedResponse<T extends Resource> {
      * @return the max resource quota.
      */
     public String getMaxResourceQuota() {
-        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
+                                           HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
     }
 
     /**
@@ -188,7 +187,8 @@ public final class FeedResponse<T extends Resource> {
      * @return the current resource quota usage.
      */
     public String getCurrentResourceQuotaUsage() {
-        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(), HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
+        return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
+                                           HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
     }
 
     /**
@@ -197,7 +197,8 @@ public final class FeedResponse<T extends Resource> {
      * @return the request charge.
      */
     public double getRequestCharge() {
-        String value = this.responseHeaders.get(HttpConstants.HttpHeaders.REQUEST_CHARGE);
+        String value = FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
+                                                   HttpConstants.HttpHeaders.REQUEST_CHARGE);
         if (StringUtils.isEmpty(value)) {
             return 0;
         }
@@ -237,7 +238,7 @@ public final class FeedResponse<T extends Resource> {
      * @return the response headers.
      */
     public Map<String, String> getResponseHeaders() {
-        return this.responseHeaders;
+        return this.inner.getResponseHeaders();
     }
 
     /**
@@ -323,7 +324,7 @@ public final class FeedResponse<T extends Resource> {
     
     private static String getValueOrNull(Map<String, String> map, String key) {
         if (map != null) {
-        return map.get(key);
+            return map.get(key);
         }
         return null;
     }

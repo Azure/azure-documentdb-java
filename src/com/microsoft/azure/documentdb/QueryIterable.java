@@ -25,11 +25,13 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private boolean hasStarted = false;
     private List<T> items = new ArrayList<T>();
     private Map<String, String> responseHeaders;
+    private int currentIndex = 0;
+    private boolean hasNext = true;
 
     QueryIterable(DocumentClient client,
-            DocumentServiceRequest request,
-            ReadType readType,
-            Class<T> classT) {
+                  DocumentServiceRequest request,
+                  ReadType readType,
+                  Class<T> classT) {
         this.client = client;
         this.retryPolicy = new ResourceThrottleRetryPolicy(
                 client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
@@ -37,15 +39,6 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         this.readType = readType;
         this.classT = classT;
         this.reset();
-    }
-
-    private void reset() {
-    if (this.request != null && this.request.getHeaders() != null) {
-            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
-            if (!StringUtils.isBlank(continuationToken)) {
-                this.continuation = continuationToken;
-            }
-        }
     }
 
     /**
@@ -75,14 +68,12 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     public Iterator<T> iterator() {
         Iterator<T> it = new Iterator<T>() {
 
-            private int currentIndex = 0;
-            private boolean hasNext = true;
-
             private BackoffRetryUtilityDelegate delegate = new BackoffRetryUtilityDelegate() {
 
                 @Override
                 public void apply() throws Exception {
-                    if (fetchNextBlock() <= 0) {
+                    List<T> results = fetchNextBlock();
+                    if (results == null || results.size() <= 0) {
                         hasNext = false;
                     }
                 }
@@ -95,11 +86,11 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
              */
             @Override
             public boolean hasNext() {
-                if (this.currentIndex >= items.size() && this.hasNext) {
+                if (currentIndex >= items.size() && hasNext) {
                     BackoffRetryUtility.execute(this.delegate, retryPolicy);
                 }
 
-                return this.hasNext;
+                return hasNext;
             }
 
             /**
@@ -109,12 +100,12 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
              */
             @Override
             public T next() {
-                if (this.currentIndex >= items.size() && this.hasNext) {
+                if (currentIndex >= items.size() && hasNext) {
                     BackoffRetryUtility.execute(this.delegate, retryPolicy);
                 }
 
-                if (!this.hasNext) return null;
-                return items.get(this.currentIndex++);
+                if (!hasNext) return null;
+                return items.get(currentIndex++);
             }
 
             /**
@@ -123,8 +114,8 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             @Override
             public void remove() {
                 if (!hasNext()) throw new NoSuchElementException();
-                if (this.currentIndex < items.size() - 1) {
-                    items.remove(this.currentIndex);
+                if (currentIndex < items.size()) {
+                    items.remove(currentIndex);
                 }
             }
 
@@ -145,16 +136,39 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         return list;
     }
 
-    private int fetchNextBlock()
+    /**
+     * Resets the iterable.
+     */
+    public void reset() {
+        this.hasStarted = false;
+        this.continuation = null;
+        this.items = new ArrayList<T>();
+        this.currentIndex = 0;
+        this.hasNext = true;
+        if (this.request != null && this.request.getHeaders() != null) {
+            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
+            if (!StringUtils.isBlank(continuationToken)) {
+                this.continuation = continuationToken;
+            }
+        }
+    }
+
+    /**
+     * Fetch the next block of query results.
+     * 
+     * @return the list of fetched resources.
+     * @throws DocumentClientException
+     */
+    public List<T> fetchNextBlock()
         throws DocumentClientException {
         DocumentServiceResponse response = null;
         List<T> fetchedItems = null;
 
-        while (!this.isNullEmptyOrFalse(this.continuation) ||
-               !this.hasStarted) {
+        while (!this.isNullEmptyOrFalse(this.continuation) || !this.hasStarted) {
             if (!this.isNullEmptyOrFalse(this.continuation)) {
-                request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION,
-                                         this.continuation);
+                request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION, this.continuation);
+            } else {
+                request.getHeaders().remove(HttpConstants.HttpHeaders.CONTINUATION);
             }
 
             if (this.readType == ReadType.Feed) {
@@ -181,11 +195,10 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             }
         }
 
-        return fetchedItems != null ? fetchedItems.size() : 0;
+        return fetchedItems;
     }
 
     private boolean isNullEmptyOrFalse(String s) {
         return s == null || s.isEmpty() || s == "false" || s == "False";
     }
-
 }

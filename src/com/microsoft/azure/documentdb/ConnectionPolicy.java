@@ -10,11 +10,9 @@ package com.microsoft.azure.documentdb;
 public final class ConnectionPolicy {
 
     private static final int DEFAULT_MAX_CONNECTIONS = 20;
-    private static final int DEFAULT_MAX_CONCURRENT_CALLS_PER_CONNECTION = 50;
     private static final int DEFAULT_REQUEST_TIMEOUT = 60;
     // defaultMediaRequestTimeout is based upon the blob client timeout and the retry policy.
     private static final int DEFAULT_MEDIA_REQUEST_TIMEOUT = 300;
-    private static final int DEFAULT_MAX_CONCURRENT_FANOUT_REQUESTS = 32;
     private static final int DEFAULT_MAX_POOL_SIZE = 100;
     private static final int DEFAULT_IDLE_CONNECTION_TIMEOUT = 60;
     
@@ -28,8 +26,6 @@ public final class ConnectionPolicy {
         this.requestTimeout = ConnectionPolicy.DEFAULT_REQUEST_TIMEOUT;
         this.mediaRequestTimeout = ConnectionPolicy.DEFAULT_MEDIA_REQUEST_TIMEOUT;
         this.connectionMode = ConnectionMode.Gateway;
-        this.maxCallsPerConnection = ConnectionPolicy.DEFAULT_MAX_CONCURRENT_CALLS_PER_CONNECTION;
-        this.maxConcurrentFanoutRequests = DEFAULT_MAX_CONCURRENT_FANOUT_REQUESTS;
         this.mediaReadMode = MediaReadMode.Buffered;
         this.maxPoolSize = DEFAULT_MAX_POOL_SIZE;
         this.idleConnectionTimeout = DEFAULT_IDLE_CONNECTION_TIMEOUT;
@@ -55,48 +51,6 @@ public final class ConnectionPolicy {
      */
     public void setMaxConnections(int maxConnections) {
         this.maxConnections = maxConnections;
-    }
-
-    private int maxCallsPerConnection;
-
-    /**
-     * Gets the number of maximum simultaneous calls permitted on a single data connection. Currently used only for
-     * Protocol.Tcp.
-     * 
-     * @return the max calls per connection.
-     */
-    public int getMaxCallsPerConnection() {
-        return this.maxCallsPerConnection;
-    }
-
-    /**
-     * Sets the number of maximum simultaneous calls permitted on a single data connection. Currently used only for
-     * Protocol.Tcp.
-     * 
-     * @param maxCallsPerConnection the max calls per connection.
-     */
-    public void setMaxCallsPerConnection(int maxCallsPerConnection) {
-        this.maxCallsPerConnection = maxCallsPerConnection;
-    }
-
-    private int maxConcurrentFanoutRequests;
-
-    /**
-     * Gets the maximum number of concurrent fanout requests.
-     * 
-     * @return the maximum number of concurrent fanout requests.
-     */
-    public int getMaxConcurrentFanoutRequest() {
-        return this.maxConcurrentFanoutRequests;
-    }
-
-    /**
-     * Sets the maximum number of concurrent fanout requests.
-     * 
-     * @param maxConcurrentFanoutRequests the max concurrent fanout requests.
-     */
-    public void setMaxConcurrentFanoutRequest(int maxConcurrentFanoutRequests) {
-        this.maxConcurrentFanoutRequests = maxConcurrentFanoutRequests;
     }
 
     private int requestTimeout;
@@ -177,26 +131,6 @@ public final class ConnectionPolicy {
      */
     public void setMediaReadMode(MediaReadMode mediaReadMode) {
         this.mediaReadMode = mediaReadMode;
-    }
-
-    private String connectBindingConfigName;
-
-    /**
-     * Gets the connection bindign config name. Ignored if ConnectionMode is Gateway or ConnectionProtocol is not TCP.
-     * 
-     * @return the connect binding config name.
-     */
-    public String getConnectBindingConfigName() {
-        return this.connectBindingConfigName;
-    }
-
-    /**
-     * Sets the connection binding config name. Ignored if ConnectionMode is Gateway or ConnectionProtocol is not TCP.
-     * 
-     * @param connectBindingConfigName the connect binding config name.
-     */
-    public void setConnectBindingConfigName(String connectBindingConfigName) {
-        this.connectBindingConfigName = connectBindingConfigName;
     }
 
     private int maxPoolSize;
