@@ -18,6 +18,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 
 import com.microsoft.azure.documentdb.AccessCondition;
 import com.microsoft.azure.documentdb.AccessConditionType;
@@ -38,6 +39,7 @@ import com.microsoft.azure.documentdb.MediaOptions;
 import com.microsoft.azure.documentdb.MediaReadMode;
 import com.microsoft.azure.documentdb.Permission;
 import com.microsoft.azure.documentdb.PermissionMode;
+import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.documentdb.StoredProcedure;
@@ -337,9 +339,12 @@ public final class GatewayTests {
 
     @Test
     public void testQueryIterableCrud() throws DocumentClientException {
-        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(), ConsistencyLevel.Session);
-        List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
-        int beforeCreateDocumentsCount = documents.size();
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+        List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(),
+                                                        null).getQueryIterable().toList();
         final int numOfDocuments = 10;
 
         // Create 10 documents.
@@ -348,9 +353,9 @@ public final class GatewayTests {
             client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, false);
         }
 
-        int noOfDocumentsPerPage = numOfDocuments / 5;
+        int numOfDocumentsPerPage = numOfDocuments / 5;
         FeedOptions fo = new FeedOptions();
-        fo.setPageSize(noOfDocumentsPerPage);
+        fo.setPageSize(numOfDocumentsPerPage);
         FeedResponse<Document> feedResponse;
         int i = 0;
         String continuationToken = null;
@@ -365,7 +370,7 @@ public final class GatewayTests {
             for (Document document : feedResponse.getQueryIterable()) {
                 i++;
                 currentPage.add(document.getId());
-                if (i == noOfDocumentsPerPage) {
+                if (i == numOfDocumentsPerPage) {
                     break;
                 }
             }
@@ -385,7 +390,21 @@ public final class GatewayTests {
         } while (continuationToken != null);
 
         documents = client.readDocuments(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
-        Assert.assertEquals(beforeCreateDocumentsCount + numOfDocuments, documents.size());
+        Assert.assertEquals(numOfDocuments, documents.size());
+
+        // Test fetch next block.
+        fo = new FeedOptions();
+        fo.setPageSize(6);
+
+        QueryIterable<Document> queryItr =
+                client.readDocuments(this.collectionForTest.getSelfLink(), fo).getQueryIterable();
+        Assert.assertEquals(6, queryItr.fetchNextBlock().size());
+        Assert.assertEquals(4, queryItr.fetchNextBlock().size());
+
+        // Reset the query iterable.
+        queryItr.reset();
+        Assert.assertEquals(6, queryItr.fetchNextBlock().size());
+        Assert.assertEquals(4, queryItr.fetchNextBlock().size());
     }
 
     @Test

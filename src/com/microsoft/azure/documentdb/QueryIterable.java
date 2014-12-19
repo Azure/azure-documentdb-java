@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-import org.apache.commons.lang3.StringUtils;
 
 /**
  * 
@@ -21,6 +20,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private DocumentServiceRequest request = null;
     private ReadType readType;
     private Class<T> classT;
+    private String initialContinuation = null;
     private String continuation = null;
     private boolean hasStarted = false;
     private List<T> items = new ArrayList<T>();
@@ -38,6 +38,14 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         this.request = request;
         this.readType = readType;
         this.classT = classT;
+
+        if (this.request != null && this.request.getHeaders() != null) {
+            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
+            if (!QueryIterable.isNullEmptyOrFalse(continuationToken)) {
+                this.initialContinuation = continuationToken;
+            }
+        }
+
         this.reset();
     }
 
@@ -141,16 +149,10 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      */
     public void reset() {
         this.hasStarted = false;
-        this.continuation = null;
+        this.continuation = this.initialContinuation;
         this.items = new ArrayList<T>();
         this.currentIndex = 0;
         this.hasNext = true;
-        if (this.request != null && this.request.getHeaders() != null) {
-            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
-            if (!StringUtils.isBlank(continuationToken)) {
-                this.continuation = continuationToken;
-            }
-        }
     }
 
     /**
@@ -164,17 +166,17 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         DocumentServiceResponse response = null;
         List<T> fetchedItems = null;
 
-        while (!this.isNullEmptyOrFalse(this.continuation) || !this.hasStarted) {
-            if (!this.isNullEmptyOrFalse(this.continuation)) {
-                request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION, this.continuation);
+        while (!QueryIterable.isNullEmptyOrFalse(this.continuation) || !this.hasStarted) {
+            if (!QueryIterable.isNullEmptyOrFalse(this.continuation)) {
+                this.request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION, this.continuation);
             } else {
-                request.getHeaders().remove(HttpConstants.HttpHeaders.CONTINUATION);
+                this.request.getHeaders().remove(HttpConstants.HttpHeaders.CONTINUATION);
             }
 
             if (this.readType == ReadType.Feed) {
-                response = this.client.doReadFeed(request);
+                response = this.client.doReadFeed(this.request);
             } else {
-                response = this.client.doQuery(request);
+                response = this.client.doQuery(this.request);
             }
 
             // A retriable exception may happen. "this.hasStarted" and "this.continuation" must not be set
@@ -198,7 +200,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         return fetchedItems;
     }
 
-    private boolean isNullEmptyOrFalse(String s) {
+    private static boolean isNullEmptyOrFalse(String s) {
         return s == null || s.isEmpty() || s == "false" || s == "False";
     }
 }
