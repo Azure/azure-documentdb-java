@@ -126,7 +126,7 @@ final class GatewayProxy {
 
     /**
      * Only one instance is created for the httpClient for optimization.
-     * A PoolingClientConnectionManager is used with the Http client 
+     * A PoolingClientConnectionManager is used with the Http client
      * to be able to reuse connections and execute requests concurrently.
      * A timeout for closing each connection is set so that connections don't leak.
      * A timeout is set for requests to avoid deadlocks.
@@ -153,11 +153,11 @@ final class GatewayProxy {
         String httpMethod) {
         if (this.masterKey != null) {
             final Date currentTime = new Date();
-            final SimpleDateFormat sdf = 
-                new SimpleDateFormat("E, dd MMM YYY HH:mm:ss z"); 
+            final SimpleDateFormat sdf =
+                new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss z");
             sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
             String xDate = sdf.format(currentTime);
-            
+
             request.getHeaders().put(HttpConstants.HttpHeaders.X_DATE, xDate);
         }
 
@@ -209,7 +209,7 @@ final class GatewayProxy {
 
     private void maybeThrowException(HttpResponse response) throws DocumentClientException {
         int statusCode = response.getStatusLine().getStatusCode();
-        
+
         if (statusCode >= HttpConstants.StatusCodes.MINIMUM_STATUSCODE_AS_ERROR_GATEWAY) {
             HttpEntity httpEntity = response.getEntity();
             String body = "";
@@ -263,7 +263,7 @@ final class GatewayProxy {
         }
 
         this.maybeThrowException(response);
-        
+
         // No content in delete request, we can release the connection directly;
         httpDelete.releaseConnection();
         return new DocumentServiceResponse(response);
@@ -282,7 +282,7 @@ final class GatewayProxy {
                           null,  // Query string not used.
                           null);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Incorrect uri from request.", 
+            throw new IllegalArgumentException("Incorrect uri from request.",
                                                e);
         }
 
