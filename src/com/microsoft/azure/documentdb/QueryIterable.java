@@ -159,7 +159,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      * Fetch the next block of query results.
      * 
      * @return the list of fetched resources.
-     * @throws DocumentClientException
+     * @throws DocumentClientException the document client exception.
      */
     public List<T> fetchNextBlock()
         throws DocumentClientException {

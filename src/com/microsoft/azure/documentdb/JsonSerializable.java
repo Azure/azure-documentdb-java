@@ -111,7 +111,7 @@ class JsonSerializable {
      * 
      * @param <T> the type of the object.
      * @param propertyName the property to set.
-     * @param value, the value of the property.
+     * @param value the value of the property.
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public <T extends Object> void set(String propertyName, T value) {
@@ -257,7 +257,7 @@ class JsonSerializable {
      * 
      * @param <T> the type of the object.
      * @param propertyName the property to get.
-     * @param c, the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
+     * @param c the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
      *     and a static one.
      * @return the object value.
      */
