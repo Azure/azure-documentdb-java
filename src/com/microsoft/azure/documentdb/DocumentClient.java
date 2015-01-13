@@ -35,6 +35,23 @@ public final class DocumentClient {
     private RetryPolicy retryPolicy;
 
     /**
+     * A client query compatibility mode when making query request. Can be used to force a specific query request
+     * format.
+     */
+    enum QueryCompatibilityMode {
+        Default,
+        Query,
+        SqlQuery
+    }
+
+    /**
+     * Compatibility mode:
+     * Allows to specify compatibility mode used by client when making query requests. Should be removed when
+     * application/sql is no longer supported.
+     */
+    QueryCompatibilityMode queryCompatibilityMode = QueryCompatibilityMode.Default;
+
+    /**
      * Initializes a new instance of the DocumentClient class using the specified DocumentDB service endpoint and keys.
      * 
      * @param serviceEndpoint the URI of the service end point.
@@ -114,6 +131,7 @@ public final class DocumentClient {
         this.gatewayProxy = new GatewayProxy(this.serviceEndpoint,
                                              this.connectionPolicy,
                                              desiredConsistencyLevel,
+                                             this.queryCompatibilityMode,
                                              this.masterKey,
                                              this.resourceTokens);
     }
@@ -238,10 +256,26 @@ public final class DocumentClient {
             throw new IllegalArgumentException("query");
         }
 
+        return queryDatabases(new SqlQuerySpec(query, null), options);
+    }
+    
+    /**
+     * Query for databases.
+     * 
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained databases.
+     */
+    public FeedResponse<Database> queryDatabases(SqlQuerySpec querySpec, FeedOptions options) {
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
                                                                        Paths.DATABASES_ROOT,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<Database>(new QueryIterable<Database>(this, request, ReadType.Query, Database.class));
     }
@@ -365,11 +399,35 @@ public final class DocumentClient {
             throw new IllegalArgumentException("query");
         }
 
+        return queryCollections(databaseLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for document collections in a database.
+     * 
+     * @param databaseLink the database link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained collections.
+     */
+    public FeedResponse<DocumentCollection> queryCollections(String databaseLink,
+                                                             SqlQuerySpec querySpec,
+                                                             FeedOptions options) {
+
+        if (StringUtils.isEmpty(databaseLink)) {
+            throw new IllegalArgumentException("databaseLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<DocumentCollection>(new QueryIterable<DocumentCollection>(this,
                                                                                           request,
@@ -546,11 +604,32 @@ public final class DocumentClient {
             throw new IllegalArgumentException("query");
         }  
 
+        return queryDocuments(collectionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for documents in a document collection.
+     * 
+     * @param collectionLink the collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained documents.
+     */
+    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }  
+
         String path = DocumentClient.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<Document>(new QueryIterable<Document>(this,
                                                                       request,
@@ -702,11 +781,34 @@ public final class DocumentClient {
             throw new IllegalArgumentException("query");
         }
 
+        return queryStoredProcedures(collectionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for stored procedures in a document collection.
+     * 
+     * @param collectionLink the collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained stored procedures.
+     */
+    public FeedResponse<StoredProcedure> queryStoredProcedures(String collectionLink,
+                                                               SqlQuerySpec querySpec,
+                                                               FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<StoredProcedure>(new QueryIterable<StoredProcedure>(this,
                                                                                     request,
@@ -857,21 +959,46 @@ public final class DocumentClient {
      * @return the feed response with the obtained triggers.
      */
     public FeedResponse<Trigger> queryTriggers(String collectionLink,
-            String query, FeedOptions options) {
-        
+                                               String query,
+                                               FeedOptions options) {
+
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
-        
+
         if (StringUtils.isEmpty(query)) {
             throw new IllegalArgumentException("query");
         }
-        
+
+        return queryTriggers(collectionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for triggers.
+     * 
+     * @param collectionLink the collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained triggers.
+     */
+    public FeedResponse<Trigger> queryTriggers(String collectionLink,
+                                               SqlQuerySpec querySpec,
+                                               FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<Trigger>(new QueryIterable<Trigger>(this, request, ReadType.Query, Trigger.class));
     }
@@ -1014,20 +1141,47 @@ public final class DocumentClient {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
-        
+
+        if (StringUtils.isEmpty(query)) {
+            throw new IllegalArgumentException("query");
+        }
+
+        return queryUserDefinedFunctions(collectionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for user defined functions.
+     * 
+     * @param collectionLink the collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained user defined functions.
+     */
+    public FeedResponse<UserDefinedFunction> queryUserDefinedFunctions(String collectionLink,
+                                                                       SqlQuerySpec querySpec,
+                                                                       FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<UserDefinedFunction>(new QueryIterable<UserDefinedFunction>(this,
                                                                                             request,
                                                                                             ReadType.Query,
                                                                                             UserDefinedFunction.class));
     }
-    
-    
+
     /**
      * Creates an attachment.
      * 
@@ -1157,15 +1311,37 @@ public final class DocumentClient {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
+
         if (StringUtils.isEmpty(query)) {
             throw new IllegalArgumentException("query");
         }
         
+        return queryAttachments(documentLink, new SqlQuerySpec(query, null), options); 
+    }
+
+    /**
+     * Query for attachments.
+     * 
+     * @param documentLink the document link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained attachments.
+     */
+    public FeedResponse<Attachment> queryAttachments(String documentLink, SqlQuerySpec querySpec, FeedOptions options) {
+        if (StringUtils.isEmpty(documentLink)) {
+            throw new IllegalArgumentException("documentLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<Attachment>(new QueryIterable<Attachment>(this,
                                                                           request,
@@ -1296,6 +1472,55 @@ public final class DocumentClient {
             path,
             requestHeaders);
         return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, request, ReadType.Feed, Conflict.class));
+    }
+
+    /**
+     * Query for conflicts.
+     * 
+     * @param collectionLink the collection link.
+     * @param query the query.
+     * @param options the feed options.
+     * @return the feed response of the obtained conflicts.
+     */
+    public FeedResponse<Conflict> queryConflicts(String collectionLink, String query, FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+
+        if (StringUtils.isEmpty(query)) {
+            throw new IllegalArgumentException("query");
+        }
+
+        return queryConflicts(collectionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for conflicts.
+     * 
+     * @param collectionLink the collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response of the obtained conflicts.
+     */
+    public FeedResponse<Conflict> queryConflicts(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
+
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
+        String path = DocumentClient.joinPath(collectionLink, Paths.CONFLICTS_PATH_SEGMENT);
+        Map<String, String> requestHeaders = this.getFeedHeaders(options);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict,
+                                                                       path,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
+                                                                       requestHeaders);
+        return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, request, ReadType.Query, Conflict.class));
     }
 
     /**
@@ -1436,13 +1661,39 @@ public final class DocumentClient {
         if (StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
         }
+
         if (StringUtils.isEmpty(query)) {
             throw new IllegalArgumentException("query");
         }
         
+        return queryUsers(databaseLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for users.
+     * 
+     * @param databaseLink the database link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response of the obtained users.
+     */
+    public FeedResponse<User> queryUsers(String databaseLink, SqlQuerySpec querySpec, FeedOptions options) {
+
+        if (StringUtils.isEmpty(databaseLink)) {
+            throw new IllegalArgumentException("databaseLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, query, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User,
+                                                                       path,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
+                                                                       requestHeaders);
         return new FeedResponse<User>(new QueryIterable<User>(this, request, ReadType.Query, User.class));
     }
 
@@ -1574,12 +1825,40 @@ public final class DocumentClient {
         if (StringUtils.isEmpty(permissionLink)) {
             throw new IllegalArgumentException("permissionLink");
         }
-        
+
+        if (StringUtils.isEmpty(query)) {
+            throw new IllegalArgumentException("query");
+        }
+
+        return queryPermissions(permissionLink, new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for permissions.
+     * 
+     * @param permissionLink the permission link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained permissions.
+     */
+    public FeedResponse<Permission> queryPermissions(String permissionLink,
+                                                     SqlQuerySpec querySpec,
+                                                     FeedOptions options) {
+
+        if (StringUtils.isEmpty(permissionLink)) {
+            throw new IllegalArgumentException("permissionLink");
+        }
+
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
         String path = DocumentClient.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
                                                                        path,
-                                                                       query,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
                                                                        requestHeaders);
         return new FeedResponse<Permission>(new QueryIterable<Permission>(this,
                                                                           request,

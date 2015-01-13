@@ -104,6 +104,47 @@ final class DocumentServiceRequest {
     }
 
     /**
+     * Creates a DocumentServiceRequest with a query.
+     * 
+     * @param resourceType the resource type.
+     * @param relativePath the relative URI path.
+     * @param query the query.
+     * @param headers the request headers.
+     * @return the created document service request.
+     */
+    public static DocumentServiceRequest create(ResourceType resourceType,
+                                                String relativePath,
+                                                SqlQuerySpec querySpec,
+                                                DocumentClient.QueryCompatibilityMode queryCompatibilityMode,
+                                                Map<String, String> headers) {
+        String queryText;
+        switch (queryCompatibilityMode) {
+            case SqlQuery:
+                if (querySpec.getParameters() != null && querySpec.getParameters().size() > 0) {
+                    throw new IllegalArgumentException(
+                        String.format("Unsupported argument in query compatibility mode '{%s}'",
+                                      queryCompatibilityMode.name()));
+                }
+
+                queryText = querySpec.getQueryText();
+                break;
+
+            case Default:
+            case Query:
+            default:
+                queryText = querySpec.toString();
+                break;
+        }
+
+        try {
+            HttpEntity body = new StringEntity(queryText);
+            return new DocumentServiceRequest(resourceType, relativePath, body, headers);
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalArgumentException("Failed to get HttpEntity from resource.", e);
+        }
+    }
+
+    /**
      * Creates a DocumentServiceRequest without body.
      * 
      * @param resourceType the resource type.

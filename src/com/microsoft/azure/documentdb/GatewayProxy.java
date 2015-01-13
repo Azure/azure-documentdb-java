@@ -45,10 +45,12 @@ final class GatewayProxy {
     private HttpClient httpClient;
     private HttpClient mediaHttpClient;
     private PoolingClientConnectionManager connectionManager;
+    private DocumentClient.QueryCompatibilityMode queryCompatibilityMode;
 
     public GatewayProxy(URI serviceEndpoint,
                         ConnectionPolicy connectionPolicy,
                         ConsistencyLevel consistencyLevel,
+                        DocumentClient.QueryCompatibilityMode queryCompatibilityMode,
                         String masterKey,
                         Map<String, String> resourceTokens) {
         this.serviceEndpoint = serviceEndpoint;
@@ -66,6 +68,7 @@ final class GatewayProxy {
         }
 
         this.connectionPolicy = connectionPolicy;
+        this.queryCompatibilityMode = queryCompatibilityMode;
         this.masterKey = masterKey;
         this.resourceTokens = resourceTokens;
 
@@ -109,8 +112,20 @@ final class GatewayProxy {
     public DocumentServiceResponse doSQLQuery(DocumentServiceRequest request)
         throws DocumentClientException {
         request.getHeaders().put(HttpConstants.HttpHeaders.IS_QUERY, "true");
-        request.getHeaders().put(HttpConstants.HttpHeaders.CONTENT_TYPE,
-                                 RuntimeConstants.MediaTypes.SQL);
+
+        switch (this.queryCompatibilityMode) {
+            case SqlQuery:
+                request.getHeaders().put(HttpConstants.HttpHeaders.CONTENT_TYPE,
+                                         RuntimeConstants.MediaTypes.SQL);
+                break;
+            case Default:
+            case Query:
+            default:
+                request.getHeaders().put(HttpConstants.HttpHeaders.CONTENT_TYPE,
+                                         RuntimeConstants.MediaTypes.QUERY_JSON);
+                break;
+        }
+
         return this.performPostRequest(request);
     }
 

@@ -105,6 +105,7 @@ class Constants {
 
     static class ResourceKeys {
         static final String ATTACHMENTS = "Attachments";
+        static final String CONFLICTS = "Conflicts";
         static final String DATABASES = "Databases";
         static final String DOCUMENTS = "Documents";
         static final String DOCUMENT_COLLECTIONS = "DocumentCollections";

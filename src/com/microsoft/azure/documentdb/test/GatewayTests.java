@@ -42,6 +42,9 @@ import com.microsoft.azure.documentdb.PermissionMode;
 import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
+import com.microsoft.azure.documentdb.SqlParameter;
+import com.microsoft.azure.documentdb.SqlParameterCollection;
+import com.microsoft.azure.documentdb.SqlQuerySpec;
 import com.microsoft.azure.documentdb.StoredProcedure;
 import com.microsoft.azure.documentdb.Trigger;
 import com.microsoft.azure.documentdb.TriggerOperation;
@@ -123,8 +126,10 @@ public final class GatewayTests {
         };
 
         for (String id : allDatabaseIds) {
-            Database database = client.queryDatabases(String.format("SELECT * FROM root r WHERE r.id='%s'", id),
-                                                      null).getQueryIterable().iterator().next();
+            Database database = client.queryDatabases(
+                    new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                     new SqlParameterCollection(new SqlParameter("@id", id))),
+                    null).getQueryIterable().iterator().next();
             if (database != null) {
                 client.deleteDatabase(database.getSelfLink(), null);
             }
@@ -189,7 +194,7 @@ public final class GatewayTests {
     }
 
     @Test
-    public void testJsonSerialization() throws DocumentClientException {
+    public void testJsonSerialization() {
         Document document = new Document();
         document.set("prop0", null);
         document.set("prop1", "abc");
@@ -252,6 +257,46 @@ public final class GatewayTests {
     }
 
     @Test
+    public void testSqlQuerySpecSerialization() {
+        Assert.assertEquals("{}", (new SqlQuerySpec()).toString());
+        Assert.assertEquals("{\"query\":\"SELECT 1\"}", (new SqlQuerySpec("SELECT 1")).toString());
+
+        Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
+                            "{\"name\":\"@p1\",\"value\":5}" +
+                            "]}",
+                            (new SqlQuerySpec("SELECT 1",
+                                              new SqlParameterCollection(new SqlParameter("@p1", 5)))).toString());
+
+        Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
+                            "{\"name\":\"@p1\",\"value\":5}," +
+                            "{\"name\":\"@p1\",\"value\":true}" +
+                            "]}",
+                            (new SqlQuerySpec("SELECT 1",
+                                    new SqlParameterCollection(new SqlParameter("@p1", 5),
+                                                               new SqlParameter("@p1", true)))).toString());
+
+        Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
+                            "{\"name\":\"@p1\",\"value\":\"abc\"}" +
+                            "]}",
+                            (new SqlQuerySpec("SELECT 1",
+                                              new SqlParameterCollection(new SqlParameter("@p1", "abc")))).toString());
+
+        Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
+                            "{\"name\":\"@p1\",\"value\":[1,2,3]}" +
+                            "]}",
+                            (new SqlQuerySpec("SELECT 1",
+                                              new SqlParameterCollection(
+                                                      new SqlParameter("@p1", new int[] {1,2,3})))).toString());
+
+        Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
+                            "{\"name\":\"@p1\",\"value\":{\"a\":[1,2,3]}}" +
+                            "]}",
+                            (new SqlQuerySpec("SELECT 1",
+                                    new SqlParameterCollection(new SqlParameter(
+                                                               "@p1", new JSONObject("{\"a\":[1,2,3]}"))))).toString());
+    }
+
+    @Test
     public void testDatabaseCrud() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
                                                    MASTER_KEY,
@@ -272,8 +317,9 @@ public final class GatewayTests {
         // create should increase the number of databases.
         Assert.assertEquals(beforeCreateDatabasesCount + 1, databases.size());
         // query databases.
-        databases = client.queryDatabases(String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                                        databaseDefinition.getId()),
+        databases = client.queryDatabases(new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                           new SqlParameterCollection(new SqlParameter(
+                                                                   "@id", databaseDefinition.getId()))),
                                           null).getQueryIterable().toList();
         // number of results for the query should be > 0.
         Assert.assertTrue(databases.size() > 0);
@@ -320,8 +366,9 @@ public final class GatewayTests {
         Assert.assertEquals(collections.size(), beforeCreateCollectionsCount + 1);
         // Query collections.
         collections = client.queryCollections(this.databaseForTest.getSelfLink(),
-                                              String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                                            collectionDefinition.getId()),
+                                              new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                               new SqlParameterCollection(new SqlParameter(
+                                                                       "@id", collectionDefinition.getId()))),
                                               null).getQueryIterable().toList();
         Assert.assertTrue(collections.size() > 0);
         // Delete collection.
@@ -515,8 +562,9 @@ public final class GatewayTests {
 
         // Query documents.
         documents = client.queryDocuments(this.collectionForTest.getSelfLink(),
-                                          String.format("SELECT * FROM root r WHERE r.name='%s'",
-                                                        documentDefinition.getString("name")),
+                                          new SqlQuerySpec("SELECT * FROM root r WHERE r.name=@id",
+                                                           new SqlParameterCollection(new SqlParameter(
+                                                                   "@id", documentDefinition.getString("name")))),
                                           null).getQueryIterable().toList();
         Assert.assertEquals(1, documents.size());
 
@@ -834,8 +882,10 @@ public final class GatewayTests {
         }
 
         triggers = client.queryTriggers(this.collectionForTest.getSelfLink(),
-                                        String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                                      newTrigger.getId()), null).getQueryIterable().toList();
+                                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                         new SqlParameterCollection(
+                                                                 new SqlParameter("@id", newTrigger.getId()))),
+                                        null).getQueryIterable().toList();
         if (triggers.size() > 0) {
             //
         } else {
@@ -882,9 +932,10 @@ public final class GatewayTests {
         }
 
         storedProcedures = client.queryStoredProcedures(this.collectionForTest.getSelfLink(),
-                                                        String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                                                      newStoredProcedure.getId()),
-                                                                      null).getQueryIterable().toList();
+                                                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                                         new SqlParameterCollection(new SqlParameter(
+                                                                                 "@id", newStoredProcedure.getId()))),
+                                                        null).getQueryIterable().toList();
         if (storedProcedures.size() > 0) {
             //
         } else {
@@ -1028,8 +1079,9 @@ public final class GatewayTests {
         {
             List<UserDefinedFunction> udfs = client.queryUserDefinedFunctions(
                     this.collectionForTest.getSelfLink(),
-                    String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                  newUdf.getId()), null).getQueryIterable().toList();
+                    new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                     new SqlParameterCollection(new SqlParameter("@id", newUdf.getId()))),
+                    null).getQueryIterable().toList();
             if (udfs.size() > 0) {
                 //
             } else {
@@ -1059,7 +1111,8 @@ public final class GatewayTests {
         Assert.assertEquals(beforeCreateCount + 1, users.size());
         // Query users.
         users = client.queryUsers(databaseForTest.getSelfLink(),
-                                  "SELECT * FROM root r WHERE r.id='new user'",
+                                  new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                   new SqlParameterCollection(new SqlParameter("@id", "new user"))),
                                   null).getQueryIterable().toList();
         Assert.assertEquals(1, users.size());
 
@@ -1113,9 +1166,10 @@ public final class GatewayTests {
 
         // Query permissions.
         permissions = client.queryPermissions(user.getSelfLink(),
-                                              String.format("SELECT * FROM root r WHERE r.id='%s'",
-                                                            permission.getId()),
-                                                            null).getQueryIterable().toList();
+                                              new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                                               new SqlParameterCollection(new SqlParameter(
+                                                                       "@id", permission.getId()))),
+                                              null).getQueryIterable().toList();
         Assert.assertEquals(1, permissions.size());
 
         // Replace permission.
@@ -1282,6 +1336,24 @@ public final class GatewayTests {
         Assert.assertEquals("document should have been created successfully",
                             "BBBBBB",
                             successDoc.getString("CustomProperty1"));
+    }
+
+    @Test
+    public void testConflictCrud() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+
+        // Read conflicts.
+        client.readConflicts(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
+
+        // Query for conflicts.
+        client.queryConflicts(
+                this.collectionForTest.getSelfLink(),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                 new SqlParameterCollection(new SqlParameter("@id", "FakeId"))),
+                null).getQueryIterable().toList();
     }
 
     private static String getUID() {

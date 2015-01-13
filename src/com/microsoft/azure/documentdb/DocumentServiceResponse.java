@@ -136,6 +136,8 @@ final class DocumentServiceResponse implements AutoCloseable {
     public static <T extends Resource> String getResourceKey(Class<T> c) {
         if (c.equals(Attachment.class)) {
             return Constants.ResourceKeys.ATTACHMENTS;
+        } else if (c.equals(Conflict.class)) {
+            return Constants.ResourceKeys.CONFLICTS;
         } else if (c.equals(Database.class)) {
             return Constants.ResourceKeys.DATABASES;
         } else if (c.equals(Document.class)) {
