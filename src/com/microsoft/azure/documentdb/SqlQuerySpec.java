@@ -47,7 +47,7 @@ public final class SqlQuerySpec extends JsonSerializable {
     /**
      * Sets the text of the query.
      * 
-     * @param value the query text.
+     * @param queryText the query text.
      */
     public void setQueryText(String queryText) {
         super.set("query", queryText);
