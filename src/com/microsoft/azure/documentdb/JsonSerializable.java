@@ -1,9 +1,11 @@
 package com.microsoft.azure.documentdb;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -106,6 +108,21 @@ class JsonSerializable {
         this.propertyBag.remove(propertyName);
     }
 
+    private static Object[] convertToObjectArray(Object array) {
+        Class<?> ofArray = array.getClass().getComponentType();
+        if (ofArray.isPrimitive()) {
+            List<Object> ar = new ArrayList<Object>();
+            int length = Array.getLength(array);
+            for (int i = 0; i < length; i++) {
+                ar.add(Array.get(array, i));
+            }
+            return ar.toArray();
+        }
+        else {
+            return (Object[]) array;
+        }
+    }
+
     /**
      * Sets the value of a property.
      * 
@@ -122,6 +139,12 @@ class JsonSerializable {
             // Collection.
             JSONArray jsonArray = new JSONArray();
             this.internalSetCollection(propertyName, (Collection)value, jsonArray);
+            this.propertyBag.put(propertyName, jsonArray);
+        } else if (value.getClass().isArray()) {
+            // Array.
+            JSONArray jsonArray = new JSONArray();
+            this.internalSetCollection(propertyName,
+                                       Arrays.asList(JsonSerializable.convertToObjectArray(value)), jsonArray);
             this.propertyBag.put(propertyName, jsonArray);
         } else if (value instanceof Number || value instanceof Boolean || value instanceof String ||
                 value instanceof JSONObject) {
