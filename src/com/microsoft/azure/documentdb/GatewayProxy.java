@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -169,7 +170,7 @@ final class GatewayProxy {
         if (this.masterKey != null) {
             final Date currentTime = new Date();
             final SimpleDateFormat sdf =
-                new SimpleDateFormat("E, dd MMM yyyy HH:mm:ss z");
+                new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
             sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
             String xDate = sdf.format(currentTime);
 
