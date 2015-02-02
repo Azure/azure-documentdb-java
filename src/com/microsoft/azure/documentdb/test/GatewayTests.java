@@ -131,7 +131,7 @@ public final class GatewayTests {
                                      new SqlParameterCollection(new SqlParameter("@id", id))),
                     null).getQueryIterable().iterator().next();
             if (database != null) {
-                client.deleteDatabase(database.getSelfLink(), null);
+                client.deleteDatabase(database.getSelfLink(), null).close();;
             }
         }
     }
@@ -332,11 +332,11 @@ public final class GatewayTests {
         Database oneDbFromRead = client.readDatabase(replacedDb.getSelfLink(), null).getResource();
         Assert.assertEquals(replacedDb.getId(), oneDbFromRead.getId());
         // Delete database.
-        client.deleteDatabase(replacedDb.getSelfLink(), null);
+        client.deleteDatabase(replacedDb.getSelfLink(), null).close();
 
         // Read database after deletion.
         try {
-            client.readDatabase(createdDb.getSelfLink(), null);
+            client.readDatabase(createdDb.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -372,11 +372,11 @@ public final class GatewayTests {
                                               null).getQueryIterable().toList();
         Assert.assertTrue(collections.size() > 0);
         // Delete collection.
-        client.deleteCollection(createdCollection.getSelfLink(), null);
+        client.deleteCollection(createdCollection.getSelfLink(), null).close();
         // Read collection after deletion.
 
         try {
-            client.readCollection(createdCollection.getSelfLink(), null);
+            client.readCollection(createdCollection.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -397,7 +397,7 @@ public final class GatewayTests {
         // Create 10 documents.
         for (int i = 0; i < numOfDocuments; ++i) {
             Document documentDefinition = new Document("{ 'name': 'For paging test' }");
-            client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, false);
+            client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, false).close();
         }
 
         int numOfDocumentsPerPage = numOfDocuments / 5;
@@ -471,7 +471,7 @@ public final class GatewayTests {
                 "    'indexingMode': 'Lazy'" +
                 "  }" +
                 "}");
-        client.deleteCollection(this.collectionForTest.getSelfLink(), null);
+        client.deleteCollection(this.collectionForTest.getSelfLink(), null).close();
         DocumentCollection lazyCollection = client.createCollection(this.databaseForTest.getSelfLink(),
                                                                     lazyCollectionDefinition,
                                                                     null).getResource();
@@ -485,7 +485,7 @@ public final class GatewayTests {
                 "    'indexingMode': 'Consistent'" +
                 "  }" +
                 "}");
-        client.deleteCollection(lazyCollection.getSelfLink(), null);
+        client.deleteCollection(lazyCollection.getSelfLink(), null).close();
         DocumentCollection consistentCollection = client.createCollection(this.databaseForTest.getSelfLink(),
                                                                           consistentCollectionDefinition,
                                                                           null).getResource();
@@ -509,7 +509,7 @@ public final class GatewayTests {
                 "    ]" +
                 "  }" +
                 "}");
-        client.deleteCollection(consistentCollection.getSelfLink(), null);
+        client.deleteCollection(consistentCollection.getSelfLink(), null).close();
         DocumentCollection collectionWithSecondaryIndex = client.createCollection(this.databaseForTest.getSelfLink(),
                                                                                   collectionDefinition,
                                                                                   null).getResource();
@@ -592,11 +592,11 @@ public final class GatewayTests {
         Assert.assertEquals(rr.getStatusCode(), HttpStatus.SC_NOT_MODIFIED);
 
         // delete document
-        client.deleteDocument(replacedDocument.getSelfLink(), null);
+        client.deleteDocument(replacedDocument.getSelfLink(), null).close();
 
         // read documents after deletion
         try {
-            client.readDocument(replacedDocument.getSelfLink(), null);
+            client.readDocument(replacedDocument.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -738,7 +738,7 @@ public final class GatewayTests {
         // Create attachment with invalid content type.
         ReadableStream mediaStream = new ReadableStream("stream content.");
         try {
-            client.createAttachment(document.getSelfLink(), mediaStream, invalidMediaOptions);
+            client.createAttachment(document.getSelfLink(), mediaStream, invalidMediaOptions).close();
             Assert.assertTrue(false);  // This line shouldn't execute.
         } catch (DocumentClientException e) {
             Assert.assertEquals(400, e.getStatusCode());
@@ -755,7 +755,7 @@ public final class GatewayTests {
         mediaStream = new ReadableStream("stream content");
         // Create colliding attachment.
         try {
-            client.createAttachment(document.getSelfLink(), mediaStream, validMediaOptions);
+            client.createAttachment(document.getSelfLink(), mediaStream, validMediaOptions).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(409, e.getStatusCode());
@@ -786,7 +786,7 @@ public final class GatewayTests {
         attachment.set("Author", "new author");
 
         // Replace the attachment.
-        client.replaceAttachment(attachment, null);
+        client.replaceAttachment(attachment, null).close();
         Assert.assertEquals("Book", attachment.getString("MediaType"));
         Assert.assertEquals("new author", attachment.getString("Author"));
         // Read attachment media.
@@ -829,7 +829,7 @@ public final class GatewayTests {
         Assert.assertEquals(validAttachment.getMediaLink(), attachment.getMediaLink());
         Assert.assertEquals(validAttachment.getContentType(), attachment.getContentType());
         // Deleting attachment.
-        client.deleteAttachment(attachment.getSelfLink(), null);
+        client.deleteAttachment(attachment.getSelfLink(), null).close();
         // read attachments after deletion
         attachments = client.readAttachments(document.getSelfLink(), null).getQueryIterable().toList();
         Assert.assertEquals(0, attachments.size());
@@ -861,7 +861,7 @@ public final class GatewayTests {
 
         Document document = new Document();
         document.setId("noname");
-        client.createDocument(this.collectionForTest.getSelfLink(), document, options, false);
+        client.createDocument(this.collectionForTest.getSelfLink(), document, options, false).close();
 
         // replace...
         String id = GatewayTests.getUID();
@@ -892,7 +892,7 @@ public final class GatewayTests {
             Assert.fail("Query fail to find trigger");
         }
 
-        client.deleteTrigger(newTrigger.getSelfLink(), null);
+        client.deleteTrigger(newTrigger.getSelfLink(), null).close();
     }
 
     @Test
@@ -942,7 +942,7 @@ public final class GatewayTests {
             Assert.fail("Query fail to find StoredProcedure");
         }
 
-        client.deleteStoredProcedure(newStoredProcedure.getSelfLink(), null);
+        client.deleteStoredProcedure(newStoredProcedure.getSelfLink(), null).close();
     }
 
     @Test
@@ -1088,7 +1088,7 @@ public final class GatewayTests {
                 Assert.fail("Query fail to find UserDefinedFunction");
             }
         }
-        client.deleteUserDefinedFunction(newUdf.getSelfLink(), null);
+        client.deleteUserDefinedFunction(newUdf.getSelfLink(), null).close();
     }
 
     @Test
@@ -1126,10 +1126,10 @@ public final class GatewayTests {
         user = client.readUser(replacedUser.getSelfLink(), null).getResource();
         Assert.assertEquals(replacedUser.getId(), user.getId());
         // Delete user.
-        client.deleteUser(user.getSelfLink(), null);
+        client.deleteUser(user.getSelfLink(), null).close();
         // Read user after deletion.
         try {
-            client.readUser(user.getSelfLink(), null);
+            client.readUser(user.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -1183,10 +1183,10 @@ public final class GatewayTests {
         permission = client.readPermission(replacedPermission.getSelfLink(), null).getResource();
         Assert.assertEquals(replacedPermission.getId(), permission.getId());
         // Delete permission.
-        client.deletePermission(replacedPermission.getSelfLink(), null);
+        client.deletePermission(replacedPermission.getSelfLink(), null).close();
         // Read permission after deletion.
         try {
-            client.readPermission(permission.getSelfLink(), null);
+            client.readPermission(permission.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -1297,7 +1297,7 @@ public final class GatewayTests {
                 clientForCollection1.readCollection(collectionForTest.getSelfLink(), null).getResource();
         // 2. Failure-- Use Col1 Permission to delete
         try {
-            clientForCollection1.deleteCollection(obtainedCollection1.getSelfLink(), null);
+            clientForCollection1.deleteCollection(obtainedCollection1.getSelfLink(), null).close();
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(403, e.getStatusCode());
