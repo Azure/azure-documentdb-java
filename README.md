@@ -47,6 +47,67 @@ To use this SDK to call Azure DocumentDB, you need to first [create an account](
 
 You can follow this [tutorial](http://azure.microsoft.com/en-us/documentation/articles/documentdb-java-application/) to help you get started.
 
+```java
+import java.util.Collection;
+
+import com.google.gson.Gson;
+import com.microsoft.azure.documentdb.ConnectionPolicy;
+import com.microsoft.azure.documentdb.ConsistencyLevel;
+import com.microsoft.azure.documentdb.Database;
+import com.microsoft.azure.documentdb.Document;
+import com.microsoft.azure.documentdb.DocumentClient;
+import com.microsoft.azure.documentdb.DocumentClientException;
+import com.microsoft.azure.documentdb.DocumentCollection;
+
+public class SampleApp {
+    // Replace with your DocumentDB end point and master key.
+    private static final String END_POINT = "[YOUR_ENDPOINT_HERE]";
+    private static final String MASTER_KEY = "[YOUR_KEY_HERE]";
+
+    // Define an id for your database and collection
+    private static final String DATABASE_ID = "TestDB";
+    private static final String COLLECTION_ID = "TestCollection";
+
+    // We'll use Gson for POJO <=> JSON serialization for this sample.
+    // Codehaus' Jackson is another great POJO <=> JSON serializer.
+    private static Gson gson = new Gson();
+
+    public static void main(String[] args) throws DocumentClientException {
+        // Instantiate a DocumentClient w/ your DocumetnDB Endpoint and AuthKey.
+        DocumentClient documentClient = new DocumentClient(END_POINT,
+                MASTER_KEY, ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Define a new database using the id above.
+        Database myDatabase = new Database();
+        myDatabase.setId(DATABASE_ID);
+
+        // Create a new database.
+        myDatabase = documentClient.createDatabase(myDatabase, null)
+                .getResource();
+
+        // Define a new collection using the id above.
+        DocumentCollection myCollection = new DocumentCollection();
+        myCollection.setId(COLLECTION_ID);
+
+        // Create a new collection.
+        myCollection = documentClient.createCollection(
+                myDatabase.getSelfLink(), myCollection, null).getResource();
+
+        // Create an object, serialize it in to JSON, and wrap it in to a
+        // document.
+        SomePojo somePojo = new SomePojo();
+        String somePojoJson = gson.toJson(somePojo);
+        Document myDocument = new Document(somePojoJson);
+
+        // Create a new document.
+        myDocument = documentClient.createDocument(myCollection.getSelfLink(),
+                myDocument, null, false).getResource();
+
+    }
+}
+```
+
 Additional samples are provided in the unit tests.
 
 ##Need Help?
