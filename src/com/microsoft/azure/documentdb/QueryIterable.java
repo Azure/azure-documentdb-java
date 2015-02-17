@@ -190,6 +190,8 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             this.continuation = this.responseHeaders.get(HttpConstants.HttpHeaders.CONTINUATION);
 
             fetchedItems = response.getQueryResponse(this.classT);
+            this.items.clear();
+            this.currentIndex = 0;
             this.items.addAll(fetchedItems);
 
             if (fetchedItems != null && fetchedItems.size() > 0) {

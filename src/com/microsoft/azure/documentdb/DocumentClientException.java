@@ -68,7 +68,7 @@ public class DocumentClientException extends Exception {
             String header = this.responseHeaders.get(
             HttpConstants.HttpHeaders.RETRY_AFTER_IN_MILLISECONDS);
 
-            if (!header.isEmpty()) {
+            if (header != null && !header.isEmpty()) {
                 long retryIntervalInMilliseconds = Long.valueOf(header);
                 return retryIntervalInMilliseconds;
             }
