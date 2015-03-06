@@ -150,7 +150,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     public void reset() {
         this.hasStarted = false;
         this.continuation = this.initialContinuation;
-        this.items = new ArrayList<T>();
+        this.items.clear();
         this.currentIndex = 0;
         this.hasNext = true;
     }

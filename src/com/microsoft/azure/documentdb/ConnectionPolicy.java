@@ -29,6 +29,7 @@ public final class ConnectionPolicy {
         this.mediaReadMode = MediaReadMode.Buffered;
         this.maxPoolSize = DEFAULT_MAX_POOL_SIZE;
         this.idleConnectionTimeout = DEFAULT_IDLE_CONNECTION_TIMEOUT;
+        this.userAgentSuffix = "";
     }
 
     private int maxConnections;
@@ -167,6 +168,24 @@ public final class ConnectionPolicy {
      */
     public void setIdleConnectionTimeout(int idleConnectionTimeout) {
         this.idleConnectionTimeout = idleConnectionTimeout;
+    }
+    
+    private String userAgentSuffix;
+    
+    /**
+     * sets the value of the user-agent suffix.
+     * @param userAgentSuffix The value to be appended to the user-agent header, this is used for monitoring purposes.
+     */
+    public void setUserAgentSuffix(String userAgentSuffix) {
+        this.userAgentSuffix = userAgentSuffix;
+    }
+    
+    /**
+     * Gets the value of user-agent suffix.
+     * @return the value of user-agent suffix.
+     */
+    public String getUserAgentSuffix() {
+        return this.userAgentSuffix;
     }
     
     /**
