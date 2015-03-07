@@ -128,12 +128,19 @@ public final class DocumentClient {
         this.sessionContainer = new SessionContainer(this.serviceEndpoint.getHost());
         this.desiredConsistencyLevel = desiredConsistencyLevel;
 
+        UserAgentContainer userAgentContainer = new UserAgentContainer();
+        String userAgentSuffix = connectionPolicy.getUserAgentSuffix();
+        if(userAgentSuffix != null && userAgentSuffix.length() > 0) {
+            userAgentContainer.setSuffix(userAgentSuffix);
+        }
+
         this.gatewayProxy = new GatewayProxy(this.serviceEndpoint,
                                              this.connectionPolicy,
                                              desiredConsistencyLevel,
                                              this.queryCompatibilityMode,
                                              this.masterKey,
-                                             this.resourceTokens);
+                                             this.resourceTokens,
+                                             userAgentContainer);
     }
 
     RetryPolicy getRetryPolicy() {

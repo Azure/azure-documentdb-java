@@ -1356,6 +1356,13 @@ public final class GatewayTests {
                 null).getQueryIterable().toList();
     }
 
+    @Test
+    public void testCustomizedUserAgentCrud() throws DocumentClientException {
+        ConnectionPolicy policy = ConnectionPolicy.GetDefault();
+        policy.setUserAgentSuffix("My-Custom-User-Agent");
+        Assert.assertEquals("User-agent suffix should've been added", "My-Custom-User-Agent", policy.getUserAgentSuffix());
+    }
+
     private static String getUID() {
         UUID u = UUID.randomUUID();
         return ("" + u.getMostSignificantBits()) + Math.abs(u.getLeastSignificantBits());

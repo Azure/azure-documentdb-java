@@ -53,15 +53,20 @@ final class GatewayProxy {
                         ConsistencyLevel consistencyLevel,
                         DocumentClient.QueryCompatibilityMode queryCompatibilityMode,
                         String masterKey,
-                        Map<String, String> resourceTokens) {
+                        Map<String, String> resourceTokens,
+                        UserAgentContainer userAgentContainer) {
         this.serviceEndpoint = serviceEndpoint;
         this.defaultHeaders = new HashMap<String, String>();
         this.defaultHeaders.put(HttpConstants.HttpHeaders.CACHE_CONTROL,
                                 "no-cache");
         this.defaultHeaders.put(HttpConstants.HttpHeaders.VERSION,
                                 HttpConstants.Versions.CURRENT_VERSION);
-        this.defaultHeaders.put(HttpConstants.HttpHeaders.USER_AGENT,
-                                HttpConstants.Versions.USER_AGENT);
+
+        if (userAgentContainer == null) {
+            userAgentContainer = new UserAgentContainer();
+        }
+
+        this.defaultHeaders.put(HttpConstants.HttpHeaders.USER_AGENT, userAgentContainer.getUserAgent());
 
         if (consistencyLevel != null) {
             this.defaultHeaders.put(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL,
