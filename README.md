@@ -14,7 +14,7 @@ To get the binaries of this library as distributed by Microsoft, ready for use w
     <dependency>
     	<groupId>com.microsoft.azure</groupId>
     	<artifactId>azure-documentdb</artifactId>
-    	<version>0.9.4</version>
+    	<version>0.9.5</version>
     </dependency>
 
 ###Option 2: Source Via Git
