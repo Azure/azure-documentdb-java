@@ -101,21 +101,39 @@ public final class ResourceResponse<T extends Resource> implements AutoCloseable
     /**
      * Max Quota.
      *  
-     * @return the document size quota.
+     * @return the collection size quota.
      */
-    public long getDocumentSizeQuota() {
-        return this.getMaxQuotaHeader(Constants.Quota.DOCUMENT_SIZE);
+    public long getCollectionSizeQuota() {
+        return this.getMaxQuotaHeader(Constants.Quota.COLLECTION_SIZE);
     }
 
     /**
      * Current Usage.
      *  
-     * @return the document size usage.
+     * @return the collection size usage.
      */
-    public long getDocumentSizeUsage() {
-        return this.getCurrentQuotaHeader(Constants.Quota.DOCUMENT_SIZE);
+    public long getCollectionSizeUsage() {
+        return this.getCurrentQuotaHeader(Constants.Quota.COLLECTION_SIZE);
     }
 
+    /**
+     * Max Quota.
+     *  
+     * @return the document quota.
+     */
+    public long getDocumentQuota() {
+        return this.getMaxQuotaHeader(Constants.Quota.DOCUMENTS_SIZE);
+    }
+
+    /**
+     * Current Usage.
+     *  
+     * @return the document usage.
+     */
+    public long getDocumentUsage() {
+        return this.getCurrentQuotaHeader(Constants.Quota.DOCUMENTS_SIZE);
+    }
+    
     /**
      * Max Quota.
      * 
@@ -307,10 +325,13 @@ public final class ResourceResponse<T extends Resource> implements AutoCloseable
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.PERMISSION)) {
                 this.quotaHeaders.put(Constants.Quota.PERMISSION, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.PERMISSION, Long.valueOf(headerCurrentUsageWords[i + 1]));
-            } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.DOCUMENT_SIZE)) {
-                this.quotaHeaders.put(Constants.Quota.DOCUMENT_SIZE, Long.valueOf(headerMaxQuotaWords[i + 1]));
-                this.usageHeaders.put(Constants.Quota.DOCUMENT_SIZE, Long.valueOf(headerCurrentUsageWords[i + 1]));
-            } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.STORED_PROCEDURE)) {
+            } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.COLLECTION_SIZE)) {
+                this.quotaHeaders.put(Constants.Quota.COLLECTION_SIZE, Long.valueOf(headerMaxQuotaWords[i + 1]));
+                this.usageHeaders.put(Constants.Quota.COLLECTION_SIZE, Long.valueOf(headerCurrentUsageWords[i + 1]));
+            } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.DOCUMENTS_SIZE)) {
+                this.quotaHeaders.put(Constants.Quota.DOCUMENTS_SIZE, Long.valueOf(headerMaxQuotaWords[i + 1]));
+                this.usageHeaders.put(Constants.Quota.DOCUMENTS_SIZE, Long.valueOf(headerCurrentUsageWords[i + 1]));
+            }else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.STORED_PROCEDURE)) {
                 this.quotaHeaders.put(Constants.Quota.STORED_PROCEDURE, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.STORED_PROCEDURE, Long.valueOf(headerCurrentUsageWords[i + 1]));
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.TRIGGER)) {

@@ -101,8 +101,6 @@ class HttpConstants {
         // Usage Info
         public static final String REQUEST_CHARGE = "x-ms-request-charge";
         public static final String CURRENT_MEDIA_STORAGE_USAGE_IN_MB = "x-ms-media-storage-usage-mb";
-        public static final String DATABASE_ACCOUNT_CAPACITY_UNITS_CONSUMED = "x-ms-database-capacity-units-consumed";
-        public static final String DATABASE_ACCOUNT_CAPACITY_UNITS_PROVISIONED = "x-ms-database-capacity-units-provisioned";
         public static final String DATABASE_ACCOUNT_CONSUMED_DOCUMENT_STORAGE_IN_MB = "x-ms-databaseaccount-consumed-mb";
         public static final String DATABASE_ACCOUNT_RESERVED_DOCUMENT_STORAGE_IN_MB = "x-ms-databaseaccount-reserved-mb";
         public static final String DATABASE_ACCOUNT_PROVISIONED_DOCUMENT_STORAGE_IN_MB = "x-ms-databaseaccount-provisioned-mb";
@@ -143,6 +141,9 @@ class HttpConstants {
         // Client-request-id: Optional caller-specified request ID, in the form
         // of a GUID
         public static final String CLIENT_REQUEST_ID = "x-ms-client-request-id";
+
+        // Offer header
+        public static final String OFFER_TYPE = "x-ms-offer-type";
     }
 
     public static class Versions {
@@ -151,9 +152,9 @@ class HttpConstants {
         public static String DOCUMENT_SERVICE_PROPERTIES_VERSION_20131105 = "2013-11-05";
         public static String MEDIA_ID_FORMAT_CHANGE_VERSION_20140418 = "2014-02-25";
 
-        public static String CURRENT_VERSION = "2014-08-21";
+        public static String CURRENT_VERSION = "2015-04-08";
 
-        public static String USER_AGENT = "documentdb-java-sdk-0.9.5";
+        public static String USER_AGENT = "documentdb-java-sdk-1.0.0";
     }
     
     public static class StatusCodes {

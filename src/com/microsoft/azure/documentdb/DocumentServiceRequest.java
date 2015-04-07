@@ -22,6 +22,30 @@ final class DocumentServiceRequest {
 
     /**
      * Creates a DocumentServiceRequest with an HttpEntity.
+     *
+     * @param resourceId the resource Id.
+     * @param resourceType the resource type.
+     * @param httpEntity the HTTP entity.
+     * @param headers the request headers.
+     */
+    private DocumentServiceRequest(String resourceId,
+                                   ResourceType resourceType,
+                                   HttpEntity body,
+                                   Map<String, String> headers) {
+        this.resourceType = resourceType;
+        this.path = null;
+        this.resourceId = resourceId;
+
+        if (resourceType == ResourceType.Media) {
+            this.resourceId = getAttachmentIdFromMediaId(this.resourceId);
+        }
+
+        this.body = body;
+        this.headers = headers != null ? headers : new HashMap<String, String>();
+    }
+
+    /**
+     * Creates a DocumentServiceRequest with an HttpEntity.
      * 
      * @param resourceType the resource type.
      * @param relativePath the relative URI path.
@@ -156,6 +180,20 @@ final class DocumentServiceRequest {
                                                 String relativePath,
                                                 Map<String, String> headers) {
         return new DocumentServiceRequest(resourceType, relativePath, null, headers);
+    }
+
+    /**
+     * Creates a DocumentServiceRequest with a resourceId.
+     *
+     * @param resourceId the resource id.
+     * @param resourceType the resource type.
+     * @param headers the request headers.
+     * @return the created document service request.
+     */
+    public static DocumentServiceRequest create(String resourceId,
+                                                ResourceType resourceType,
+                                                Map<String, String> headers) {
+        return new DocumentServiceRequest(resourceId, resourceType, null, headers);
     }
 
     static String extractIdFromUri(String path) {

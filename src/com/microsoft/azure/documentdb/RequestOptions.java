@@ -151,4 +151,24 @@ public final class RequestOptions {
     public void setResourceTokenExpirySeconds(Integer resourceTokenExpirySeconds) {
         this.resourceTokenExpirySeconds = resourceTokenExpirySeconds;
     }
+
+    private String offerType;
+
+    /**
+     * Gets the offer type when creating a document collection.
+     * 
+     * @return the offer type.
+     */
+    public String getOfferType() {
+        return this.offerType;
+    }
+
+    /**
+     * Sets the offer type when creating a document collection.
+     * 
+     * @param offerType the offer type.
+     */
+    public void setOfferType(String offerType) {
+        this.offerType = offerType;
+    }
 }

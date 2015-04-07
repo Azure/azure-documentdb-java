@@ -12,6 +12,7 @@ enum ResourceType {
     Document,
     DocumentCollection,
     Media,  // Media doesn't have a corresponding resource class.
+    Offer,
     Permission,
     StoredProcedure,
     Trigger,

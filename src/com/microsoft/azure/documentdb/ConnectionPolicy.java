@@ -9,7 +9,6 @@ package com.microsoft.azure.documentdb;
  */
 public final class ConnectionPolicy {
 
-    private static final int DEFAULT_MAX_CONNECTIONS = 20;
     private static final int DEFAULT_REQUEST_TIMEOUT = 60;
     // defaultMediaRequestTimeout is based upon the blob client timeout and the retry policy.
     private static final int DEFAULT_MEDIA_REQUEST_TIMEOUT = 300;
@@ -22,7 +21,6 @@ public final class ConnectionPolicy {
      * Constructor.
      */
     public ConnectionPolicy() {
-        this.maxConnections = ConnectionPolicy.DEFAULT_MAX_CONNECTIONS;
         this.requestTimeout = ConnectionPolicy.DEFAULT_REQUEST_TIMEOUT;
         this.mediaRequestTimeout = ConnectionPolicy.DEFAULT_MEDIA_REQUEST_TIMEOUT;
         this.connectionMode = ConnectionMode.Gateway;
@@ -30,28 +28,6 @@ public final class ConnectionPolicy {
         this.maxPoolSize = DEFAULT_MAX_POOL_SIZE;
         this.idleConnectionTimeout = DEFAULT_IDLE_CONNECTION_TIMEOUT;
         this.userAgentSuffix = "";
-    }
-
-    private int maxConnections;
-
-    /**
-     * Gets the maximum number of simultaneous network connections with a specific data partition. Currently used only
-     * for Protocol.Tcp.
-     * 
-     * @return the max connections.
-     */
-    public int getMaxConnections() {
-        return this.maxConnections;
-    }
-
-    /**
-     * Sets the maximum number of simultaneous network connections with a specific data partition. Currently used only
-     * for Protocol.Tcp.
-     * 
-     * @param maxConnections the max connections.
-     */
-    public void setMaxConnections(int maxConnections) {
-        this.maxConnections = maxConnections;
     }
 
     private int requestTimeout;
@@ -97,7 +73,7 @@ public final class ConnectionPolicy {
     private ConnectionMode connectionMode;
 
     /**
-     * Gets the connection mode used the client Gateway or Direct.
+     * Gets the connection mode used in the client. Currently only Gateway in supported.
      * 
      * @return the connection mode.
      */
@@ -106,7 +82,7 @@ public final class ConnectionPolicy {
     }
 
     /**
-     * Sets the connection mode used the client Gateway or Direct
+     * Sets the connection mode used in the client. Currently only Gateway in supported.
      * 
      * @param connectionMode the connection mode.
      */

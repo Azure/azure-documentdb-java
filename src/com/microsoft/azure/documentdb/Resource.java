@@ -98,8 +98,9 @@ public class Resource extends JsonSerializable {
      * @return the timestamp.
      */
     public Date getTimestamp() {
-        double millisec = super.getDouble(Constants.Properties.LAST_MODIFIED);
-        return new Date((long) millisec);
+        Double millisec = super.getDouble(Constants.Properties.LAST_MODIFIED);
+        if (millisec == null) return null;
+        return new Date(millisec.longValue());
     }
 
     /**
