@@ -144,6 +144,8 @@ final class DocumentServiceResponse implements AutoCloseable {
             return Constants.ResourceKeys.DOCUMENTS;
         } else if (c.equals(DocumentCollection.class)) {
             return Constants.ResourceKeys.DOCUMENT_COLLECTIONS;
+        } else if (c.equals(Offer.class)) {
+            return Constants.ResourceKeys.OFFERS;
         } else if (c.equals(Permission.class)) {
             return Constants.ResourceKeys.PERMISSIONS;
         } else if (c.equals(Trigger.class)) {

@@ -10,11 +10,6 @@ public class DatabaseAccount extends Resource {
 
     private long maxMediaStorageUsageInMB;
     private long mediaStorageUsageInMB;
-    private long capacityUnitsConsumed;
-    private long capacityUnitsProvisioned;
-    private long consumedDocumentStorageInMB;
-    private long reservedDocumentStorageInMB;
-    private long provisionedDocumentStorageInMB;
 
     /**
      * Constructor.
@@ -122,77 +117,6 @@ public class DatabaseAccount extends Resource {
 
     void setMediaStorageUsageInMB(long value) {
         this.mediaStorageUsageInMB = value;
-    }
-
-    /**
-     * The number is capacity units database account is currently consuming. Value is returned from cached information
-     * which is updated periodically and is not guaranteed to be real time.
-     * 
-     * @return the capacity units consumed.
-     */
-    public long getCapacityUnitsConsumed() {
-        return this.capacityUnitsConsumed;
-    }
-
-    void setCapacityUnitsConsumed(long value) {
-        this.capacityUnitsConsumed = value;
-    }
-
-    /**
-     * The number of provisioned capacity units for the database account
-     * Value is returned from cached information which is updated periodically
-     * and is not guaranteed to be real time.
-     * 
-     * @return the capacity units provisioned.
-     */
-    public long getCapacityUnitsProvisioned() {
-        return this.capacityUnitsProvisioned;
-    }
-
-    void setCapacityUnitsProvisioned(long value) {
-        this.capacityUnitsProvisioned = value;
-    }
-
-    /**
-     * The cumulative sum of current sizes of created collection in MB Value is returned from cached information which
-     * is updated periodically and is not guaranteed to be real time
-     * 
-     * @return the consumed documents storage in MB.
-     */
-    public long getConsumedDocumentStorageInMB() {
-        return this.consumedDocumentStorageInMB;
-    }
-
-    void setConsumedDocumentStorageInMB(long value) {
-        this.consumedDocumentStorageInMB = value;
-    }
-
-    /**
-     * The cumulative sum of maximum sizes of created collection in MB Value is returned from cached information which
-     * is updated periodically and is not guaranteed to be real time.
-     * 
-     * @return the reserved documents storage in MB.
-     */
-    public long getReservedDocumentStorageInMB() {
-        return this.reservedDocumentStorageInMB;
-    }
-
-    void setReservedDocumentStorageInMB(long value) {
-        this.reservedDocumentStorageInMB = value;
-    }
-
-    /**
-     * The provisioned documented storage capacity for the database account Value is returned from cached information
-     * which is updated periodically and is not guaranteed to be real time.
-     * 
-     * @return the provisioned document storage in MB.
-     */
-    public long getProvisionedDocumentStorageInMB() {
-        return this.provisionedDocumentStorageInMB;
-    }
-
-    void setProvisionedDocumentStorageInMB(long value) {
-        this.provisionedDocumentStorageInMB = value;
     }
 
     /**

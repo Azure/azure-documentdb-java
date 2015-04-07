@@ -170,30 +170,6 @@ public final class DocumentClient {
     }
 
     /**
-     * Replaces a database.
-     * 
-     * @param database the database.
-     * @param options the request options.
-     * @return the resource response with the replaced database.
-     * @throws DocumentClientException the document client exception.
-     */
-    public ResourceResponse<Database> replaceDatabase(Database database,
-                                                      RequestOptions options)
-            throws DocumentClientException {
-        if (database == null) {
-            throw new IllegalArgumentException("Database");          
-        }
-        
-        String path = DocumentClient.joinPath(database.getSelfLink(), null);
-        Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
-                                                                       path,
-                                                                       database,
-                                                                       requestHeaders);
-        return new ResourceResponse<Database>(this.doReplace(request), Database.class);
-    }
-
-    /**
      * Deletes a database.
      * 
      * @param databaseLink the database link.
@@ -1741,7 +1717,7 @@ public final class DocumentClient {
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<Permission> replacePermission(Permission permission, RequestOptions options)
-    		throws DocumentClientException {
+            throws DocumentClientException {
 
         if (permission == null) {
             throw new IllegalArgumentException("permission");          
@@ -1874,6 +1850,95 @@ public final class DocumentClient {
     }
 
     /**
+     * Replaces an offer.
+     * 
+     * @param offer the offer to use.
+     * @return the resource response with the replaced offer.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Offer> replaceOffer(Offer offer) throws DocumentClientException {
+
+        if (offer == null) {
+            throw new IllegalArgumentException("offer");          
+        }
+
+        String path = DocumentClient.joinPath(offer.getSelfLink(), null);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
+                                                                       path,
+                                                                       offer,
+                                                                       null);
+        return new ResourceResponse<Offer>(this.doReplace(request), Offer.class);
+    }
+
+    /**
+     * Reads an offer.
+     * 
+     * @param offerLink the offer link.
+     * @return the resource response with the read offer.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Offer> readOffer(String offerLink) throws DocumentClientException {
+
+        if (StringUtils.isEmpty(offerLink)) {
+            throw new IllegalArgumentException("offerLink");
+        }
+        
+        String path = DocumentClient.joinPath(offerLink, null);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, null);
+        return new ResourceResponse<Offer>(this.doRead(request), Offer.class);
+    }
+
+    /**
+     * Reads offers.
+     * 
+     * @param options the feed options.
+     * @return the feed response with the read offers.
+     */
+    public FeedResponse<Offer> readOffers(FeedOptions options) {
+        String path = DocumentClient.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
+        Map<String, String> requestHeaders = this.getFeedHeaders(options);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, requestHeaders);
+        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, request, ReadType.Feed, Offer.class));
+    }
+
+    /**
+     * Query for offers in a database.
+     * 
+     * @param query the query.
+     * @param options the feed options.
+     * @return the feed response with the obtained offers.
+     */
+    public FeedResponse<Offer> queryOffers(String query, FeedOptions options) {
+        if (StringUtils.isEmpty(query)) {
+            throw new IllegalArgumentException("query");
+        }
+
+        return queryOffers(new SqlQuerySpec(query, null), options);
+    }
+
+    /**
+     * Query for offers in a database.
+     * 
+     * @param querySpec the query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained offers.
+     */
+    public FeedResponse<Offer> queryOffers(SqlQuerySpec querySpec, FeedOptions options) {
+        if (querySpec == null) {
+            throw new IllegalArgumentException("querySpec");
+        }
+
+        String path = DocumentClient.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
+        Map<String, String> requestHeaders = this.getFeedHeaders(options);
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
+                                                                       path,
+                                                                       querySpec,
+                                                                       this.queryCompatibilityMode,
+                                                                       requestHeaders);
+        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, request, ReadType.Query, Offer.class));
+    }
+
+    /**
      * Gets database account information.
      * 
      * @return the database account.
@@ -1889,20 +1954,10 @@ public final class DocumentClient {
         // read the headers and set to the account
         Map<String, String> responseHeader = response.getResponseHeaders();
 
-        account.setCapacityUnitsConsumed(Long.valueOf(responseHeader.get(
-                HttpConstants.HttpHeaders.DATABASE_ACCOUNT_CAPACITY_UNITS_CONSUMED)));
-        account.setCapacityUnitsProvisioned(Long.valueOf(responseHeader.get(
-                HttpConstants.HttpHeaders.DATABASE_ACCOUNT_CAPACITY_UNITS_PROVISIONED)));
         account.setMaxMediaStorageUsageInMB(Long.valueOf(responseHeader.get(
                 HttpConstants.HttpHeaders.MAX_MEDIA_STORAGE_USAGE_IN_MB)));
         account.setMediaStorageUsageInMB(Long.valueOf(responseHeader.get(
                 HttpConstants.HttpHeaders.CURRENT_MEDIA_STORAGE_USAGE_IN_MB)));
-        account.setConsumedDocumentStorageInMB(Long.valueOf(responseHeader.get(
-                HttpConstants.HttpHeaders.DATABASE_ACCOUNT_CONSUMED_DOCUMENT_STORAGE_IN_MB)));
-        account.setReservedDocumentStorageInMB(Long.valueOf(responseHeader.get(
-                HttpConstants.HttpHeaders.DATABASE_ACCOUNT_RESERVED_DOCUMENT_STORAGE_IN_MB)));
-        account.setProvisionedDocumentStorageInMB(Long.valueOf(responseHeader.get(
-                HttpConstants.HttpHeaders.DATABASE_ACCOUNT_PROVISIONED_DOCUMENT_STORAGE_IN_MB)));
 
         return account;
     }
@@ -2032,6 +2087,10 @@ public final class DocumentClient {
         if (options.getResourceTokenExpirySeconds() != null) {
             headers.put(HttpConstants.HttpHeaders.RESOURCE_TOKEN_EXPIRY,
                         String.valueOf(options.getResourceTokenExpirySeconds()));
+        }
+
+        if (options.getOfferType() != null) {
+            headers.put(HttpConstants.HttpHeaders.OFFER_TYPE, options.getOfferType());
         }
 
         return headers;

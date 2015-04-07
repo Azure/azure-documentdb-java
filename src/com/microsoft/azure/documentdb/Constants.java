@@ -15,8 +15,8 @@ class Constants {
         static final String COLLECTION = "collections";
         static final String USER = "users";
         static final String PERMISSION = "permissions";
-        static final String DOCUMENT_SIZE = "documentSize";
-        static final String ATTACHMENT = "attachmentSize";
+        static final String COLLECTION_SIZE = "collectionSize";
+        static final String DOCUMENTS_SIZE = "documentsSize";
         static final String STORED_PROCEDURE = "storedProcedures";
         static final String TRIGGER = "triggers";
         static final String USER_DEFINED_FUNCTION = "functions";
@@ -100,7 +100,9 @@ class Constants {
         //Conflict.
         static final String CONFLICT = "conflict";
         static final String OPERATION_TYPE = "operationType";
-        
+
+        //Offer resource
+        static final String OFFER_TYPE = "offerType";
     }
 
     static class ResourceKeys {
@@ -109,6 +111,7 @@ class Constants {
         static final String DATABASES = "Databases";
         static final String DOCUMENTS = "Documents";
         static final String DOCUMENT_COLLECTIONS = "DocumentCollections";
+        static final String OFFERS = "Offers"; 
         static final String PERMISSIONS = "Permissions";
         static final String TRIGGERS = "Triggers";
         static final String STOREDPROCEDURES = "StoredProcedures";

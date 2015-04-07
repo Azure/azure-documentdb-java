@@ -9,11 +9,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -35,8 +37,10 @@ import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.IndexType;
 import com.microsoft.azure.documentdb.IndexingMode;
+import com.microsoft.azure.documentdb.IndexingPolicy;
 import com.microsoft.azure.documentdb.MediaOptions;
 import com.microsoft.azure.documentdb.MediaReadMode;
+import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.Permission;
 import com.microsoft.azure.documentdb.PermissionMode;
 import com.microsoft.azure.documentdb.QueryIterable;
@@ -323,16 +327,9 @@ public final class GatewayTests {
                                           null).getQueryIterable().toList();
         // number of results for the query should be > 0.
         Assert.assertTrue(databases.size() > 0);
-        // replace database.
-        createdDb.setId(GatewayTests.databaseForTestAlternativeId2);
-        Database replacedDb = client.replaceDatabase(createdDb, null).getResource();
-        // Db id should change.
-        Assert.assertEquals(GatewayTests.databaseForTestAlternativeId2, replacedDb.getId());
-        // Read database.
-        Database oneDbFromRead = client.readDatabase(replacedDb.getSelfLink(), null).getResource();
-        Assert.assertEquals(replacedDb.getId(), oneDbFromRead.getId());
+ 
         // Delete database.
-        client.deleteDatabase(replacedDb.getSelfLink(), null).close();
+        client.deleteDatabase(createdDb.getSelfLink(), null).close();
 
         // Read database after deletion.
         try {
@@ -1194,6 +1191,160 @@ public final class GatewayTests {
         }
     }
 
+    private void validateOfferResponseBody(Offer offer, String expectedCollLink, String expectedOfferType) {
+        Assert.assertNotNull("Id cannot be null", offer.getId());
+        Assert.assertNotNull("Resource Id (Rid) cannot be null", offer.getResourceId());
+        Assert.assertNotNull("Self link cannot be null", offer.getSelfLink());
+        Assert.assertNotNull("Resource Link cannot be null", offer.getResourceLink());
+        Assert.assertTrue("Offer id not contained in offer self link", offer.getSelfLink().contains(offer.getId()));
+        Assert.assertEquals(StringUtils.removeEnd(StringUtils.removeStart(expectedCollLink, "/"), "/"),
+                            StringUtils.removeEnd(StringUtils.removeStart(offer.getResourceLink(), "/"), "/"));
+
+        if (expectedOfferType != null)
+        {
+            Assert.assertEquals(expectedOfferType, offer.getOfferType());
+        }
+    }
+
+    @Test
+    public void testOfferReadAndQuery() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+
+        List<Offer> offerList = client.readOffers(null).getQueryIterable().toList();
+        Offer expectedOffer = offerList.get(0);
+
+        this.validateOfferResponseBody(expectedOffer, this.collectionForTest.getSelfLink(), null);
+
+        // Read the offer
+        Offer readOffer = client.readOffer(expectedOffer.getSelfLink()).getResource();
+        this.validateOfferResponseBody(readOffer, this.collectionForTest.getSelfLink(), expectedOffer.getOfferType());
+        // Check if the read resource is what we expect
+        Assert.assertEquals(expectedOffer.getId(), readOffer.getId());
+        Assert.assertEquals(expectedOffer.getResourceId(), readOffer.getResourceId());
+        Assert.assertEquals(expectedOffer.getSelfLink(), readOffer.getSelfLink());
+        Assert.assertEquals(expectedOffer.getResourceLink(), readOffer.getResourceLink());
+
+        // Query for the offer.
+        List<Offer> queryResultList = client.queryOffers(
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                 new SqlParameterCollection(new SqlParameter("@id", expectedOffer.getId()))),
+                null).getQueryIterable().toList();
+        Offer oneQueryResult = queryResultList.get(0);
+        this.validateOfferResponseBody(oneQueryResult, this.collectionForTest.getSelfLink(), expectedOffer.getOfferType());
+        // Check if the query result is what we expect
+        Assert.assertEquals(expectedOffer.getId(), oneQueryResult.getId());
+        Assert.assertEquals(expectedOffer.getResourceId(), oneQueryResult.getResourceId());
+        Assert.assertEquals(expectedOffer.getSelfLink(), oneQueryResult.getSelfLink());
+        Assert.assertEquals(expectedOffer.getResourceLink(), oneQueryResult.getResourceLink());
+
+        // Modify the SelfLink
+        String offerLink = expectedOffer.getSelfLink().substring(
+        	    0, expectedOffer.getSelfLink().length() - 1) + "x";
+
+        // Read the offer
+        try {
+            readOffer = client.readOffer(offerLink).getResource();
+            Assert.fail("Expected an exception when reading offer with bad offer link");
+        } catch (DocumentClientException ex) {
+            Assert.assertEquals(400, ex.getStatusCode());
+        }
+
+        client.deleteCollection(this.collectionForTest.getSelfLink(), null).close();
+
+        // Now try to get the read the offer after the collection is deleted
+        try {
+            client.readOffer(expectedOffer.getSelfLink()).getResource();
+            Assert.fail("Expected an exception when reading deleted offer");
+        } catch (DocumentClientException ex) {
+            Assert.assertEquals(404, ex.getStatusCode());
+        }
+
+        // Make sure read feed returns 0 results.
+        offerList = client.readOffers(null).getQueryIterable().toList();
+        Assert.assertEquals(0, offerList.size());
+    }
+
+    @Test
+    public void testOfferReplace() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        List<Offer> offerList = client.readOffers(null).getQueryIterable().toList();
+        Offer expectedOffer = offerList.get(0);
+
+        this.validateOfferResponseBody(expectedOffer, this.collectionForTest.getSelfLink(), null);
+        Offer offerToReplace = new Offer(expectedOffer.toString());
+
+        // Modify the offer
+        offerToReplace.setOfferType("S2");
+
+        // Replace the offer
+        Offer replacedOffer = client.replaceOffer(offerToReplace).getResource();
+        this.validateOfferResponseBody(replacedOffer, this.collectionForTest.getSelfLink(), "S2");
+
+        // Check if the replaced offer is what we expect
+        Assert.assertEquals(offerToReplace.getId(), replacedOffer.getId());
+        Assert.assertEquals(offerToReplace.getResourceId(), replacedOffer.getResourceId());
+        Assert.assertEquals(offerToReplace.getSelfLink(), replacedOffer.getSelfLink());
+        Assert.assertEquals(offerToReplace.getResourceLink(), replacedOffer.getResourceLink());
+
+        offerToReplace.setResourceId("NotAllowed");
+        try {
+            client.replaceOffer(offerToReplace).getResource();
+            Assert.fail("Expected an exception when replaceing an offer with bad id");
+        } catch (DocumentClientException ex) {
+            Assert.assertEquals(400, ex.getStatusCode());
+        }
+
+        offerToReplace.setResourceId("InvalidRid");
+        try {
+            client.replaceOffer(offerToReplace).getResource();
+            Assert.fail("Expected an exception when replaceing an offer with bad Rid");
+        } catch (DocumentClientException ex) {
+            Assert.assertEquals(400, ex.getStatusCode());
+        }
+
+        offerToReplace.setId(null);
+        offerToReplace.setResourceId(null);
+        try {
+            client.replaceOffer(offerToReplace).getResource();
+            Assert.fail("Expected an exception when replaceing an offer with null id and rid");
+        } catch (DocumentClientException ex) {
+            Assert.assertEquals(400, ex.getStatusCode());
+        }
+    }
+
+    @Test
+    public void testCreateCollectionWithOfferType() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Create a new collection of offer type S2.
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId(GatewayTests.getUID());
+        RequestOptions requestOptions = new RequestOptions();
+        requestOptions.setOfferType("S2");
+        client.createCollection(this.databaseForTest.getSelfLink(), collectionDefinition, requestOptions).close();
+
+        // We should have an offer of type S2.
+        List<Offer> offerList = client.readOffers(null).getQueryIterable().toList();
+        boolean hasS2 = false;
+        for (Offer offer : offerList) {
+            if (offer.getOfferType().equals("S2")) {
+                hasS2 = true;
+                break;
+            }
+        }
+        Assert.assertTrue("There should be an offer of type S2.", hasS2);
+    }
+
     @Test
     public void testDatabaseAccount() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
@@ -1203,8 +1354,6 @@ public final class GatewayTests {
 
         DatabaseAccount dba = client.getDatabaseAccount();
         Assert.assertNotNull("dba Address link works", dba.getAddressesLink());
-        Assert.assertTrue("provision storage must larger than 10000MB",
-                          dba.getProvisionedDocumentStorageInMB() > 10000);
 
         if (dba.getConsistencyPolicy().getDefaultConsistencyLevel() == ConsistencyLevel.BoundedStaleness) {
             Assert.assertTrue("StaleInternal should be larger than 5 seconds",
@@ -1366,5 +1515,50 @@ public final class GatewayTests {
     private static String getUID() {
         UUID u = UUID.randomUUID();
         return ("" + u.getMostSignificantBits()) + Math.abs(u.getLeastSignificantBits());
+    }
+
+    @Test
+    @Ignore
+    public void TestQuotaHeaders() {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        try {
+            cleanUpGeneratedDatabases();
+            Database dbToCreate = new Database();
+            dbToCreate.setId("DocumentQuotaDB" + getUID());
+            Database db = client.createDatabase(dbToCreate, null).getResource();
+
+            DocumentCollection collectionToCreate = new DocumentCollection();
+            collectionToCreate.setId("DocumentQuotaDBDocumentCollectionConsistent");
+            IndexingPolicy policy = new IndexingPolicy();
+            policy.setIndexingMode(IndexingMode.Consistent);
+            collectionToCreate.setIndexingPolicy(policy);;
+
+            DocumentCollection collection = client.createCollection(db.getSelfLink(), collectionToCreate, null).getResource();
+
+            for(int i = 0; i< 10000; i++)
+            {
+                String docName = getUID().substring(0,10);
+                Document smallDoc = new Document();
+                smallDoc.setId(docName);
+                client.createDocument(collection.getSelfLink(), smallDoc, null, false).getResource();
+            }
+
+            Thread.sleep(5 * 60 * 1000);
+
+            ResourceResponse<DocumentCollection> response = client.readCollection("dbs/bB1nAA==/colls/bB1nAKpXNQA=/", null);
+
+            Assert.assertTrue(response.getCollectionSizeUsage() > response.getDocumentUsage());
+            Assert.assertTrue(response.getCollectionSizeUsage() == 4 * 1024);
+            Assert.assertTrue(response.getDocumentUsage() == 2 * 1024);
+            response.close();
+        } catch (DocumentClientException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

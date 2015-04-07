@@ -160,6 +160,8 @@ final class AuthorizationHelper {
             return Paths.DOCUMENTS_PATH_SEGMENT;
         case DocumentCollection:
             return Paths.COLLECTIONS_PATH_SEGMENT;
+        case Offer:
+            return Paths.OFFERS_PATH_SEGMENT;
         case Permission:
             return Paths.PERMISSIONS_PATH_SEGMENT;
         case StoredProcedure:

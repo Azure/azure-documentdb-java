@@ -13,6 +13,7 @@ class Paths {
     static final String CONFLICTS_PATH_SEGMENT = "conflicts";
     static final String DOCUMENTS_PATH_SEGMENT = "docs";
     static final String ATTACHMENTS_PATH_SEGMENT = "attachments";
+    static final String OFFERS_PATH_SEGMENT = "offers";
 
     static final String MEDIA_PATH_SEGMENT = "media";
 }

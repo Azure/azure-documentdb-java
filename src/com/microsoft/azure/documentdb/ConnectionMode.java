@@ -14,6 +14,4 @@ public enum ConnectionMode {
      * Use the DocumentDB gateway to route all requests. The gateway proxies requests to the right data partition.
      */
     Gateway
-
-    // TODO(pushi): Implement other connection modes.
 }

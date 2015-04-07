@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.microsoft.azure</groupId>
   <artifactId>azure-documentdb</artifactId>
-  <version>0.9.5</version>
+  <version>1.0.0</version>
   <name>${project.groupId}:${project.artifactId}</name>
   <description>Java SDK for Microsoft Azure DocumentDB</description>
   <url>http://azure.microsoft.com/en-us/services/documentdb/</url>
