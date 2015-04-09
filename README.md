@@ -90,9 +90,13 @@ public class SampleApp {
         DocumentCollection myCollection = new DocumentCollection();
         myCollection.setId(COLLECTION_ID);
 
+        // Configure the new collection performance tier to S1.
+        RequestOptions requestOptions = new RequestOptions();
+        requestOptions.setOfferType("S1");
+
         // Create a new collection.
         myCollection = documentClient.createCollection(
-                myDatabase.getSelfLink(), myCollection, null).getResource();
+                myDatabase.getSelfLink(), myCollection, requestOptions).getResource();
 
         // Create an object, serialize it in to JSON, and wrap it in to a
         // document.
