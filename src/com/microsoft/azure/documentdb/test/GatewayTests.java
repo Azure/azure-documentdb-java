@@ -56,6 +56,10 @@ import com.microsoft.azure.documentdb.TriggerType;
 import com.microsoft.azure.documentdb.User;
 import com.microsoft.azure.documentdb.UserDefinedFunction;
 
+final class AnotherPOJO {
+    public String pojoProp = "789";
+}
+
 public final class GatewayTests {
     static final String HOST = "[YOUR_ENDPOINT_HERE]";
     static final String MASTER_KEY = "[YOUR_KEY_HERE]";
@@ -193,7 +197,7 @@ public final class GatewayTests {
     }
 
     static class StaticPOJOForTest {
-        // Jackson's readValue method only supports static and non-local POJO.
+        // Jackson's readValue method supports member class only if it's static.
         public String pojoProp = "456";
     }
 
@@ -207,6 +211,7 @@ public final class GatewayTests {
         document.set("child2", new JSONObject("{'child2Prop1': '800'}"));
 
         document.set("child3", new StaticPOJOForTest());
+        document.set("child4", new AnotherPOJO());
         // Collection of numbers.
         Collection<Integer> collection1 = new ArrayList<Integer>();
         collection1.add(101);
@@ -242,6 +247,9 @@ public final class GatewayTests {
                 "  'child3': {" +
                 "    'pojoProp': '456'" +
                 "  }," +
+                "  'child4': {" +
+                "    'pojoProp': '789'" +
+                "  }," +
                 "  'collection1': [101, 102]," +
                 "  'collection2': [{'foo': 'bar'}]," +
                 "  'collection3': [{'pojoProp': '456'}]," +
@@ -250,6 +258,7 @@ public final class GatewayTests {
         Assert.assertEquals(expectedDocument.toString(), document.toString());
 
         Assert.assertEquals("456", document.getObject("child3", StaticPOJOForTest.class).pojoProp);
+        Assert.assertEquals("789", document.getObject("child4", AnotherPOJO.class).pojoProp);
         Assert.assertEquals("456", document.getCollection("collection3",
                             StaticPOJOForTest.class).iterator().next().pojoProp);
 
@@ -1242,7 +1251,7 @@ public final class GatewayTests {
 
         // Modify the SelfLink
         String offerLink = expectedOffer.getSelfLink().substring(
-        	    0, expectedOffer.getSelfLink().length() - 1) + "x";
+                0, expectedOffer.getSelfLink().length() - 1) + "x";
 
         // Read the offer
         try {
