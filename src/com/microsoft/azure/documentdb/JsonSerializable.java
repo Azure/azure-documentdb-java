@@ -303,10 +303,16 @@ class JsonSerializable {
                 }
             } else {
                 // POJO.
-                if (!c.isMemberClass() || !Modifier.isStatic(c.getModifiers())) {
-                    throw new IllegalArgumentException(
-                            "c must be a member (not an anonymous or local) and static class.");
+                if (c.isAnonymousClass() || c.isLocalClass()) {
+                   throw new IllegalArgumentException(
+                            String.format("%s can't be an anonymous or local class.", c.getName()));
                 }
+
+                if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
+                    throw new IllegalArgumentException(
+                            String.format("%s must be static if it's a member class.", c.getName()));
+                }
+
                 try {
                     return new ObjectMapper().readValue(jsonObj.toString(), c);
                 } catch (IOException e) {
