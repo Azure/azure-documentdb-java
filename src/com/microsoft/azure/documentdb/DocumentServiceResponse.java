@@ -54,9 +54,13 @@ final class DocumentServiceResponse implements AutoCloseable {
     }
 
     public String getReponseBodyAsString() {
+        if (this.httpEntity == null) {
+            this.close();
+            return null;
+        }
+
         try {
-            String responseBody = EntityUtils.toString(this.httpEntity, StandardCharsets.UTF_8);
-            return responseBody;
+            return EntityUtils.toString(this.httpEntity, StandardCharsets.UTF_8);
         } catch (ParseException | IOException e) {
             throw new IllegalStateException("Failed to get UTF-8 string from http entity.", e);
         } finally {
@@ -65,14 +69,8 @@ final class DocumentServiceResponse implements AutoCloseable {
     }
     
     public <T extends Resource> T getResource(Class<T> c) {
-        String responseBody = null;
-        try {
-            responseBody = EntityUtils.toString(this.httpEntity, StandardCharsets.UTF_8);
-        } catch (ParseException | IOException e) {
-            throw new IllegalStateException("Failed to get UTF-8 string from http entity.", e);
-        } finally {
-            this.close();
-        }
+        String responseBody = this.getReponseBodyAsString();
+        if (responseBody == null) return null;
 
         try {
             return c.getConstructor(String.class).newInstance(responseBody);
@@ -83,14 +81,8 @@ final class DocumentServiceResponse implements AutoCloseable {
     }
 
     public <T extends Resource> List<T> getQueryResponse(Class<T> c) {
-        String responseBody = null;
-        try {
-            responseBody = EntityUtils.toString(this.httpEntity, StandardCharsets.UTF_8);
-        } catch (ParseException | IOException e) {
-            throw new IllegalStateException("Failed to get UTF-8 string from http entity.", e);
-        } finally {
-            this.close();
-        } 
+        String responseBody = this.getReponseBodyAsString();
+        if (responseBody == null) return null;
 
         JSONObject jobject = new JSONObject(responseBody);
         String resourceKey = DocumentServiceResponse.getResourceKey(c);
@@ -117,7 +109,10 @@ final class DocumentServiceResponse implements AutoCloseable {
     }
     
     public InputStream getContentStream() {
-        if (this.httpEntity == null) return null;
+        if (this.httpEntity == null) {
+            this.close();
+            return null;
+        }
 
         try {
             if (this.httpEntity.isStreaming()) {
