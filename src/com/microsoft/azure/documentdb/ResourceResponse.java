@@ -12,7 +12,7 @@ import org.apache.commons.lang3.StringUtils;
  * 
  * @param <T> the resource type of the resource response.
  */
-public final class ResourceResponse<T extends Resource> implements AutoCloseable {
+public final class ResourceResponse<T extends Resource> {
     private Class<T> cls;
     private T resource;
     private DocumentServiceResponse response;
@@ -24,6 +24,8 @@ public final class ResourceResponse<T extends Resource> implements AutoCloseable
         this.usageHeaders = new HashMap<String, Long>();
         this.quotaHeaders = new HashMap<String, Long>();
         this.cls = cls;
+        this.resource = this.response.getResource(this.cls);
+        this.response.close();
     }
 
     /**
@@ -242,9 +244,6 @@ public final class ResourceResponse<T extends Resource> implements AutoCloseable
      * @return the resource.
      */
     public T getResource() {
-        if (this.resource == null) {
-            this.resource = this.response.getResource(this.cls);
-        }
         return this.resource;
     }
 
@@ -271,13 +270,12 @@ public final class ResourceResponse<T extends Resource> implements AutoCloseable
     }
 
     /**
-     * Closes the connection for this response, 
-     * This connection is automatically closed if the underlying stream is already read.
+     * Deprecated.
      */
+    @Deprecated
     public void close() {
-        this.response.close();
     }
-    
+
     private long getCurrentQuotaHeader(String headerName) {
         if (this.usageHeaders.size() == 0 &&
                 !this.getMaxResourceQuota().isEmpty() &&
