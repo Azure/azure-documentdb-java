@@ -95,7 +95,7 @@ public final class FeedResponse<T extends Resource> {
     /**
      * Max Quota.
      * 
-     * @return the document size quota.
+     * @return the collection size quota.
      */
     public long getCollectionSizeQuota() {
         return this.getMaxQuotaHeader(Constants.Quota.COLLECTION_SIZE);
@@ -104,7 +104,7 @@ public final class FeedResponse<T extends Resource> {
     /**
      * Current Usage.
      *  
-     * @return the current document size usage.
+     * @return the current collection size usage.
      */
     public long getCollectionSizeUsage() {
         return this.getCurrentQuotaHeader(Constants.Quota.COLLECTION_SIZE);

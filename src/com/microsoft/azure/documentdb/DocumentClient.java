@@ -129,7 +129,7 @@ public final class DocumentClient {
         this.desiredConsistencyLevel = desiredConsistencyLevel;
 
         UserAgentContainer userAgentContainer = new UserAgentContainer();
-        String userAgentSuffix = connectionPolicy.getUserAgentSuffix();
+        String userAgentSuffix = this.connectionPolicy.getUserAgentSuffix();
         if(userAgentSuffix != null && userAgentSuffix.length() > 0) {
             userAgentContainer.setSuffix(userAgentSuffix);
         }

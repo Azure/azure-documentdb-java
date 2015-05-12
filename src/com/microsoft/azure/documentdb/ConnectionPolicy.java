@@ -73,7 +73,7 @@ public final class ConnectionPolicy {
     private ConnectionMode connectionMode;
 
     /**
-     * Gets the connection mode used in the client. Currently only Gateway in supported.
+     * Gets the connection mode used in the client. Currently only Gateway is supported.
      * 
      * @return the connection mode.
      */
@@ -82,7 +82,7 @@ public final class ConnectionPolicy {
     }
 
     /**
-     * Sets the connection mode used in the client. Currently only Gateway in supported.
+     * Sets the connection mode used in the client. Currently only Gateway is supported.
      * 
      * @param connectionMode the connection mode.
      */
