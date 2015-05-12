@@ -154,7 +154,7 @@ class HttpConstants {
 
         public static String CURRENT_VERSION = "2015-04-08";
 
-        public static String USER_AGENT = "documentdb-java-sdk-1.0.0";
+        public static String USER_AGENT = "documentdb-java-sdk-1.0.1";
     }
     
     public static class StatusCodes {
