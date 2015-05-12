@@ -541,7 +541,7 @@ public final class GatewayTests {
         Document documentDefinition = new Document(
                 "{" +
                 "  'name': 'sample document'," +
-                "  'foo': 'bar'," +
+                "  'foo': 'bar 你好'," +  // foo contains some UTF-8 characters.
                 "  'key': 'value'" +
                 "}");
 
@@ -559,6 +559,8 @@ public final class GatewayTests {
                                                   null,
                                                   false).getResource();
         Assert.assertEquals(documentDefinition.getString("name"), document.getString("name"));
+        Assert.assertEquals(documentDefinition.getString("foo"), document.getString("foo"));
+        Assert.assertEquals(documentDefinition.getString("bar"), document.getString("bar"));
         Assert.assertNotNull(document.getId());
 
         // Read documents after creation.

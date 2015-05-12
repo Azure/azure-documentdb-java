@@ -5,7 +5,7 @@
 package com.microsoft.azure.documentdb;
 
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -98,12 +98,8 @@ final class DocumentServiceRequest {
                                                 String relativePath,
                                                 Resource resource,
                                                 Map<String, String> headers) {
-        try {
-            HttpEntity body = new StringEntity(resource.toString());
-            return new DocumentServiceRequest(resourceType, relativePath, body, headers);
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalArgumentException("Failed to get HttpEntity from resource.", e);
-        }
+        HttpEntity body = new StringEntity(resource.toString(), StandardCharsets.UTF_8);
+        return new DocumentServiceRequest(resourceType, relativePath, body, headers);
     }
 
     /**
@@ -119,12 +115,8 @@ final class DocumentServiceRequest {
                                                 String relativePath,
                                                 String query,
                                                 Map<String, String> headers) {
-        try {
-            HttpEntity body = new StringEntity(query);
-            return new DocumentServiceRequest(resourceType, relativePath, body, headers);
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalArgumentException("Failed to get HttpEntity from resource.", e);
-        }
+        HttpEntity body = new StringEntity(query, StandardCharsets.UTF_8);
+        return new DocumentServiceRequest(resourceType, relativePath, body, headers);
     }
 
     /**
@@ -160,12 +152,8 @@ final class DocumentServiceRequest {
                 break;
         }
 
-        try {
-            HttpEntity body = new StringEntity(queryText);
-            return new DocumentServiceRequest(resourceType, relativePath, body, headers);
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalArgumentException("Failed to get HttpEntity from resource.", e);
-        }
+        HttpEntity body = new StringEntity(queryText, StandardCharsets.UTF_8);
+        return new DocumentServiceRequest(resourceType, relativePath, body, headers);
     }
 
     /**
