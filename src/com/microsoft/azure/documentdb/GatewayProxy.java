@@ -6,6 +6,7 @@ package com.microsoft.azure.documentdb;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -20,6 +21,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
+import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
 import org.apache.http.ParseException;
 import org.apache.http.client.HttpClient;
@@ -28,11 +32,16 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.conn.routing.HttpRoutePlanner;
+import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
+import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
 import org.apache.http.impl.conn.SchemeRegistryFactory;
 import org.apache.http.params.HttpConnectionParams;
 import org.apache.http.params.HttpParams;
+import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 
 
@@ -154,7 +163,13 @@ final class GatewayProxy {
      * @return the created HttpClient
      */
     private HttpClient createHttpClient(boolean isForMedia) {
-        HttpClient httpClient = new DefaultHttpClient(this.connectionManager);
+        ProxySelectorRoutePlanner ps = new ProxySelectorRoutePlanner(
+                SchemeRegistryFactory.createDefault(), ProxySelector.getDefault());
+
+        DefaultHttpClient defaultHttpClient = new DefaultHttpClient(this.connectionManager);
+        defaultHttpClient.setRoutePlanner(ps);
+        
+        HttpClient httpClient = defaultHttpClient;
         HttpParams httpParams = httpClient.getParams();
 
         if (isForMedia) {
