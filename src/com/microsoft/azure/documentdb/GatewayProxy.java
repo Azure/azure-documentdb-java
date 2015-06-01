@@ -6,6 +6,7 @@ package com.microsoft.azure.documentdb;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -30,6 +31,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
+import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
 import org.apache.http.impl.conn.SchemeRegistryFactory;
 import org.apache.http.params.HttpConnectionParams;
 import org.apache.http.params.HttpParams;
@@ -154,7 +156,13 @@ final class GatewayProxy {
      * @return the created HttpClient
      */
     private HttpClient createHttpClient(boolean isForMedia) {
-        HttpClient httpClient = new DefaultHttpClient(this.connectionManager);
+        ProxySelectorRoutePlanner ps = new ProxySelectorRoutePlanner(
+                SchemeRegistryFactory.createDefault(), ProxySelector.getDefault());
+
+        DefaultHttpClient defaultHttpClient = new DefaultHttpClient(this.connectionManager);
+        defaultHttpClient.setRoutePlanner(ps);
+        
+        HttpClient httpClient = defaultHttpClient;
         HttpParams httpParams = httpClient.getParams();
 
         if (isForMedia) {
