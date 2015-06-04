@@ -440,9 +440,8 @@ class JsonSerializable {
             return c.cast(this.propertyBag);
         } else {
             // POJO
-            if (!c.isMemberClass() || !Modifier.isStatic(c.getModifiers())) {
-                throw new IllegalArgumentException(
-                        "c must be a member (not an anonymous or local) and static class.");
+            if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
+                throw new IllegalArgumentException("Nested classes must be static.");
             }
             try {
                 return new ObjectMapper().readValue(this.toString(), c);
