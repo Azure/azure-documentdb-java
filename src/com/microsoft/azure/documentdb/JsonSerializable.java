@@ -303,7 +303,7 @@ class JsonSerializable {
                 }
             } else {
                 // POJO
-                checkForValidPOJO(c);
+                JsonSerializable.checkForValidPOJO(c);
 
                 try {
                     return new ObjectMapper().readValue(jsonObj.toString(), c);
@@ -327,6 +327,7 @@ class JsonSerializable {
                 String.format("%s must be static if it's a member class.", c.getName()));
         }
     }
+
     /**
      * Gets an object collection.
      * 
@@ -351,7 +352,7 @@ class JsonSerializable {
             } else if (JsonSerializable.class.isAssignableFrom(c)) {
                 isJsonSerializable = true;
             } else {
-                checkForValidPOJO(c);
+                JsonSerializable.checkForValidPOJO(c);
                 mapper = new ObjectMapper();
             }
 
@@ -446,7 +447,7 @@ class JsonSerializable {
             return c.cast(this.propertyBag);
         } else {
             // POJO
-            checkForValidPOJO(c);
+            JsonSerializable.checkForValidPOJO(c);
             try {
                 return new ObjectMapper().readValue(this.toString(), c);
             } catch (IOException e) {
