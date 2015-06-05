@@ -302,16 +302,8 @@ class JsonSerializable {
                             "Failed to instantiate class object.", e);
                 }
             } else {
-                // POJO.
-                if (c.isAnonymousClass() || c.isLocalClass()) {
-                   throw new IllegalArgumentException(
-                            String.format("%s can't be an anonymous or local class.", c.getName()));
-                }
-
-                if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
-                    throw new IllegalArgumentException(
-                            String.format("%s must be static if it's a member class.", c.getName()));
-                }
+                // POJO
+                checkForValidPOJO(c);
 
                 try {
                     return new ObjectMapper().readValue(jsonObj.toString(), c);
@@ -325,6 +317,16 @@ class JsonSerializable {
         return null;
     }
 
+    private static void checkForValidPOJO(Class<?> c){
+        if (c.isAnonymousClass() || c.isLocalClass()) {
+            throw new IllegalArgumentException(
+                String.format("%s can't be an anonymous or local class.", c.getName()));
+        }
+        if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
+            throw new IllegalArgumentException(
+                String.format("%s must be static if it's a member class.", c.getName()));
+        }
+    }
     /**
      * Gets an object collection.
      * 
@@ -339,13 +341,25 @@ class JsonSerializable {
             JSONArray jsonArray = this.propertyBag.getJSONArray(propertyName);
             Collection<T> result = new ArrayList<T>();
             ObjectMapper mapper = null;
+            boolean isBaseClass = false;
+            boolean isJsonSerializable = false;
+
+            // Check once.
+            if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
+                Boolean.class.isAssignableFrom(c)) {
+                isBaseClass = true;
+            } else if (JsonSerializable.class.isAssignableFrom(c)) {
+                isJsonSerializable = true;
+            } else {
+                checkForValidPOJO(c);
+                mapper = new ObjectMapper();
+            }
 
             for (int i = 0; i < jsonArray.length(); i++) {
-                if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                        Boolean.class.isAssignableFrom(c)) {
+                if (isBaseClass) {
                     // Number, String, Boolean 
                     result.add(c.cast(jsonArray.get(i)));
-                } else if (JsonSerializable.class.isAssignableFrom(c)) {
+                } else if (isJsonSerializable) {
                     JSONObject jsonObject = jsonArray.getJSONObject(i);
                     // JsonSerializable
                     try {
@@ -358,14 +372,6 @@ class JsonSerializable {
                 } else {
                     JSONObject jsonObject = jsonArray.getJSONObject(i);
                     // POJO
-                    if (mapper == null) {
-                        mapper = new ObjectMapper();
-                        // Checks once.
-                        if (!c.isMemberClass() || !Modifier.isStatic(c.getModifiers())) {
-                            throw new IllegalArgumentException(
-                                    "c must be a member (not an anonymous or local) and static class.");
-                        }
-                    }
                     try {
                         result.add(mapper.readValue(jsonObject.toString(), c));
                     } catch (IOException e) {
@@ -440,10 +446,7 @@ class JsonSerializable {
             return c.cast(this.propertyBag);
         } else {
             // POJO
-            if (!c.isMemberClass() || !Modifier.isStatic(c.getModifiers())) {
-                throw new IllegalArgumentException(
-                        "c must be a member (not an anonymous or local) and static class.");
-            }
+            checkForValidPOJO(c);
             try {
                 return new ObjectMapper().readValue(this.toString(), c);
             } catch (IOException e) {
