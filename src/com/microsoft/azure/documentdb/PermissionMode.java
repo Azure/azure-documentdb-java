@@ -13,7 +13,7 @@ public enum PermissionMode
     /**
      * Permission applicable for all operations.
      */
-    Create(0x2);
+    All(0x2);
 
     private int value;
 
