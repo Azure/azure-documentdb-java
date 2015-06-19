@@ -117,14 +117,11 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             }
 
             /**
-             * Removes the current value.
+             * Remove not supported.
              */
             @Override
             public void remove() {
-                if (!hasNext()) throw new NoSuchElementException();
-                if (currentIndex < items.size()) {
-                    items.remove(currentIndex);
-                }
+                throw new UnsupportedOperationException("remove");
             }
 
         };
