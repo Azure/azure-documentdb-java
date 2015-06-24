@@ -68,6 +68,7 @@ public class ApiServlet extends HttpServlet {
 			break;
 		}
 
+		response.setCharacterEncoding("UTF-8");
 		response.getWriter().println(apiResponse);
 	}
 
