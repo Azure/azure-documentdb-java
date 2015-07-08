@@ -12,6 +12,11 @@ import org.json.JSONObject;
  */
 public final class IndexingPolicy extends JsonSerializable {
 
+    private static final String DEFAULT_PATH = "/*";
+
+    private Collection<IncludedPath> includedPaths;
+    private Collection<ExcludedPath> excludedPaths;
+
     /**
      * Constructor.
      */
@@ -87,62 +92,69 @@ public final class IndexingPolicy extends JsonSerializable {
     }
 
     /**
-     * Gets or sets the path level configurations for indexing.
-     */
-    private Collection<IndexingPath> included;
-    private Collection<String> excluded;
-
-
-    /**
      * Gets the paths that are chosen to be indexed by the user.
      * 
      * @return the included paths.
      */
-    public Collection<IndexingPath> getIncludedPaths() {
-        if (this.included == null) {
-            this.included = super.getCollection(Constants.Properties.INCLUDED_PATHS, IndexingPath.class);
+    public Collection<IncludedPath> getIncludedPaths() {
+        if (this.includedPaths == null) {
+            this.includedPaths = super.getCollection(Constants.Properties.INCLUDED_PATHS, IncludedPath.class);
 
-            if (this.included == null) {
-                this.included = new ArrayList<IndexingPath>();
+            if (this.includedPaths == null) {
+                this.includedPaths = new ArrayList<IncludedPath>();
             }
         }
 
-        return this.included;
+        return this.includedPaths;
     }
-    
+
+    public void setIncludedPaths(Collection<IncludedPath> includedPaths) {
+        this.includedPaths = includedPaths;
+    }
+
     /**
      * Gets the paths that are not indexed.
      * 
      * @return the excluded paths.
      */
-    public Collection<String> getExcludedPaths() {
-        if (this.excluded == null) {
-            this.excluded = super.getCollection(Constants.Properties.EXCLUDED_PATHS, String.class);
+    public Collection<ExcludedPath> getExcludedPaths() {
+        if (this.excludedPaths == null) {
+            this.excludedPaths = super.getCollection(Constants.Properties.EXCLUDED_PATHS, ExcludedPath.class);
 
-            if (this.excluded == null) {
-                this.excluded = new ArrayList<String>();
+            if (this.excludedPaths == null) {
+                this.excludedPaths = new ArrayList<ExcludedPath>();
             }
         }
 
-        return this.excluded;
+        return this.excludedPaths;
+    }
+
+    public void setExcludedPaths(Collection<ExcludedPath> excludedPaths) {
+        this.excludedPaths = excludedPaths;
     }
 
     @Override
     void onSave() {
-        boolean bDefaultPaths = (this.included != null && this.included.size() == 0 && 
-                                 this.excluded != null && this.excluded.size() == 0);
-
-        // If we do not have any user-specified paths, do not serialize.
-        // If we don't do this, included and excluded will be sent as empty lists [], [] which have a different meaning
-        // on server.
-        if (bDefaultPaths) return;
-
-        if (this.included != null) {
-            super.set(Constants.Properties.INCLUDED_PATHS, this.included);
+        // If indexing mode is not 'none' and not paths are set, set them to the defaults
+        if (this.getIndexingMode() != IndexingMode.None && this.getIncludedPaths().size() == 0 &&
+                this.getExcludedPaths().size() == 0) {
+            IncludedPath includedPath = new IncludedPath();
+            includedPath.setPath(IndexingPolicy.DEFAULT_PATH);
+            this.getIncludedPaths().add(includedPath);
         }
 
-        if (this.excluded != null) {
-            super.set(Constants.Properties.EXCLUDED_PATHS, this.excluded);
+        if (this.includedPaths != null) {
+            for (IncludedPath includedPath : this.includedPaths) {
+                includedPath.onSave();
+            }
+            super.set(Constants.Properties.INCLUDED_PATHS, this.includedPaths);
+        }
+
+        if (this.excludedPaths != null) {
+            for (ExcludedPath excludedPath : this.excludedPaths) {
+                excludedPath.onSave();
+            }
+            super.set(Constants.Properties.EXCLUDED_PATHS, this.excludedPaths);
         }
     }
 }

@@ -89,13 +89,15 @@ class Constants {
         static final String MAX_PATH_DEPTH = "maxPathDepth";
         static final String INDEXING_MODE = "indexingMode";
         static final String INDEX_TYPE = "IndexType";
+        static final String INDEX_KIND = "kind";
+        static final String DATA_TYPE = "dataType";
+        static final String PRECISION = "precision";
 
         static final String PATHS = "paths";
-        static final String PATH = "Path";
-        static final String FREQUENT_PATHS = "Frequent";
-        static final String INCLUDED_PATHS = "IncludedPaths";
-        static final String IN_FREQUENT_PATHS = "InFrequent";
-        static final String EXCLUDED_PATHS = "ExcludedPaths";
+        static final String PATH = "path";
+        static final String INCLUDED_PATHS = "includedPaths";
+        static final String EXCLUDED_PATHS = "excludedPaths";
+        static final String INDEXES = "indexes";
 
         //Conflict.
         static final String CONFLICT = "conflict";

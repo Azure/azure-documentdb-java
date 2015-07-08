@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ import com.microsoft.azure.documentdb.AccessConditionType;
 import com.microsoft.azure.documentdb.Attachment;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
+import com.microsoft.azure.documentdb.DataType;
 import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.DatabaseAccount;
 import com.microsoft.azure.documentdb.Document;
@@ -35,7 +37,10 @@ import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.IndexType;
+import com.microsoft.azure.documentdb.HashIndex;
+import com.microsoft.azure.documentdb.IncludedPath;
+import com.microsoft.azure.documentdb.Index;
+import com.microsoft.azure.documentdb.IndexKind;
 import com.microsoft.azure.documentdb.IndexingMode;
 import com.microsoft.azure.documentdb.IndexingPolicy;
 import com.microsoft.azure.documentdb.MediaOptions;
@@ -44,6 +49,7 @@ import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.Permission;
 import com.microsoft.azure.documentdb.PermissionMode;
 import com.microsoft.azure.documentdb.QueryIterable;
+import com.microsoft.azure.documentdb.RangeIndex;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.documentdb.SqlParameter;
@@ -505,27 +511,139 @@ public final class GatewayTests {
                 "  'indexingPolicy': {" +
                 "    'automatic': true," +
                 "    'indexingMode': 'Consistent'," +
-                "    'IncludedPaths': ["+
+                "    'includedPaths': ["+
                 "      {" +
-                "        'IndexType': 'Hash'," +
-                "        'Path': '/'" +
+                "        'path': '/'," +
+                "        'indexes': [" +
+                "          {" +
+                "            'kind': 'Hash'," +
+                "            'dataType': 'Number'," +
+                "            'precision': 2," +
+                "          }" +
+                "        ]" +
                 "      }" +
                 "    ]," +
-                "    'ExcludedPaths': [" +
-                "      '/\"systemMetadata\"/*'" +
+                "    'excludedPaths': [" +
+                "      {" +
+                "        'path': '/\"systemMetadata\"/*'," +
+                "      }" +
                 "    ]" +
                 "  }" +
                 "}");
+
+        // Change the index using the setter.
+        HashIndex indexToChange = (HashIndex)(
+                collectionDefinition.getIndexingPolicy().getIncludedPaths().iterator().next().getIndexes().iterator().next());
+        indexToChange.setDataType(DataType.String);
+        indexToChange.setPrecision(3);
+
         client.deleteCollection(consistentCollection.getSelfLink(), null);
         DocumentCollection collectionWithSecondaryIndex = client.createCollection(this.databaseForTest.getSelfLink(),
                                                                                   collectionDefinition,
                                                                                   null).getResource();
         // Check the size of included and excluded paths.
         Assert.assertEquals(2, collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().size());
+        IncludedPath includedPath = collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().iterator().next();
         Assert.assertEquals(
-                IndexType.Hash,
-                collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().iterator().next().getIndexType());
+                IndexKind.Hash,
+                includedPath.getIndexes().iterator().next().getKind());
+        HashIndex hashIndex = (HashIndex) includedPath.getIndexes().iterator().next();
+        Assert.assertEquals(
+                DataType.String,
+                hashIndex.getDataType());
+        Assert.assertEquals(
+                3,
+                hashIndex.getPrecision());
         Assert.assertEquals(1, collectionWithSecondaryIndex.getIndexingPolicy().getExcludedPaths().size());
+    }
+
+    @Test
+    public void testCreateDefaultPolicy() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // no indexing policy specified
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        DocumentCollection collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+        GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
+
+        // partial policy specified
+        collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.getIndexingPolicy().setIndexingMode(IndexingMode.Lazy);
+        collectionDefinition.getIndexingPolicy().setAutomatic(true);
+
+        collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+        GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
+
+        // default policy
+        collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setIndexingPolicy(new IndexingPolicy());
+
+        collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+        GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
+
+        // missing indexes
+        collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setIndexingPolicy(new IndexingPolicy());
+        IncludedPath includedPath = new IncludedPath();
+        includedPath.setPath("/*");
+        collectionDefinition.getIndexingPolicy().getIncludedPaths().add(includedPath);
+
+        collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+        GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
+
+        // missing precision
+        collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setIndexingPolicy(new IndexingPolicy());
+        includedPath = new IncludedPath();
+        includedPath.setPath("/*");
+        Collection<Index> indexes = includedPath.getIndexes();
+        indexes.add(new HashIndex(DataType.String));
+        indexes.add(new RangeIndex(DataType.Number));
+
+        collectionDefinition.getIndexingPolicy().getIncludedPaths().add(includedPath);
+
+        collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+        GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
+    }
+
+    private static void checkDefaultPolicyPaths(IndexingPolicy indexingPolicy) {
+        // no excluded paths            
+        Assert.assertEquals(0, indexingPolicy.getExcludedPaths().size());
+        // included path should be 2 '_ts' and '/'
+        Assert.assertEquals(2, indexingPolicy.getIncludedPaths().size());
+
+        // check default path
+        Iterator<IncludedPath> pathItr = indexingPolicy.getIncludedPaths().iterator();
+        IncludedPath firstPath = pathItr.next();
+        Assert.assertEquals("/*", firstPath.getPath());
+        Assert.assertEquals(2, firstPath.getIndexes().size());
+        Iterator<Index> indexItr = firstPath.getIndexes().iterator();
+        Index firstIndex = indexItr.next();
+        Index secondIndex = indexItr.next();
+        Assert.assertEquals(IndexKind.Hash, firstIndex.getKind());
+        Assert.assertEquals(IndexKind.Range, secondIndex.getKind());
+        Assert.assertEquals(DataType.String, ((HashIndex)firstIndex).getDataType());
+        Assert.assertEquals((short)3, ((HashIndex)firstIndex).getPrecision());
+        Assert.assertEquals(IndexKind.Range, secondIndex.getKind());
+        Assert.assertEquals(DataType.Number, ((RangeIndex)secondIndex).getDataType());
+        Assert.assertEquals((short)-1, ((RangeIndex)secondIndex).getPrecision());
+
+        // _ts
+        IncludedPath secondPath = pathItr.next();
+        Assert.assertEquals("/\"_ts\"/?", secondPath.getPath());
     }
 
     @Test
