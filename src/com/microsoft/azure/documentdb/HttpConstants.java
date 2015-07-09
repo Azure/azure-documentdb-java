@@ -147,14 +147,8 @@ class HttpConstants {
     }
 
     public static class Versions {
-        // For DocumentServiceProperties and MediaIdFormatChange, Gateway will
-        // work for the version later than this version.
-        public static String DOCUMENT_SERVICE_PROPERTIES_VERSION_20131105 = "2013-11-05";
-        public static String MEDIA_ID_FORMAT_CHANGE_VERSION_20140418 = "2014-02-25";
-
-        public static String CURRENT_VERSION = "2015-04-08";
-
-        public static String USER_AGENT = "documentdb-java-sdk-1.0.1";
+        public static String CURRENT_VERSION = "2015-06-03";
+        public static String USER_AGENT = "documentdb-java-sdk-1.1.0";
     }
     
     public static class StatusCodes {

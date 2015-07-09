@@ -46,6 +46,10 @@ public final class DocumentCollection extends Resource {
      * @param indexingPolicy the indexing policy.
      */
     public void setIndexingPolicy(IndexingPolicy indexingPolicy) {
+        if (indexingPolicy == null) {
+            throw new IllegalArgumentException("IndexingPolicy cannot be null.");
+        }
+
         this.indexingPolicy = indexingPolicy;
     }
 
@@ -120,9 +124,11 @@ public final class DocumentCollection extends Resource {
     
     @Override
     public void onSave() {
-        if (this.indexingPolicy != null) {
-            this.indexingPolicy.onSave();
-            super.set(Constants.Properties.INDEXING_POLICY, this.indexingPolicy);
+        if (this.indexingPolicy == null) {
+            this.getIndexingPolicy();
         }
+
+        this.indexingPolicy.onSave();
+        super.set(Constants.Properties.INDEXING_POLICY, this.indexingPolicy);
     }
 }

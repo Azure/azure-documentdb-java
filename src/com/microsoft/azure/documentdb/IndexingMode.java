@@ -17,5 +17,14 @@ public enum IndexingMode {
      * <p>
      * With lazy indexing, queries are eventually consistent. The index is updated when the collection is idle.
      */
-    Lazy
+    Lazy,
+
+    /**
+     * No index is provided.
+     * <p>
+     * Setting IndexingMode to "None" drops the index. Use this if you don't want to maintain the index for a document
+     * collection, to save the storage cost or improve the write throughput. Your queries will degenerate to scans of
+     * the entire collection.
+     */
+    None
 }
