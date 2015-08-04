@@ -2185,7 +2185,6 @@ public final class DocumentClient {
                 try {
                     stringArray[i] = mapper.writeValueAsString(object);
                 } catch (IOException e) {
-                    e.printStackTrace();
                     throw new IllegalArgumentException("Can't serialize the object into the json string", e);
                 }
             }

@@ -163,7 +163,6 @@ class JsonSerializable {
             try {
                 this.propertyBag.put(propertyName, new JSONObject(mapper.writeValueAsString(value)));
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalArgumentException("Can't serialize the object into the json string", e);
             }
         }
@@ -198,7 +197,6 @@ class JsonSerializable {
                     try {
                         targetArray.put(new JSONObject(mapper.writeValueAsString(childValue)));
                     } catch (IOException e) {
-                        e.printStackTrace();
                         throw new IllegalArgumentException("Can't serialize the object into the json string", e);
                     }
                 }
@@ -308,7 +306,6 @@ class JsonSerializable {
                 try {
                     return new ObjectMapper().readValue(jsonObj.toString(), c);
                 } catch (IOException e) {
-                    e.printStackTrace();
                     throw new IllegalStateException("Failed to get POJO.", e);
                 }
             }
@@ -376,7 +373,6 @@ class JsonSerializable {
                     try {
                         result.add(mapper.readValue(jsonObject.toString(), c));
                     } catch (IOException e) {
-                        e.printStackTrace();
                         throw new IllegalStateException("Failed to get POJO.", e);
                     }
                 }
@@ -451,7 +447,6 @@ class JsonSerializable {
             try {
                 return new ObjectMapper().readValue(this.toString(), c);
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalStateException("Failed to get POJO.", e);
             }
         }

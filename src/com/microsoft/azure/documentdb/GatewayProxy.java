@@ -247,7 +247,6 @@ final class GatewayProxy {
                     body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
                     EntityUtils.consume(response.getEntity());
                 } catch (ParseException | IOException e) {
-                    e.printStackTrace();
                     // body is empty.
                     throw new IllegalStateException("Failed to get content from the http response", e);
                 }
