@@ -212,7 +212,7 @@ class JsonSerializable {
      * @return the string value.
      */
     public String getString(String propertyName) {
-        if (this.has(propertyName)) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             return this.propertyBag.getString(propertyName);
         } else {
             return null;
@@ -226,7 +226,7 @@ class JsonSerializable {
      * @return the boolean value.
      */
     public Boolean getBoolean(String propertyName) {
-        if (this.has(propertyName)) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             return new Boolean(this.propertyBag.getBoolean(propertyName));
         } else {
             return null;
@@ -240,7 +240,7 @@ class JsonSerializable {
      * @return the boolean value
      */
     public Integer getInt(String propertyName) {
-        if (this.has(propertyName)) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             return new Integer(this.propertyBag.getInt(propertyName));
         } else {
             return null;
@@ -254,7 +254,7 @@ class JsonSerializable {
      * @return the long value
      */
     public Long getLong(String propertyName) {
-        if (this.has(propertyName)) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             return new Long(this.propertyBag.getLong(propertyName));
         } else {
             return null;
@@ -268,7 +268,7 @@ class JsonSerializable {
      * @return the double value.
      */
     public Double getDouble(String propertyName) {
-        if (this.has(propertyName)) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             return new Double(this.propertyBag.getDouble(propertyName));
         } else {
             return null;
@@ -285,7 +285,7 @@ class JsonSerializable {
      * @return the object value.
      */
     public <T extends Object> T getObject(String propertyName, Class<T> c) {
-        if (this.propertyBag.has(propertyName)) {
+        if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             JSONObject jsonObj = this.propertyBag.getJSONObject(propertyName);
             if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
                     Boolean.class.isAssignableFrom(c)) {
@@ -338,7 +338,7 @@ class JsonSerializable {
      * @return the object collection.
      */
     public <T extends Object> Collection<T> getCollection(String propertyName, Class<T> c) {
-        if (this.propertyBag != null && this.propertyBag.has(propertyName)) {
+        if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             JSONArray jsonArray = this.propertyBag.getJSONArray(propertyName);
             Collection<T> result = new ArrayList<T>();
             ObjectMapper mapper = null;
@@ -395,7 +395,7 @@ class JsonSerializable {
      * @return the JSONObject.
      */
     public JSONObject getObject(String propertyName) {
-        if (this.propertyBag.has(propertyName)) {
+        if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             JSONObject jsonObj = this.propertyBag.getJSONObject(propertyName);
             return jsonObj;
         }
@@ -410,7 +410,7 @@ class JsonSerializable {
      */
     public Collection<JSONObject> getCollection(String propertyName) {
         Collection<JSONObject> result = null;
-        if (this.propertyBag != null && this.propertyBag.has(propertyName)) {
+        if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             result = new ArrayList<JSONObject>();
             JSONArray jsonArray = this.propertyBag.getJSONArray(propertyName);
 
