@@ -52,6 +52,7 @@ import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.RangeIndex;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
+import com.microsoft.azure.documentdb.SpatialIndex;
 import com.microsoft.azure.documentdb.SqlParameter;
 import com.microsoft.azure.documentdb.SqlParameterCollection;
 import com.microsoft.azure.documentdb.SqlQuerySpec;
@@ -367,12 +368,17 @@ public final class GatewayTests {
                                                                       null).getQueryIterable().toList();
         // Create a collection.
         int beforeCreateCollectionsCount = collections.size();
+        
+        IndexingPolicy consistentPolicy = new IndexingPolicy("{'indexingMode': 'Consistent'}");
         DocumentCollection collectionDefinition = new DocumentCollection();
         collectionDefinition.setId(GatewayTests.getUID());
+        collectionDefinition.setIndexingPolicy(consistentPolicy);
         DocumentCollection createdCollection = client.createCollection(this.databaseForTest.getSelfLink(),
                                                                        collectionDefinition,
                                                                        null).getResource();
-        Assert.assertEquals(createdCollection.getId(), collectionDefinition.getId());
+        Assert.assertEquals(collectionDefinition.getId(), createdCollection.getId());
+        Assert.assertEquals(IndexingMode.Consistent, createdCollection.getIndexingPolicy().getIndexingMode());
+
         // Read collections after creation.
         collections = client.readCollections(this.databaseForTest.getSelfLink(), null).getQueryIterable().toList();
         // Create should increase the number of collections.
@@ -384,6 +390,24 @@ public final class GatewayTests {
                                                                        "@id", collectionDefinition.getId()))),
                                               null).getQueryIterable().toList();
         Assert.assertTrue(collections.size() > 0);
+
+        // Replacing indexing policy is allowed.
+        IndexingPolicy lazyPolicy = new IndexingPolicy("{'indexingMode': 'Lazy'}");
+        createdCollection.setIndexingPolicy(lazyPolicy);
+        DocumentCollection replacedCollection = client.replaceCollection(createdCollection, null).getResource();
+        Assert.assertEquals(IndexingMode.Lazy, replacedCollection.getIndexingPolicy().getIndexingMode());
+
+        // Replacing collection Id should fail.
+        try {
+            createdCollection.setId(GatewayTests.getUID());
+            client.replaceCollection(createdCollection, null);
+            Assert.fail("Exception didn't happen.");
+        } catch (DocumentClientException e) {
+            // Document collection properties other than indexing policy cannot be changed.
+            Assert.assertEquals(400, e.getStatusCode());
+            Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+
         // Delete collection.
         client.deleteCollection(createdCollection.getSelfLink(), null);
         // Read collection after deletion.
@@ -395,6 +419,42 @@ public final class GatewayTests {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
+    }
+
+    @Test
+    public void testSpatialIndex() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId(GatewayTests.getUID());
+        IndexingPolicy indexingPolicy = new IndexingPolicy();
+        IncludedPath includedPath1 = new IncludedPath();
+        includedPath1.setPath("/\"Location\"/?");
+        includedPath1.getIndexes().add(new SpatialIndex(DataType.Point));
+        indexingPolicy.getIncludedPaths().add(includedPath1);
+        IncludedPath includedPath2 = new IncludedPath();
+        includedPath2.setPath("/");
+        indexingPolicy.getIncludedPaths().add(includedPath2);
+        collectionDefinition.setIndexingPolicy(indexingPolicy);
+
+        DocumentCollection collection = client.createCollection(
+                this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
+
+        Document location1 = new Document(
+                "{ 'id': 'loc1', 'Location': { 'type': 'Point', 'coordinates': [ 20.0, 20.0 ] } }");
+        client.createDocument(collection.getSelfLink(), location1, null, true);
+        Document location2 = new Document(
+                "{ 'id': 'loc2', 'Location': { 'type': 'Point', 'coordinates': [ 100.0, 100.0 ] } }");
+        client.createDocument(collection.getSelfLink(), location2, null, true);
+        
+        List<Document> results = client.queryDocuments(
+                collection.getSelfLink(),
+                "SELECT * FROM root WHERE (ST_DISTANCE(root.Location, {type: 'Point', coordinates: [20.1, 20]}) < 20000) ",
+                null).getQueryIterable().toList();
+        Assert.assertEquals(1, results.size());
+        Assert.assertEquals(location1.getId(), results.get(0).getId());
     }
 
     @Test
@@ -481,7 +541,7 @@ public final class GatewayTests {
                 "{" +
                 "  'id': 'lazy collection'," +
                 "  'indexingPolicy': {" +
-                "    'indexingMode': 'Lazy'" +
+                "    'indexingMode': 'lazy'" +
                 "  }" +
                 "}");
         client.deleteCollection(this.collectionForTest.getSelfLink(), null);
@@ -1649,7 +1709,7 @@ public final class GatewayTests {
 
     @Test
     @Ignore
-    public void TestQuotaHeaders() {
+    public void testQuotaHeaders() {
         DocumentClient client = new DocumentClient(HOST,
                 MASTER_KEY,
                 ConnectionPolicy.GetDefault(),
@@ -1688,6 +1748,96 @@ public final class GatewayTests {
             e.printStackTrace();
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    @Test
+    public void testIndexProgressHeaders() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        Document doc = new Document();
+        doc.setId("doc01");
+        doc.set("name", "name01");
+
+        SqlQuerySpec query = new SqlQuerySpec(
+            "SELECT * FROM root r WHERE r.name=@name",
+            new SqlParameterCollection(new SqlParameter("@name", "name01")));
+
+        // Consistent-indexing collection
+        {
+            DocumentCollection consistentCollection = new DocumentCollection();
+            consistentCollection.setId("Consistent Collection");
+            consistentCollection = client.createCollection(this.databaseForTest.getSelfLink(), consistentCollection, null).getResource();
+            ResourceResponse<DocumentCollection> collectionResponse = client.readCollection(consistentCollection.getSelfLink(), null);
+            Assert.assertEquals(100, collectionResponse.getIndexTransformationProgress());
+        }
+
+        // None-indexing collection
+        {
+            DocumentCollection noneCollection = new DocumentCollection();
+            noneCollection.setId("None Collection");
+            noneCollection.getIndexingPolicy().setIndexingMode(IndexingMode.None);
+            noneCollection.getIndexingPolicy().setAutomatic(false);
+            noneCollection = client.createCollection(this.databaseForTest.getSelfLink(), noneCollection, null).getResource();
+            ResourceResponse<DocumentCollection> collectionResponse = client.readCollection(noneCollection.getSelfLink(), null);
+            Assert.assertEquals(100, collectionResponse.getIndexTransformationProgress());
+        }
+    }
+    
+    @Test
+    public void testIdValidation() throws DocumentClientException {
+        // Sets up entities for this test.
+        DocumentClient client = new DocumentClient(HOST,
+                                                   MASTER_KEY,
+                                                   ConnectionPolicy.GetDefault(),
+                                                   ConsistencyLevel.Session);
+        // Id shouldn't end with a space.
+        try {
+            client.createDocument(
+                    collectionForTest.getSelfLink(),
+                    new Document("{ 'id': 'id_with_space ', 'key': 'value' }"), null, false).getResource();
+            Assert.fail("An exception is expected.");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Id ends with a space.", e.getMessage());
+        }
+        // Id shouldn't contain '/'.
+        try {
+            client.createDocument(
+                    collectionForTest.getSelfLink(),
+                    new Document("{ 'id': 'id_with_illegal/_chars/', 'key': 'value' }"), null, false).getResource();
+            Assert.fail("An exception is expected.");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+        }
+        // Id shouldn't contain '\'.
+        try {
+            client.createDocument(
+                    collectionForTest.getSelfLink(),
+                    new Document("{ 'id': 'id_with_illegal\\\\_chars', 'key': 'value' }"), null, false).getResource();
+            Assert.fail("An exception is expected.");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+        }
+        // Id shouldn't contain '?'.
+        try {
+            client.createDocument(
+                    collectionForTest.getSelfLink(),
+                    new Document("{ 'id': 'id_with_illegal?_?chars', 'key': 'value' }"), null, false).getResource();
+            Assert.fail("An exception is expected.");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+        }
+        // Id shouldn't contain '#'.
+        try {
+            client.createDocument(
+                    collectionForTest.getSelfLink(),
+                    new Document("{ 'id': 'id_with_illegal#_chars', 'key': 'value' }"), null, false).getResource();
+            Assert.fail("An exception is expected.");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
         }
     }
 }

@@ -161,6 +161,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("Database");          
         }
 
+        DocumentClient.validateResource(database);
+
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
                                                                        Paths.DATABASES_ROOT,
@@ -284,6 +286,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collection");          
         }
 
+        DocumentClient.validateResource(collection);
+
         String path = DocumentClient.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
@@ -291,6 +295,34 @@ public final class DocumentClient {
                                                                        collection,
                                                                        requestHeaders);
         return new ResourceResponse<DocumentCollection>(this.doCreate(request), DocumentCollection.class);
+    }
+
+    /**
+     * Replaces a document collection.
+     * 
+     * @param collection the document collection to use.
+     * @param options the request options.
+     * @return the resource response with the replaced document collection.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<DocumentCollection> replaceCollection(DocumentCollection collection,
+                                                                  RequestOptions options)
+            throws DocumentClientException {
+
+        if (collection == null) {
+            throw new IllegalArgumentException("collection");          
+        }
+
+        DocumentClient.validateResource(collection);
+
+        String path = DocumentClient.joinPath(collection.getSelfLink(), null);
+        Map<String, String> requestHeaders = this.getRequestHeaders(options);
+
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+                                                                       path,
+                                                                       collection,
+                                                                       requestHeaders);
+        return new ResourceResponse<DocumentCollection>(this.doReplace(request), DocumentCollection.class);
     }
 
     /**
@@ -442,6 +474,8 @@ public final class DocumentClient {
 
         Document typedDocument = Document.FromObject(document);
 
+        DocumentClient.validateResource(typedDocument);
+
         if (typedDocument.getId() == null && !disableAutomaticIdGeneration) {
             // We are supposed to use GUID. Basically UUID is the same as GUID
             // when represented as a string.
@@ -475,9 +509,12 @@ public final class DocumentClient {
             throw new IllegalArgumentException("document");          
         }
 
+        Document typedDocument = Document.FromObject(document);
+        DocumentClient.validateResource(typedDocument);
+
         String path = DocumentClient.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        Document typedDocument = Document.FromObject(document);
+
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
                                                                        typedDocument,
@@ -499,6 +536,8 @@ public final class DocumentClient {
         if (document == null) {
             throw new IllegalArgumentException("document");          
         }
+
+        DocumentClient.validateResource(document);
 
         String path = DocumentClient.joinPath(document.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -641,6 +680,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("storedProcedure");          
         }
 
+        DocumentClient.validateResource(storedProcedure);
+
         String path = DocumentClient.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
@@ -665,6 +706,8 @@ public final class DocumentClient {
         if (storedProcedure == null) {
             throw new IllegalArgumentException("storedProcedure");          
         }
+
+        DocumentClient.validateResource(storedProcedure);
 
         String path = DocumentClient.joinPath(storedProcedure.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -839,6 +882,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("trigger");          
         }
 
+        DocumentClient.validateResource(trigger);
+
         String path = DocumentClient.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
@@ -862,6 +907,8 @@ public final class DocumentClient {
         if (trigger == null) {
             throw new IllegalArgumentException("trigger");          
         }
+
+        DocumentClient.validateResource(trigger);
 
         String path = DocumentClient.joinPath(trigger.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -1008,6 +1055,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("udf");          
         }
 
+        DocumentClient.validateResource(udf);
+
         String path = DocumentClient.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
@@ -1031,6 +1080,8 @@ public final class DocumentClient {
         if (udf == null) {
             throw new IllegalArgumentException("udf");          
         }
+
+        DocumentClient.validateResource(udf);
 
         String path = DocumentClient.joinPath(udf.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -1184,7 +1235,9 @@ public final class DocumentClient {
         if (attachment == null) {
             throw new IllegalArgumentException("attachment");          
         }
-        
+
+        DocumentClient.validateResource(attachment);
+
         String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
@@ -1207,6 +1260,8 @@ public final class DocumentClient {
         if (attachment == null) {
             throw new IllegalArgumentException("attachment");          
         }
+
+        DocumentClient.validateResource(attachment);
 
         String path = DocumentClient.joinPath(attachment.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -1546,6 +1601,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("user");
         }
 
+        DocumentClient.validateResource(user);
+
         String path = DocumentClient.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, user, requestHeaders);
@@ -1565,6 +1622,8 @@ public final class DocumentClient {
         if (user == null) {
             throw new IllegalArgumentException("user");          
         }
+
+        DocumentClient.validateResource(user);
 
         String path = DocumentClient.joinPath(user.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -1699,6 +1758,8 @@ public final class DocumentClient {
             throw new IllegalArgumentException("permission");          
         }
 
+        DocumentClient.validateResource(permission);
+
         String path = DocumentClient.joinPath(userLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
@@ -1722,6 +1783,8 @@ public final class DocumentClient {
         if (permission == null) {
             throw new IllegalArgumentException("permission");          
         }
+
+        DocumentClient.validateResource(permission);
 
         String path = DocumentClient.joinPath(permission.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
@@ -1861,6 +1924,8 @@ public final class DocumentClient {
         if (offer == null) {
             throw new IllegalArgumentException("offer");          
         }
+
+        DocumentClient.validateResource(offer);
 
         String path = DocumentClient.joinPath(offer.getSelfLink(), null);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
@@ -2192,5 +2257,18 @@ public final class DocumentClient {
         }
 
         return String.format("[%s]", StringUtils.join(stringArray, ","));
+    }
+
+    private static void validateResource(Resource resource) {
+        if (!StringUtils.isEmpty(resource.getId())) {
+            if (resource.getId().indexOf('/') != -1 || resource.getId().indexOf('\\') != -1 ||
+                    resource.getId().indexOf('?') != -1 || resource.getId().indexOf('#') != -1) {
+                throw new IllegalArgumentException("Id contains illagel chars.");
+            }
+
+            if (resource.getId().endsWith(" ")) {
+                throw new IllegalArgumentException("Id ends with a space.");
+            }
+        }
     }
 }

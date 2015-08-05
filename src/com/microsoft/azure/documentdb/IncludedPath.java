@@ -96,6 +96,9 @@ public class IncludedPath extends JsonSerializable {
                 case Range:
                     result.add(new RangeIndex(jsonObject.toString()));
                     break;
+                case Spatial:
+                    result.add(new SpatialIndex(jsonObject.toString()));
+                    break;
                 }
             }
 

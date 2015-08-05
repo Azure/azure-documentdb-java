@@ -9,7 +9,7 @@ import org.apache.commons.lang3.StringUtils;
 /**
  * Represents the service response to a request made from DocumentClient. Contains both the resource and the response
  * headers.
- * 
+ *
  * @param <T> the resource type of the resource response.
  */
 public final class ResourceResponse<T extends Resource> {
@@ -30,7 +30,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     * 
+     *
      * @return the database quota.
      */
     public long getDatabaseQuota() {
@@ -39,7 +39,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the current database usage.
      */
     public long getDatabaseUsage() {
@@ -48,7 +48,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     * 
+     *
      * @return the collection quota.
      */
     public long getCollectionQuota() {
@@ -57,7 +57,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the current collection usage.
      */
     public long getCollectionUsage() {
@@ -66,7 +66,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     *  
+     *
      * @return the user quota.
      */
     public long getUserQuota() {
@@ -75,7 +75,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the current user usage.
      */
     public long getUserUsage() {
@@ -84,7 +84,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     *  
+     *
      * @return the permission quota.
      */
     public long getPermissionQuota() {
@@ -93,7 +93,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     * 
+     *
      * @return the current permission usage.
      */
     public long getPermissionUsage() {
@@ -102,7 +102,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     *  
+     *
      * @return the collection size quota.
      */
     public long getCollectionSizeQuota() {
@@ -111,7 +111,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the collection size usage.
      */
     public long getCollectionSizeUsage() {
@@ -120,7 +120,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     *  
+     *
      * @return the document quota.
      */
     public long getDocumentQuota() {
@@ -129,16 +129,16 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the document usage.
      */
     public long getDocumentUsage() {
         return this.getCurrentQuotaHeader(Constants.Quota.DOCUMENTS_SIZE);
     }
-    
+
     /**
      * Max Quota.
-     * 
+     *
      * @return the stored procedures quota.
      */
     public long getStoredProceduresQuota() {
@@ -147,7 +147,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     * 
+     *
      * @return the current stored procedures usage.
      */
     public long getStoredProceduresUsage() {
@@ -156,7 +156,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     *  
+     *
      * @return the triggers quota.
      */
     public long getTriggersQuota() {
@@ -165,7 +165,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the current triggers usage.
      */
     public long getTriggersUsage() {
@@ -174,7 +174,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Max Quota.
-     * 
+     *
      * @return the user defined functions quota.
      */
     public long getUserDefinedFunctionsQuota() {
@@ -183,7 +183,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Current Usage.
-     *  
+     *
      * @return the current user defined functions usage.
      */
     public long getUserDefinedFunctionsUsage() {
@@ -193,7 +193,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the Activity ID for the request.
-     *  
+     *
      * @return the activity id.
      */
     public String getActivityId() {
@@ -202,7 +202,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the token used for managing client's consistency requirements.
-     * 
+     *
      * @return the session token.
      */
     public String getSessionToken() {
@@ -211,7 +211,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the HTTP status code associated with the response.
-     * 
+     *
      * @return the status code.
      */
     public int getStatusCode()
@@ -222,7 +222,7 @@ public final class ResourceResponse<T extends Resource> {
     /**
      * Gets the maximum size limit for this entity (in megabytes (MB) for server resources and in count for master
      * resources).
-     * 
+     *
      * @return the max resource quota.
      */
     public String getMaxResourceQuota() {
@@ -231,7 +231,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the current size of this entity (in megabytes (MB) for server resources and in count for master resources)
-     * 
+     *
      * @return the current resource quota usage.
      */
     public String getCurrentResourceQuotaUsage() {
@@ -240,7 +240,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the resource for the request.
-     * 
+     *
      * @return the resource.
      */
     public T getResource() {
@@ -249,7 +249,7 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the number of index paths (terms) generated by the operation.
-     * 
+     *
      * @return the request charge.
      */
     public double getRequestCharge() {
@@ -262,11 +262,24 @@ public final class ResourceResponse<T extends Resource> {
 
     /**
      * Gets the headers associated with the response.
-     * 
+     *
      * @return the resposne headers.
      */
     public Map<String, String> getResponseHeaders() {
         return this.response.getResponseHeaders();
+    }
+
+    /**
+     * Gets the progress of an index transformation, if one is underway.
+     *
+     * @return the progress of an index transformation.
+     */
+    public long getIndexTransformationProgress() {
+        String value = this.getResponseHeaders().get(HttpConstants.HttpHeaders.INDEX_TRANSFORMATION_PROGRESS);
+        if (StringUtils.isEmpty(value)) {
+          return -1;
+        }
+        return Long.valueOf(value);
     }
 
     /**

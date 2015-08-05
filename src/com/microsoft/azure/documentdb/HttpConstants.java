@@ -144,11 +144,14 @@ class HttpConstants {
 
         // Offer header
         public static final String OFFER_TYPE = "x-ms-offer-type";
+
+        // Index progress headers
+        public static final String INDEX_TRANSFORMATION_PROGRESS = "x-ms-documentdb-collection-index-transformation-progress";
     }
 
     public static class Versions {
         public static String CURRENT_VERSION = "2015-06-03";
-        public static String USER_AGENT = "documentdb-java-sdk-1.1.0";
+        public static String USER_AGENT = "documentdb-java-sdk-1.2.0";
     }
     
     public static class StatusCodes {
