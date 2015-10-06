@@ -117,7 +117,7 @@ Additional samples are provided in the unit tests.
 
 ##Need Help?
 
-Be sure to check out the Microsoft Azure [Developer Forums on MSDN](https://social.msdn.microsoft.com/forums/azure/en-US/home?forum=AzureDocumentDB) or the [Developer Forums on Stack Overflow](http://stackoverflow.com/questions/tagged/azure-documentdb) if you have trouble with the provided code.
+Be sure to check out the [Developer Forums on Stack Overflow](http://stackoverflow.com/questions/tagged/azure-documentdb) if you have trouble with the provided code.
 
 ##Contribute Code or Provide Feedback
 
@@ -130,4 +130,4 @@ If you encounter any bugs with the library please file an issue in the [Issues](
 * [Azure Developer Center](http://azure.microsoft.com/en-us/develop/java/)
 * [Azure DocumentDB Service](http://azure.microsoft.com/en-us/documentation/services/documentdb/)
 * [Azure DocumentDB Team Blog](http://blogs.msdn.com/b/documentdb/)
-* [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc)
+* [JavaDocs](http://azure.github.io/azure-documentdb-java/)
