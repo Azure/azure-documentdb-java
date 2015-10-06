@@ -1,5 +1,6 @@
 package com.microsoft.azure.documentdb;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 
@@ -26,8 +27,49 @@ public final class IndexingPolicy extends JsonSerializable {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the IndexingPolicy class with the specified set of indexes as 
+     * default index specifications for the root path.
      * 
+     * The following example shows how to override the default indexingPolicy for root path:
+     * 
+     * <pre>
+     * {@code
+     * HashIndex hashIndexOverride = Index.Hash(DataType.String, 5);
+     * RangeIndex rangeIndexOverride = Index.Range(DataType.Number, 2);
+     * SpatialIndex spatialIndexOverride = Index.Spatial(DataType.Point);
+     *
+     * IndexingPolicy indexingPolicy = new IndexingPolicy(hashIndexOverride, rangeIndexOverride, spatialIndexOverride);
+     * }
+     * </pre>
+     * 
+     * If you would like to just override the indexingPolicy for Numbers you can specify just that:
+     * 
+     * <pre>
+     * {@code
+     * RangeIndex rangeIndexOverride = Index.Range(DataType.Number, 2);
+     *
+     * IndexingPolicy indexingPolicy = new IndexingPolicy(rangeIndexOverride);
+     * }
+     * </pre>
+     * 
+     * @param defaultIndexOverrides comma separated set of indexes that serve as default index specifications for the root path.
+     */
+    public IndexingPolicy(Index[] defaultIndexOverrides) {
+        this();
+
+        if (defaultIndexOverrides == null) {
+           throw new IllegalArgumentException("defaultIndexOverrides is null.");
+        }
+
+        IncludedPath includedPath = new IncludedPath();
+        includedPath.setPath(IndexingPolicy.DEFAULT_PATH);
+        includedPath.setIndexes(new ArrayList<Index>(Arrays.asList(defaultIndexOverrides)));
+        this.getIncludedPaths().add(includedPath);
+}
+
+    /**
+     * Constructor.
+     *
      * @param jsonString the json string that represents the indexing policy.
      */
     public IndexingPolicy(String jsonString) {
@@ -36,7 +78,7 @@ public final class IndexingPolicy extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the indexing policy.
      */
     public IndexingPolicy(JSONObject jsonObject) {

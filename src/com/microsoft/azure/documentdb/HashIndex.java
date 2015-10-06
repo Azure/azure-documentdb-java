@@ -6,7 +6,19 @@ import org.json.JSONObject;
 public final class HashIndex extends Index {
 
     /**
-     * Constructor.
+     * Specifies an instance of HashIndex class with specified DataType.
+     *
+     * Here is an example to instantiate HashIndex class passing in the DataType:
+     *
+     * <pre>
+     * {@code
+     * 
+     * HashIndex hashIndex = new HashIndex(DataType.String);
+     * 
+     * }
+     * </pre>
+     * 
+     * @param dataType the data type.
      */
     public HashIndex(DataType dataType) {
         super(IndexKind.Hash);
@@ -14,7 +26,29 @@ public final class HashIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the HashIndex class with specified DataType and precision.
+     *
+     * Here is an example to instantiate HashIndex class passing in the DataType:
+     *
+     * <pre>
+     * {@code
+     * 
+     * HashIndex hashIndex = new HashIndex(DataType.String, 3);
+     * 
+     * }
+     * </pre>
+     * 
+     * @param dataType the data type.
+     * @param precision the precision.
+     */
+    public HashIndex(DataType dataType, int precision) {
+        super(IndexKind.Hash);
+        this.setDataType(dataType);
+        this.setPrecision(precision);
+    }
+
+    /**
+     * Initializes a new instance of the HashIndex class with json string.
      * 
      * @param jsonString the json string that represents the index.
      */
@@ -26,7 +60,7 @@ public final class HashIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the HashIndex class with json object.
      * 
      * @param jsonObject the json object that represents the index.
      */

@@ -91,6 +91,11 @@ final class GatewayProxy {
         throws DocumentClientException {
         return this.performPostRequest(request);
     }
+    
+    public DocumentServiceResponse doUpsert(DocumentServiceRequest request)
+        throws DocumentClientException {
+        return this.performPostRequest(request);
+    }
 
     public DocumentServiceResponse doRead(DocumentServiceRequest request)
         throws DocumentClientException {
@@ -191,8 +196,33 @@ final class GatewayProxy {
         }
 
         if (this.masterKey != null || this.resourceTokens != null) {
+            String path = request.getPath();
+            path = Utils.trimBeginingAndEndingSlashes(path);
+            
+            String resourceName = "";
+            
+            if(Utils.isNameBased(path)) {
+                String[] segments = path.split("/");
+                
+                if (segments.length % 2 == 0) {
+                    // if path has even segments, it is the individual resource like dbs/db1/colls/coll1
+                    if (Utils.IsResourceType(segments[segments.length-2])) {
+                        resourceName = path;
+                    }
+                }
+                else {
+                    // if path has odd segments, get the parent(dbs/db1 from dbs/db1/colls)
+                    if (Utils.IsResourceType(segments[segments.length - 1])) {
+                        resourceName = path.substring(0, path.lastIndexOf("/"));
+                    }
+                }
+            }
+            else {
+                resourceName = request.getResourceId().toLowerCase();
+            }
+            
             String authorization =
-                this.getAuthorizationToken(request.getResourceId(),
+                this.getAuthorizationToken(resourceName,
                                            request.getPath(),
                                            request.getResourceType(),
                                            httpMethod,

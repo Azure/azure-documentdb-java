@@ -6,7 +6,19 @@ import org.json.JSONObject;
 public final class RangeIndex extends Index {
 
     /**
-     * Constructor.
+     * Initializes a new instance of the RangeIndex class with specified DataType.
+     * 
+     * Here is an example to instantiate RangeIndex class passing in the DataType:
+     * 
+     * <pre>
+     * {@code
+     * 
+     * RangeIndex rangeIndex = new RangeIndex(DataType.Number);
+     * 
+     * } 
+     * </pre>
+     * 
+     * @param dataType the data type.
      */
     public RangeIndex(DataType dataType) {
         super(IndexKind.Range);
@@ -14,7 +26,25 @@ public final class RangeIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the RangeIndex class with specified DataType and precision.
+     * 
+     * <pre>
+     * {@code
+     * 
+     * RangeIndex rangeIndex = new RangeIndex(DataType.Number, -1);
+     * 
+     * } 
+     * </pre>
+     * 
+     */
+    public RangeIndex(DataType dataType, int precision) {
+        super(IndexKind.Range);
+        this.setDataType(dataType);
+        this.setPrecision(precision);
+    }
+
+    /**
+     * Initializes a new instance of the RangeIndex class with json string.
      * 
      * @param jsonString the json string that represents the index.
      */
@@ -26,7 +56,7 @@ public final class RangeIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the RangeIndex class with json object.
      * 
      * @param jsonObject the json object that represents the index.
      */

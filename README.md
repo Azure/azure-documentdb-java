@@ -14,7 +14,7 @@ To get the binaries of this library as distributed by Microsoft, ready for use w
     <dependency>
     	<groupId>com.microsoft.azure</groupId>
     	<artifactId>azure-documentdb</artifactId>
-    	<version>1.2.0</version>
+    	<version>1.4.0</version>
     </dependency>
 
 ###Option 2: Source Via Git
@@ -35,6 +35,7 @@ To download a copy of the source code, click "Download ZIP" on the right side of
 ### Dependencies
 * Apache Commons Lang 3.3.2 (org.apache.commons / commons-lang3 / 3.3.2)
 * Apache HttpClient 4.2.5 (org.apache.httpcomponents / httpclient / 4.2.5)
+* Apache HttpCore 4.2.5 (org.apache.httpcomponents / httpcore / 4.2.5)
 * Jackson Data Mapper 1.8 (org.codehaus.jackson / jackson-mapper-asl / 1.8.5)
 * JSON 20140107 (org.json / json / 20140107)
 * JUnit 4.11 (junit / junit / 4.11)
@@ -91,7 +92,7 @@ public class SampleApp {
         myCollection.setId(COLLECTION_ID);
 
         // Configure the new collection performance tier to S1.
-        RequestOptions requestOptions = new RequestOptions();
+        RequestOptions requestOptions = new RequestOptions();
         requestOptions.setOfferType("S1");
 
         // Create a new collection.

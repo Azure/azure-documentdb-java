@@ -392,7 +392,7 @@ class ResourceId {
     static String toBase64String(byte[] buffer, int offset, int length) {
         byte[] subBuffer = Arrays.copyOfRange(buffer, offset, length);
 
-        return Helper.encodeBase64String(subBuffer).replace('/', '-');
+        return Utils.encodeBase64String(subBuffer).replace('/', '-');
     }
 
     // Copy the bytes provided with a for loop, faster when there are only a few
