@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +25,7 @@ import org.junit.runners.model.Statement;
 import com.microsoft.azure.documentdb.AccessCondition;
 import com.microsoft.azure.documentdb.AccessConditionType;
 import com.microsoft.azure.documentdb.Attachment;
+import com.microsoft.azure.documentdb.Conflict;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.DataType;
@@ -68,14 +68,25 @@ final class AnotherPOJO {
 }
 
 public final class GatewayTests {
-    static final String HOST = "[YOUR_ENDPOINT_HERE]";
-    static final String MASTER_KEY = "[YOUR_KEY_HERE]";
+    static final String MASTER_KEY = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+    static final String HOST = "https://localhost:443";
 
     private Database databaseForTest;
     private DocumentCollection collectionForTest;
     private static final String databaseForTestId = "GatewayTests_database0";
     private static final String databaseForTestAlternativeId1 = "GatewayTests_database1";
     private static final String databaseForTestAlternativeId2 = "GatewayTests_database2";
+
+    static final String DATABASES_PATH_SEGMENT = "dbs";
+    static final String USERS_PATH_SEGMENT = "users";
+    static final String PERMISSIONS_PATH_SEGMENT = "permissions";
+    static final String COLLECTIONS_PATH_SEGMENT = "colls";
+    static final String DOCUMENTS_PATH_SEGMENT = "docs";
+    static final String ATTACHMENTS_PATH_SEGMENT = "attachments";
+    static final String STORED_PROCEDURES_PATH_SEGMENT = "sprocs";
+    static final String TRIGGERS_PATH_SEGMENT = "triggers";
+    static final String USER_DEFINED_FUNCTIONS_PATH_SEGMENT = "udfs";
+    static final String CONFLICTS_PATH_SEGMENT = "conflicts";
 
     public class Retry implements TestRule {
         private int retryCount;
@@ -143,10 +154,10 @@ public final class GatewayTests {
         for (String id : allDatabaseIds) {
             Database database = client.queryDatabases(
                     new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                     new SqlParameterCollection(new SqlParameter("@id", id))),
+                            new SqlParameterCollection(new SqlParameter("@id", id))),
                     null).getQueryIterable().iterator().next();
             if (database != null) {
-                client.deleteDatabase(database.getSelfLink(), null);
+                client.deleteDatabase(getDatabaseLink(database, true), null);
             }
         }
     }
@@ -154,9 +165,9 @@ public final class GatewayTests {
     @Before
     public void setUp() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // Clean up before setting up in case a previous running fails to tear down.
         this.cleanUpGeneratedDatabases();
@@ -169,9 +180,9 @@ public final class GatewayTests {
         DocumentCollection collectionDefinition = new DocumentCollection();
         collectionDefinition.setId(GatewayTests.getUID());
 
-        this.collectionForTest = client.createCollection(this.databaseForTest.getSelfLink(),
-                                                         collectionDefinition,
-                                                         null).getResource();
+        this.collectionForTest = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
     }
 
     @After
@@ -244,31 +255,31 @@ public final class GatewayTests {
 
         Document expectedDocument = new Document(
                 "{" +
-                "  'prop0': null," +
-                "  'prop1': 'abc'," +
-                "  'child1': {" +
-                "    'child1Prop1': 500" +
-                "  }," +
-                "  'child2': {" +
-                "    'child2Prop1': '800'" +
-                "  }," +
-                "  'child3': {" +
-                "    'pojoProp': '456'" +
-                "  }," +
-                "  'child4': {" +
-                "    'pojoProp': '789'" +
-                "  }," +
-                "  'collection1': [101, 102]," +
-                "  'collection2': [{'foo': 'bar'}]," +
-                "  'collection3': [{'pojoProp': '456'}]," +
-                "  'collection4': [[['ABCD']]]" +
+                        "  'prop0': null," +
+                        "  'prop1': 'abc'," +
+                        "  'child1': {" +
+                        "    'child1Prop1': 500" +
+                        "  }," +
+                        "  'child2': {" +
+                        "    'child2Prop1': '800'" +
+                        "  }," +
+                        "  'child3': {" +
+                        "    'pojoProp': '456'" +
+                        "  }," +
+                        "  'child4': {" +
+                        "    'pojoProp': '789'" +
+                        "  }," +
+                        "  'collection1': [101, 102]," +
+                        "  'collection2': [{'foo': 'bar'}]," +
+                        "  'collection3': [{'pojoProp': '456'}]," +
+                        "  'collection4': [[['ABCD']]]" +
                 "}");
         Assert.assertEquals(expectedDocument.toString(), document.toString());
 
         Assert.assertEquals("456", document.getObject("child3", StaticPOJOForTest.class).pojoProp);
         Assert.assertEquals("789", document.getObject("child4", AnotherPOJO.class).pojoProp);
         Assert.assertEquals("456", document.getCollection("collection3",
-                            StaticPOJOForTest.class).iterator().next().pojoProp);
+                StaticPOJOForTest.class).iterator().next().pojoProp);
 
         document = new Document("{'pojoProp': '654'}");
         StaticPOJOForTest pojo = document.toObject(StaticPOJOForTest.class);
@@ -283,46 +294,57 @@ public final class GatewayTests {
         Assert.assertEquals("{\"query\":\"SELECT 1\"}", (new SqlQuerySpec("SELECT 1")).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                            "{\"name\":\"@p1\",\"value\":5}" +
-                            "]}",
-                            (new SqlQuerySpec("SELECT 1",
-                                              new SqlParameterCollection(new SqlParameter("@p1", 5)))).toString());
+                "{\"name\":\"@p1\",\"value\":5}" +
+                "]}",
+                (new SqlQuerySpec("SELECT 1",
+                        new SqlParameterCollection(new SqlParameter("@p1", 5)))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                            "{\"name\":\"@p1\",\"value\":5}," +
-                            "{\"name\":\"@p1\",\"value\":true}" +
-                            "]}",
-                            (new SqlQuerySpec("SELECT 1",
-                                    new SqlParameterCollection(new SqlParameter("@p1", 5),
-                                                               new SqlParameter("@p1", true)))).toString());
+                "{\"name\":\"@p1\",\"value\":5}," +
+                "{\"name\":\"@p1\",\"value\":true}" +
+                "]}",
+                (new SqlQuerySpec("SELECT 1",
+                        new SqlParameterCollection(new SqlParameter("@p1", 5),
+                                new SqlParameter("@p1", true)))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                            "{\"name\":\"@p1\",\"value\":\"abc\"}" +
-                            "]}",
-                            (new SqlQuerySpec("SELECT 1",
-                                              new SqlParameterCollection(new SqlParameter("@p1", "abc")))).toString());
+                "{\"name\":\"@p1\",\"value\":\"abc\"}" +
+                "]}",
+                (new SqlQuerySpec("SELECT 1",
+                        new SqlParameterCollection(new SqlParameter("@p1", "abc")))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                            "{\"name\":\"@p1\",\"value\":[1,2,3]}" +
-                            "]}",
-                            (new SqlQuerySpec("SELECT 1",
-                                              new SqlParameterCollection(
-                                                      new SqlParameter("@p1", new int[] {1,2,3})))).toString());
+                "{\"name\":\"@p1\",\"value\":[1,2,3]}" +
+                "]}",
+                (new SqlQuerySpec("SELECT 1",
+                        new SqlParameterCollection(
+                                new SqlParameter("@p1", new int[] {1,2,3})))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                            "{\"name\":\"@p1\",\"value\":{\"a\":[1,2,3]}}" +
-                            "]}",
-                            (new SqlQuerySpec("SELECT 1",
-                                    new SqlParameterCollection(new SqlParameter(
-                                                               "@p1", new JSONObject("{\"a\":[1,2,3]}"))))).toString());
+                "{\"name\":\"@p1\",\"value\":{\"a\":[1,2,3]}}" +
+                "]}",
+                (new SqlQuerySpec("SELECT 1",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@p1", new JSONObject("{\"a\":[1,2,3]}"))))).toString());
     }
 
     @Test
-    public void testDatabaseCrud() throws DocumentClientException {
+    public void testDatabaseCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testDatabaseCrud(isNameBased);
+    }
+
+    @Test
+    public void testDatabaseCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testDatabaseCrud(isNameBased);
+    }
+
+    private void testDatabaseCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // Read databases.
         List<Database> databases = client.readDatabases(null).getQueryIterable().toList();
@@ -339,18 +361,18 @@ public final class GatewayTests {
         Assert.assertEquals(beforeCreateDatabasesCount + 1, databases.size());
         // query databases.
         databases = client.queryDatabases(new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                           new SqlParameterCollection(new SqlParameter(
-                                                                   "@id", databaseDefinition.getId()))),
-                                          null).getQueryIterable().toList();
+                new SqlParameterCollection(new SqlParameter(
+                        "@id", databaseDefinition.getId()))),
+                null).getQueryIterable().toList();
         // number of results for the query should be > 0.
         Assert.assertTrue(databases.size() > 0);
- 
+
         // Delete database.
-        client.deleteDatabase(createdDb.getSelfLink(), null);
+        client.deleteDatabase(getDatabaseLink(createdDb, isNameBased), null);
 
         // Read database after deletion.
         try {
-            client.readDatabase(createdDb.getSelfLink(), null);
+            client.readDatabase(getDatabaseLink(createdDb, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -359,36 +381,47 @@ public final class GatewayTests {
     }
 
     @Test
-    public void testCollectionCrud() throws DocumentClientException {
+    public void testCollectionCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testCollectionCrud(isNameBased);
+    }
+
+    @Test
+    public void testCollectionCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testCollectionCrud(isNameBased);
+    }
+
+    private void testCollectionCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
-        List<DocumentCollection> collections = client.readCollections(this.databaseForTest.getSelfLink(),
-                                                                      null).getQueryIterable().toList();
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+        List<DocumentCollection> collections = client.readCollections(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                null).getQueryIterable().toList();
         // Create a collection.
         int beforeCreateCollectionsCount = collections.size();
-        
+
         IndexingPolicy consistentPolicy = new IndexingPolicy("{'indexingMode': 'Consistent'}");
         DocumentCollection collectionDefinition = new DocumentCollection();
         collectionDefinition.setId(GatewayTests.getUID());
         collectionDefinition.setIndexingPolicy(consistentPolicy);
-        DocumentCollection createdCollection = client.createCollection(this.databaseForTest.getSelfLink(),
-                                                                       collectionDefinition,
-                                                                       null).getResource();
+        DocumentCollection createdCollection = client.createCollection(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                collectionDefinition,
+                null).getResource();
         Assert.assertEquals(collectionDefinition.getId(), createdCollection.getId());
         Assert.assertEquals(IndexingMode.Consistent, createdCollection.getIndexingPolicy().getIndexingMode());
 
         // Read collections after creation.
-        collections = client.readCollections(this.databaseForTest.getSelfLink(), null).getQueryIterable().toList();
+        collections = client.readCollections(this.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         // Create should increase the number of collections.
         Assert.assertEquals(collections.size(), beforeCreateCollectionsCount + 1);
         // Query collections.
-        collections = client.queryCollections(this.databaseForTest.getSelfLink(),
-                                              new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                               new SqlParameterCollection(new SqlParameter(
-                                                                       "@id", collectionDefinition.getId()))),
-                                              null).getQueryIterable().toList();
+        collections = client.queryCollections(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", collectionDefinition.getId()))),
+                null).getQueryIterable().toList();
         Assert.assertTrue(collections.size() > 0);
 
         // Replacing indexing policy is allowed.
@@ -408,12 +441,15 @@ public final class GatewayTests {
             Assert.assertEquals("BadRequest", e.getError().getCode());
         }
 
+        // Resetting the id of the createdCollection so that it can be deleted with the named based id
+        createdCollection.setId(collectionDefinition.getId());
+
         // Delete collection.
-        client.deleteCollection(createdCollection.getSelfLink(), null);
+        client.deleteCollection(this.getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
         // Read collection after deletion.
 
         try {
-            client.readCollection(createdCollection.getSelfLink(), null);
+            client.readCollection(this.getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -424,9 +460,9 @@ public final class GatewayTests {
     @Test
     public void testSpatialIndex() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         DocumentCollection collectionDefinition = new DocumentCollection();
         collectionDefinition.setId(GatewayTests.getUID());
         IndexingPolicy indexingPolicy = new IndexingPolicy();
@@ -448,7 +484,7 @@ public final class GatewayTests {
         Document location2 = new Document(
                 "{ 'id': 'loc2', 'Location': { 'type': 'Point', 'coordinates': [ 100.0, 100.0 ] } }");
         client.createDocument(collection.getSelfLink(), location2, null, true);
-        
+
         List<Document> results = client.queryDocuments(
                 collection.getSelfLink(),
                 "SELECT * FROM root WHERE (ST_DISTANCE(root.Location, {type: 'Point', coordinates: [20.1, 20]}) < 20000) ",
@@ -460,11 +496,11 @@ public final class GatewayTests {
     @Test
     public void testQueryIterableCrud() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(),
-                                                        null).getQueryIterable().toList();
+                null).getQueryIterable().toList();
         final int numOfDocuments = 10;
 
         // Create 10 documents.
@@ -505,7 +541,7 @@ public final class GatewayTests {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
-                
+
             }
         } while (continuationToken != null);
 
@@ -530,65 +566,65 @@ public final class GatewayTests {
     @Test
     public void testCollectionIndexingPolicy() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // Default indexing mode should be consistent.
         Assert.assertEquals(IndexingMode.Consistent, this.collectionForTest.getIndexingPolicy().getIndexingMode());
 
         DocumentCollection lazyCollectionDefinition = new DocumentCollection(
                 "{" +
-                "  'id': 'lazy collection'," +
-                "  'indexingPolicy': {" +
-                "    'indexingMode': 'lazy'" +
-                "  }" +
+                        "  'id': 'lazy collection'," +
+                        "  'indexingPolicy': {" +
+                        "    'indexingMode': 'lazy'" +
+                        "  }" +
                 "}");
         client.deleteCollection(this.collectionForTest.getSelfLink(), null);
         DocumentCollection lazyCollection = client.createCollection(this.databaseForTest.getSelfLink(),
-                                                                    lazyCollectionDefinition,
-                                                                    null).getResource();
+                lazyCollectionDefinition,
+                null).getResource();
         // Indexing mode should be lazy.
         Assert.assertEquals(IndexingMode.Lazy, lazyCollection.getIndexingPolicy().getIndexingMode());
 
         DocumentCollection consistentCollectionDefinition = new DocumentCollection(
                 "{" +
-                "  'id': 'lazy collection'," +
-                "  'indexingPolicy': {" +
-                "    'indexingMode': 'Consistent'" +
-                "  }" +
+                        "  'id': 'lazy collection'," +
+                        "  'indexingPolicy': {" +
+                        "    'indexingMode': 'Consistent'" +
+                        "  }" +
                 "}");
         client.deleteCollection(lazyCollection.getSelfLink(), null);
         DocumentCollection consistentCollection = client.createCollection(this.databaseForTest.getSelfLink(),
-                                                                          consistentCollectionDefinition,
-                                                                          null).getResource();
+                consistentCollectionDefinition,
+                null).getResource();
         // Indexing mode should be consistent.
         Assert.assertEquals(this.collectionForTest.getIndexingPolicy().getIndexingMode(),
-                            IndexingMode.Consistent);
+                IndexingMode.Consistent);
         DocumentCollection collectionDefinition = new DocumentCollection(
                 "{" +
-                "  'id': 'CollectionWithIndexingPolicy'," +
-                "  'indexingPolicy': {" +
-                "    'automatic': true," +
-                "    'indexingMode': 'Consistent'," +
-                "    'includedPaths': ["+
-                "      {" +
-                "        'path': '/'," +
-                "        'indexes': [" +
-                "          {" +
-                "            'kind': 'Hash'," +
-                "            'dataType': 'Number'," +
-                "            'precision': 2," +
-                "          }" +
-                "        ]" +
-                "      }" +
-                "    ]," +
-                "    'excludedPaths': [" +
-                "      {" +
-                "        'path': '/\"systemMetadata\"/*'," +
-                "      }" +
-                "    ]" +
-                "  }" +
+                        "  'id': 'CollectionWithIndexingPolicy'," +
+                        "  'indexingPolicy': {" +
+                        "    'automatic': true," +
+                        "    'indexingMode': 'Consistent'," +
+                        "    'includedPaths': ["+
+                        "      {" +
+                        "        'path': '/'," +
+                        "        'indexes': [" +
+                        "          {" +
+                        "            'kind': 'Hash'," +
+                        "            'dataType': 'Number'," +
+                        "            'precision': 2," +
+                        "          }" +
+                        "        ]" +
+                        "      }" +
+                        "    ]," +
+                        "    'excludedPaths': [" +
+                        "      {" +
+                        "        'path': '/\"systemMetadata\"/*'," +
+                        "      }" +
+                        "    ]" +
+                        "  }" +
                 "}");
 
         // Change the index using the setter.
@@ -599,8 +635,8 @@ public final class GatewayTests {
 
         client.deleteCollection(consistentCollection.getSelfLink(), null);
         DocumentCollection collectionWithSecondaryIndex = client.createCollection(this.databaseForTest.getSelfLink(),
-                                                                                  collectionDefinition,
-                                                                                  null).getResource();
+                collectionDefinition,
+                null).getResource();
         // Check the size of included and excluded paths.
         Assert.assertEquals(2, collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().size());
         IncludedPath includedPath = collectionWithSecondaryIndex.getIndexingPolicy().getIncludedPaths().iterator().next();
@@ -685,74 +721,174 @@ public final class GatewayTests {
         // included path should be 2 '_ts' and '/'
         Assert.assertEquals(2, indexingPolicy.getIncludedPaths().size());
 
-        // check default path
-        Iterator<IncludedPath> pathItr = indexingPolicy.getIncludedPaths().iterator();
-        IncludedPath firstPath = pathItr.next();
-        Assert.assertEquals("/*", firstPath.getPath());
-        Assert.assertEquals(2, firstPath.getIndexes().size());
-        Iterator<Index> indexItr = firstPath.getIndexes().iterator();
-        Index firstIndex = indexItr.next();
-        Index secondIndex = indexItr.next();
-        Assert.assertEquals(IndexKind.Hash, firstIndex.getKind());
-        Assert.assertEquals(IndexKind.Range, secondIndex.getKind());
-        Assert.assertEquals(DataType.String, ((HashIndex)firstIndex).getDataType());
-        Assert.assertEquals((short)3, ((HashIndex)firstIndex).getPrecision());
-        Assert.assertEquals(IndexKind.Range, secondIndex.getKind());
-        Assert.assertEquals(DataType.Number, ((RangeIndex)secondIndex).getDataType());
-        Assert.assertEquals((short)-1, ((RangeIndex)secondIndex).getPrecision());
+        // check default path and ts path
+        IncludedPath rootIncludedPath = null;
+        IncludedPath tsIncludedPath = null;
+        for (IncludedPath path : indexingPolicy.getIncludedPaths()) {
+            if (path.getPath().equals("/*")) {
+                rootIncludedPath = path;
+            } else if (path.getPath().equals("/\"_ts\"/?")) {
+                tsIncludedPath = path;
+            }
+        }
+        // ts path should exist.
+        Assert.assertNotNull(tsIncludedPath);
+        // root path should exist.
+        Assert.assertNotNull(rootIncludedPath);
+        // RangeIndex for Numbers and HashIndex for Strings.
+        Assert.assertEquals(2, rootIncludedPath.getIndexes().size());
 
-        // _ts
-        IncludedPath secondPath = pathItr.next();
-        Assert.assertEquals("/\"_ts\"/?", secondPath.getPath());
+        // There exists one HashIndex and one RangeIndex out of these 2 indexes.
+        HashIndex hashIndex = null;
+        RangeIndex rangeIndex = null;
+        for (Index index : rootIncludedPath.getIndexes()) {
+            if (index.getKind() == IndexKind.Hash) {
+                hashIndex = (HashIndex)index;
+            } else if (index.getKind() == IndexKind.Range) {
+                rangeIndex = (RangeIndex)index;
+            }
+        }
+        Assert.assertNotNull(hashIndex);
+        Assert.assertNotNull(rangeIndex);
+
+        // HashIndex for Strings, skipping checking for precision as that default is set at backend and can change
+        Assert.assertEquals(DataType.String, hashIndex.getDataType());
+        // RangeIndex for Numbers, skipping checking for precision as that default is set at backend and can change
+        Assert.assertEquals(DataType.Number, rangeIndex.getDataType());
     }
 
     @Test
-    public void testDocumentCrud() throws DocumentClientException {
+    public void testIndexingPolicyOverrides() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        HashIndex hashIndexOverride = Index.Hash(DataType.String, 5);
+        RangeIndex rangeIndexOverride = Index.Range(DataType.Number, 2);
+        SpatialIndex spatialIndexOverride = Index.Spatial(DataType.Point);
+
+        Index[] indexes = {hashIndexOverride, rangeIndexOverride, spatialIndexOverride};
+        IndexingPolicy indexingPolicy = new IndexingPolicy(indexes);
+
+        DocumentCollection collection = new DocumentCollection();
+        collection.setId(GatewayTests.getUID());
+        collection.setIndexingPolicy(indexingPolicy);
+
+        DocumentCollection createdCollection = client.createCollection(this.databaseForTest.getSelfLink(), collection, null).getResource();
+
+        // check default path.
+        IncludedPath rootIncludedPath = null;
+        for (IncludedPath path : createdCollection.getIndexingPolicy().getIncludedPaths()) {
+            if (path.getPath().equals("/*")) {
+                rootIncludedPath = path;
+            }
+        }
+        // root path should exist.
+        Assert.assertNotNull(rootIncludedPath);
+
+        Assert.assertEquals(3, rootIncludedPath.getIndexes().size());
+
+        HashIndex hashIndex = null;
+        RangeIndex rangeIndex = null;
+        SpatialIndex spatialIndex = null;
+        for (Index index : rootIncludedPath.getIndexes()) {
+            if (index.getKind() == IndexKind.Hash) {
+                hashIndex = (HashIndex)index;
+            } else if (index.getKind() == IndexKind.Range) {
+                rangeIndex = (RangeIndex)index;
+            } else if (index.getKind() == IndexKind.Spatial) {
+                spatialIndex = (SpatialIndex)index;
+            }
+        }
+        Assert.assertNotNull(hashIndex);
+        Assert.assertNotNull(rangeIndex);
+        Assert.assertNotNull(spatialIndex);
+
+        Assert.assertEquals(DataType.String, hashIndex.getDataType());
+        Assert.assertEquals(5, hashIndex.getPrecision());
+
+        Assert.assertEquals(DataType.Number, rangeIndex.getDataType());
+        Assert.assertEquals(2, rangeIndex.getPrecision());
+
+        Assert.assertEquals(DataType.Point, spatialIndex.getDataType());
+    }
+
+    @Test
+    public void testIndexClassesSerialization() {
+        HashIndex hashIndex = new HashIndex("{\"kind\": \"Hash\", \"dataType\": \"String\", \"precision\": 8}");
+        Assert.assertEquals(IndexKind.Hash, hashIndex.getKind());
+        Assert.assertEquals(DataType.String, hashIndex.getDataType());
+        Assert.assertEquals(8, hashIndex.getPrecision());
+
+        RangeIndex rangeIndex = new RangeIndex("{\"kind\": \"Range\", \"dataType\": \"Number\", \"precision\": 4}");
+        Assert.assertEquals(IndexKind.Range, rangeIndex.getKind());
+        Assert.assertEquals(DataType.Number, rangeIndex.getDataType());
+        Assert.assertEquals(4, rangeIndex.getPrecision());
+
+        SpatialIndex spatialIndex = new SpatialIndex("{\"kind\": \"Spatial\", \"dataType\": \"Point\"}");
+        Assert.assertEquals(IndexKind.Spatial, spatialIndex.getKind());
+        Assert.assertEquals(DataType.Point, spatialIndex.getDataType());
+    }
+
+    @Test
+    public void testDocumentCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testDocumentCrud(isNameBased);
+    }
+
+    @Test
+    public void testDocumentCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testDocumentCrud(isNameBased);
+    }
+
+    private void testDocumentCrud(boolean isNameBased) throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         // Read documents.
-        List<Document> documents = client.readDocuments(this.collectionForTest.getSelfLink(),
-                                                        null).getQueryIterable().toList();
+        List<Document> documents = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null).getQueryIterable().toList();
         Assert.assertEquals(0, documents.size());
         // create a document
         Document documentDefinition = new Document(
                 "{" +
-                "  'name': 'sample document'," +
-                "  'foo': 'bar 你好'," +  // foo contains some UTF-8 characters.
-                "  'key': 'value'" +
+                        "  'name': 'sample document'," +
+                        "  'foo': 'bar ä½ å¥½'," +  // foo contains some UTF-8 characters.
+                        "  'key': 'value'" +
                 "}");
 
         // Should throw an error because automatic id generation is disabled.
         try {
-            client.createDocument(this.collectionForTest.getSelfLink(), documentDefinition, null, true);
+            client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), documentDefinition, null, true);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(400, e.getStatusCode());
             Assert.assertEquals("BadRequest", e.getError().getCode());
         }
 
-        Document document = client.createDocument(this.collectionForTest.getSelfLink(),
-                                                  documentDefinition,
-                                                  null,
-                                                  false).getResource();
+        Document document = client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition,
+                null,
+                false).getResource();
         Assert.assertEquals(documentDefinition.getString("name"), document.getString("name"));
         Assert.assertEquals(documentDefinition.getString("foo"), document.getString("foo"));
         Assert.assertEquals(documentDefinition.getString("bar"), document.getString("bar"));
         Assert.assertNotNull(document.getId());
 
         // Read documents after creation.
-        documents = client.readDocuments(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
+        documents = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
         // Create should increase the number of documents.
         Assert.assertEquals(1, documents.size());
 
         // Query documents.
-        documents = client.queryDocuments(this.collectionForTest.getSelfLink(),
-                                          new SqlQuerySpec("SELECT * FROM root r WHERE r.name=@id",
-                                                           new SqlParameterCollection(new SqlParameter(
-                                                                   "@id", documentDefinition.getString("name")))),
-                                          null).getQueryIterable().toList();
+        documents = client.queryDocuments(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.name=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", documentDefinition.getString("name")))),
+                null).getQueryIterable().toList();
         Assert.assertEquals(1, documents.size());
 
         // Replace document.
@@ -766,7 +902,7 @@ public final class GatewayTests {
         // Document id should stay the same.
         Assert.assertEquals(document.getId(), replacedDocument.getId());
         // Read document.
-        Document oneDocumentFromRead = client.readDocument(replacedDocument.getSelfLink(), null).getResource();
+        Document oneDocumentFromRead = client.readDocument(this.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null).getResource();
         Assert.assertEquals(replacedDocument.getId(), oneDocumentFromRead.getId());
 
         AccessCondition accessCondition = new AccessCondition();
@@ -775,20 +911,126 @@ public final class GatewayTests {
 
         RequestOptions options = new RequestOptions();
         options.setAccessCondition(accessCondition);
-        ResourceResponse<Document> rr = client.readDocument(oneDocumentFromRead.getSelfLink(), options);
+        ResourceResponse<Document> rr = client.readDocument(this.getDocumentLink(this.databaseForTest, this.collectionForTest, oneDocumentFromRead, isNameBased), options);
         Assert.assertEquals(rr.getStatusCode(), HttpStatus.SC_NOT_MODIFIED);
 
         // delete document
-        client.deleteDocument(replacedDocument.getSelfLink(), null);
+        client.deleteDocument(this.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
 
         // read documents after deletion
         try {
-            client.readDocument(replacedDocument.getSelfLink(), null);
+            client.readDocument(this.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
+    }
+
+    // Upsert test for Document resource - self link version
+    @Test
+    public void testDocumentUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testDocumentUpsert(isNameBased);
+    }
+
+    // Upsert test for Document resource - name based routing version
+    @Test
+    public void testDocumentUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testDocumentUpsert(isNameBased);
+    }
+
+    private void testDocumentUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Read documents and get initial count
+        List<Document> documents = client
+                .readDocuments(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        int initialDocumentCount = documents.size();
+
+        // Create a document definition
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'name': 'sample document'," + 
+                        "  'key': 'value'" + 
+                "}");
+
+        // Upsert should create the document with the definition
+        Document createdDocument = client.upsertDocument(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition, null, false).getResource();
+
+        // Read documents to check the count and it should increase
+        documents = client
+                .readDocuments(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialDocumentCount + 1, documents.size());
+
+        // Update document.
+        createdDocument.set("name", "replaced document");
+        createdDocument.set("key", "new value");
+
+        // Upsert should replace the existing document since Id exists
+        Document upsertedDocument = client.upsertDocument(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
+                null, true).getResource();
+
+        // Document id should stay the same.
+        Assert.assertEquals(createdDocument.getId(), upsertedDocument.getId());
+
+        // Property should have changed.
+        Assert.assertEquals(createdDocument.getString("name"), upsertedDocument.getString("name"));
+        Assert.assertEquals(createdDocument.getString("key"), upsertedDocument.getString("key"));
+
+        // Documents count should remain the same
+        documents = client
+                .readDocuments(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialDocumentCount + 1, documents.size());
+
+        // Update document id
+        createdDocument.setId(GatewayTests.getUID());
+
+        // Upsert should create new document
+        Document newDocument = client.upsertDocument(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
+                null, true).getResource();
+
+        // Verify id property
+        Assert.assertEquals(createdDocument.getId(), newDocument.getId());
+
+        // Read documents after upsert to check the count and it should increase
+        documents = client
+                .readDocuments(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialDocumentCount + 2, documents.size());
+
+        // Delete documents
+        client.deleteDocument(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, upsertedDocument, isNameBased),
+                null);
+        client.deleteDocument(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, newDocument, isNameBased), null);
+
+        // Read documents after delete to check the count and it should be back to original
+        documents = client
+                .readDocuments(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialDocumentCount, documents.size());
     }
 
     class TestPOJOInner {
@@ -834,9 +1076,9 @@ public final class GatewayTests {
 
 
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         TestPOJO testPojo = new TestPOJO(10);
         testPojo.id= "MyPojoObejct" + GatewayTests.getUID();
@@ -845,9 +1087,9 @@ public final class GatewayTests {
         testPojo.setPrivateStringProperty("testStringAccess");
 
         Document document = client.createDocument(this.collectionForTest.getSelfLink(),
-                                                  testPojo,
-                                                  null,
-                                                  false).getResource();
+                testPojo,
+                null,
+                false).getResource();
 
         Assert.assertEquals(document.getInt("intProperty").intValue(), testPojo.intProperty);
 
@@ -875,7 +1117,18 @@ public final class GatewayTests {
     }
 
     @Test
-    public void testAttachmentCrud() throws DocumentClientException {
+    public void testAttachmentCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testAttachmentCrud(isNameBased);
+    }
+
+    @Test
+    public void testAttachmentCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testAttachmentCrud(isNameBased);
+    }
+
+    private void testAttachmentCrud(boolean isNameBased) throws DocumentClientException {
         class ReadableStream extends InputStream {
 
             byte[] bytes;
@@ -896,23 +1149,23 @@ public final class GatewayTests {
         }
 
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         // Create document.
         Document documentDefinition = new Document(
                 "{" +
-                "  'id': 'sample document'," +
-                "  'foo': 'bar'," +
-                "  'key': 'value'" +
+                        "  'id': 'sample document'," +
+                        "  'foo': 'bar'," +
+                        "  'key': 'value'" +
                 "}");
-        Document document = client.createDocument(this.collectionForTest.getSelfLink(),
-                                                  documentDefinition,
-                                                  null,
-                                                  false).getResource();
+        Document document = client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition,
+                null,
+                false).getResource();
         // List all attachments.
-        List<Attachment> attachments = client.readAttachments(document.getSelfLink(),
-                                                              null).getQueryIterable().toList();
+        List<Attachment> attachments = client.readAttachments(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                null).getQueryIterable().toList();
         Assert.assertEquals(0, attachments.size());
 
         MediaOptions validMediaOptions = new MediaOptions();
@@ -925,7 +1178,7 @@ public final class GatewayTests {
         // Create attachment with invalid content type.
         ReadableStream mediaStream = new ReadableStream("stream content.");
         try {
-            client.createAttachment(document.getSelfLink(), mediaStream, invalidMediaOptions);
+            client.createAttachment(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, invalidMediaOptions);
             Assert.assertTrue(false);  // This line shouldn't execute.
         } catch (DocumentClientException e) {
             Assert.assertEquals(400, e.getStatusCode());
@@ -934,15 +1187,15 @@ public final class GatewayTests {
 
         // Create attachment with valid content type.
         mediaStream = new ReadableStream("stream content.");
-        Attachment validAttachment = client.createAttachment(document.getSelfLink(),
-                                                             mediaStream,
-                                                             validMediaOptions).getResource();
+        Attachment validAttachment = client.createAttachment(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                mediaStream,
+                validMediaOptions).getResource();
         Assert.assertEquals("attachment id", validAttachment.getId());
 
         mediaStream = new ReadableStream("stream content");
         // Create colliding attachment.
         try {
-            client.createAttachment(document.getSelfLink(), mediaStream, validMediaOptions);
+            client.createAttachment(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, validMediaOptions);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(409, e.getStatusCode());
@@ -952,23 +1205,23 @@ public final class GatewayTests {
         // Create attachment with media link.
         Attachment attachmentDefinition = new Attachment(
                 "{" +
-                "  'id': 'dynamic attachment'," +
-                "  'media': 'http://xstore.'," +
-                "  'MediaType': 'Book'," +
-                "  'Author': 'My Book Author'," +
-                "  'Title': 'My Book Title'," +
-                "  'contentType': 'application/text'" +
+                        "  'id': 'dynamic attachment'," +
+                        "  'media': 'http://xstore.'," +
+                        "  'MediaType': 'Book'," +
+                        "  'Author': 'My Book Author'," +
+                        "  'Title': 'My Book Title'," +
+                        "  'contentType': 'application/text'" +
                 "}");
-        Attachment attachment = client.createAttachment(document.getSelfLink(),
-                                                        attachmentDefinition,
-                                                        null).getResource();
+        Attachment attachment = client.createAttachment(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                attachmentDefinition,
+                null).getResource();
         Assert.assertEquals("Book", attachment.getString("MediaType"));
         Assert.assertEquals("My Book Author", attachment.getString("Author"));
 
         // List all attachments.
         FeedOptions fo = new FeedOptions();
         fo.setPageSize(1);
-        attachments = client.readAttachments(document.getSelfLink(), fo).getQueryIterable().toList();
+        attachments = client.readAttachments(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo).getQueryIterable().toList();
         Assert.assertEquals(2, attachments.size());
         attachment.set("Author", "new author");
 
@@ -998,36 +1251,239 @@ public final class GatewayTests {
 
         // Share attachment with a second document.
         documentDefinition = new Document("{'id': 'document 2'}");
-        document = client.createDocument(this.collectionForTest.getSelfLink(),
-                                         documentDefinition,
-                                         null,
-                                         false).getResource();
+        document = client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition,
+                null,
+                false).getResource();
         String secondAttachmentJson = String.format("{" +
-                                                    "  'id': '%s'," +
-                                                    "  'contentType': '%s'," +
-                                                    "  'media': '%s'," +
-                                                    " }",
-                                                    validAttachment.getId(),
-                                                    validAttachment.getContentType(),
-                                                    validAttachment.getMediaLink());
+                "  'id': '%s'," +
+                "  'contentType': '%s'," +
+                "  'media': '%s'," +
+                " }",
+                validAttachment.getId(),
+                validAttachment.getContentType(),
+                validAttachment.getMediaLink());
         Attachment secondAttachmentDefinition = new Attachment(secondAttachmentJson);
-        attachment = client.createAttachment(document.getSelfLink(), secondAttachmentDefinition, null).getResource();
+        attachment = client.createAttachment(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), secondAttachmentDefinition, null).getResource();
         Assert.assertEquals(validAttachment.getId(), attachment.getId());
         Assert.assertEquals(validAttachment.getMediaLink(), attachment.getMediaLink());
         Assert.assertEquals(validAttachment.getContentType(), attachment.getContentType());
         // Deleting attachment.
-        client.deleteAttachment(attachment.getSelfLink(), null);
+        client.deleteAttachment(this.getAttachmentLink(this.databaseForTest, this.collectionForTest, document, attachment, isNameBased), null);
         // read attachments after deletion
-        attachments = client.readAttachments(document.getSelfLink(), null).getQueryIterable().toList();
+        attachments = client.readAttachments(this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(0, attachments.size());
     }
 
+    // Upsert test for Attachment resource - self link version
     @Test
-    public void testTriggerCrud() throws DocumentClientException {
+    public void testAttachmentUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testAttachmentUpsert(isNameBased);
+    }
+
+    // Upsert test for Attachment resource - name based routing version
+    @Test
+    public void testAttachmentUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testAttachmentUpsert(isNameBased);
+    }
+
+    private void testAttachmentUpsert(boolean isNameBased) throws DocumentClientException {
+        // Implement a readable stream class
+        class ReadableStream extends InputStream {
+
+            byte[] bytes;
+            int index;
+
+            ReadableStream(String content) {
+                this.bytes = content.getBytes();
+                this.index = 0;
+            }
+
+            @Override
+            public int read() throws IOException {
+                if (this.index < this.bytes.length) {
+                    return this.bytes[this.index++];
+                }
+                return -1;
+            }
+        }
+
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Create document definition
+        Document documentDefinition = new Document(
+                "{" +  
+                        "  'name': 'document'," + 
+                        "  'key': 'value'" + 
+                "}");
+
+        // Create document
+        Document document = client.createDocument(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition, null, false).getResource();
+
+        // Read attachments and get initial count
+        List<Attachment> attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        int initialAttachmentCount = attachments.size();
+
+        // Set MediaOptions
+        MediaOptions mediaOptions = new MediaOptions();
+        mediaOptions.setSlug("attachment id");
+        mediaOptions.setContentType("application/text");
+        
+        // Set Feed Options
+        FeedOptions fo = new FeedOptions();
+        fo.setPageSize(1);
+        
+        // Initialize media stream
+        ReadableStream mediaStream = new ReadableStream("stream content.");
+
+        // Upsert should create the attachment
+        Attachment createdMediaStreamAttachment = client.upsertAttachment(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
+                mediaOptions).getResource();
+        
+        Assert.assertEquals("attachment id", createdMediaStreamAttachment.getId());
+        
+        // Read attachments to check the count and it should increase
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount + 1, attachments.size());
+
+        // Update MediaOptions
+        mediaOptions.setSlug("new attachment id");
+        mediaStream = new ReadableStream("stream content.");
+
+        // Upsert should create new attachment
+        Attachment newMediaStreamAttachment = client.upsertAttachment(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
+                mediaOptions).getResource();
+        
+        Assert.assertEquals("new attachment id", newMediaStreamAttachment.getId());
+
+        // Read attachments to check the count and it should increase
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount + 2, attachments.size());
+
+        // Create attachment definition with media link.
+        Attachment attachmentDefinition = new Attachment(
+                "{" + 
+                        "  'id': 'dynamic attachment'," +
+                        "  'media': 'http://xstore.'," + 
+                        "  'MediaType': 'Book'," + 
+                        "  'Author': 'My Book Author'," +
+                        "  'Title': 'My Book Title'," + 
+                        "  'contentType': 'application/text'" + 
+                "}");
+
+        // Upsert should create the attachment 
+        Attachment createdDynamicAttachment = client.upsertAttachment(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                attachmentDefinition, null).getResource();
+
+        // Verify id property
+        Assert.assertEquals(attachmentDefinition.getId(), createdDynamicAttachment.getId());
+
+        // Read all attachments and verify the count increase
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount + 3, attachments.size());
+
+        // Update attachment
+        createdDynamicAttachment.set("Author", "new author");
+
+        // Upsert should replace the existing attachment since Id exists
+        Attachment upsertedDynamicAttachment = client.upsertAttachment(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                createdDynamicAttachment, null).getResource();
+
+        // Verify id property
+        Assert.assertEquals(createdDynamicAttachment.getId(), upsertedDynamicAttachment.getId());
+
+        // Verify property change
+        Assert.assertEquals(createdDynamicAttachment.getString("Author"), upsertedDynamicAttachment.getString("Author"));
+
+        // Read all attachments and verify the count remains the same
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount + 3, attachments.size());
+
+        // Change id property
+        createdDynamicAttachment.setId(GatewayTests.getUID());
+
+        // Upsert should create new attachment
+        Attachment newDynamicAttachment = client.upsertAttachment(
+                this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                createdDynamicAttachment, null).getResource();
+
+        // Verify id property
+        Assert.assertEquals(createdDynamicAttachment.getId(), newDynamicAttachment.getId());
+
+        // Read all attachments and verify the count increases
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount + 4, attachments.size());
+
+        // Deleting attachments.
+        client.deleteAttachment(this.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+                createdMediaStreamAttachment, isNameBased), null);
+        client.deleteAttachment(this.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+                newMediaStreamAttachment, isNameBased), null);
+        client.deleteAttachment(this.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+                upsertedDynamicAttachment, isNameBased), null);
+        client.deleteAttachment(this.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+                newDynamicAttachment, isNameBased), null);
+
+        // read attachments after deletion and verify count remains the same
+        attachments = client
+                .readAttachments(
+                        this.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialAttachmentCount, attachments.size());
+    }
+
+    @Test
+    public void testTriggerCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testTriggerCrud(isNameBased);
+    }
+
+    @Test
+    public void testTriggerCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testTriggerCrud(isNameBased);
+    }
+
+    private void testTriggerCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // create..
         Trigger triggerDef = new Trigger();
@@ -1035,9 +1491,9 @@ public final class GatewayTests {
         triggerDef.setTriggerType(TriggerType.Pre);
         triggerDef.setTriggerOperation(TriggerOperation.All);
         triggerDef.setBody("function() {var x = 10;}");
-        Trigger newTrigger = client.createTrigger(this.collectionForTest.getSelfLink(),
-                                                  triggerDef,
-                                                  null).getResource();
+        Trigger newTrigger = client.createTrigger(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                triggerDef,
+                null).getResource();
         Assert.assertNotNull(newTrigger.getBody());
         Assert.assertNotNull(newTrigger.getETag());
 
@@ -1048,7 +1504,7 @@ public final class GatewayTests {
 
         Document document = new Document();
         document.setId("noname");
-        client.createDocument(this.collectionForTest.getSelfLink(), document, options, false);
+        client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), document, options, false);
 
         // replace...
         String id = GatewayTests.getUID();
@@ -1057,46 +1513,161 @@ public final class GatewayTests {
         newTrigger = client.replaceTrigger(newTrigger, null).getResource();
         Assert.assertEquals(newTrigger.getId(), id);
 
-        newTrigger = client.readTrigger(newTrigger.getSelfLink(), null).getResource();
+        newTrigger = client.readTrigger(this.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null).getResource();
 
         // read triggers:
-        List<Trigger> triggers = client.readTriggers(this.collectionForTest.getSelfLink(),
-                                                     null).getQueryIterable().toList();
+        List<Trigger> triggers = client.readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null).getQueryIterable().toList();
         if (triggers.size() > 0) {
             //
         } else {
             Assert.fail("Readfeeds fail to find trigger");
         }
 
-        triggers = client.queryTriggers(this.collectionForTest.getSelfLink(),
-                                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                         new SqlParameterCollection(
-                                                                 new SqlParameter("@id", newTrigger.getId()))),
-                                        null).getQueryIterable().toList();
+        triggers = client.queryTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(
+                                new SqlParameter("@id", newTrigger.getId()))),
+                null).getQueryIterable().toList();
         if (triggers.size() > 0) {
             //
         } else {
             Assert.fail("Query fail to find trigger");
         }
 
-        client.deleteTrigger(newTrigger.getSelfLink(), null);
+        client.deleteTrigger(this.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null);
+    }
+
+    // Upsert test for Trigger resource - self link version
+    @Test
+    public void testTriggerUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testTriggerUpsert(isNameBased);
+    }
+
+    // Upsert test for Trigger resource - name based routing version
+    @Test
+    public void testTriggerUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testTriggerUpsert(isNameBased);
+    }
+
+    private void testTriggerUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Read triggers and get initial count
+        List<Trigger> triggers = client
+                .readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        int initialTriggerCount = triggers.size();
+
+        // Create trigger definition
+        Trigger triggerDefinition = new Trigger();
+        triggerDefinition.setId(GatewayTests.getUID());
+        triggerDefinition.setTriggerType(TriggerType.Pre);
+        triggerDefinition.setTriggerOperation(TriggerOperation.All);
+        triggerDefinition.setBody("function() {var x = 10;}");
+
+        // Upsert should create the trigger
+        Trigger createdTrigger = client.upsertTrigger(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                triggerDefinition, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(triggerDefinition.getId(), createdTrigger.getId());
+        
+        // Read triggers to check the count and it should increase
+        triggers = client.readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialTriggerCount + 1, triggers.size());
+
+        // Update trigger
+        createdTrigger.setTriggerOperation(TriggerOperation.Update);
+        createdTrigger.setBody("function() {var x = 20;}");
+        
+        // Upsert should replace the trigger since it already exists
+        Trigger upsertedTrigger = client.upsertTrigger(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdTrigger, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdTrigger.getId(), upsertedTrigger.getId());
+        
+        // Verify updated property
+        Assert.assertEquals(createdTrigger.getTriggerOperation(), upsertedTrigger.getTriggerOperation());
+        Assert.assertEquals(createdTrigger.getBody(), upsertedTrigger.getBody());
+        
+        // Read triggers to check the count and it should remain the same
+        triggers = client.readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialTriggerCount + 1, triggers.size());
+        
+        // Update trigger id
+        createdTrigger.setId(GatewayTests.getUID());
+        
+        // Upsert should create new trigger since id is changed
+        Trigger newTrigger = client.upsertTrigger(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdTrigger, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdTrigger.getId(), newTrigger.getId());
+        
+        // Read triggers to check the count and it should increase
+        triggers = client.readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialTriggerCount + 2, triggers.size());        
+
+        // Delete triggers
+        client.deleteTrigger(this.getTriggerLink(this.databaseForTest, this.collectionForTest, upsertedTrigger, isNameBased),
+                null);
+        client.deleteTrigger(this.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased),
+                null);
+        
+        // Read triggers to check the count and it should remain same
+        triggers = client.readTriggers(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialTriggerCount, triggers.size());
     }
 
     @Test
-    public void testStoredProcedureCrud() throws DocumentClientException {
+    public void testStoredProcedureCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testStoredProcedureCrud(isNameBased);
+    }
+
+    @Test
+    public void testStoredProcedureCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testStoredProcedureCrud(isNameBased);
+    }
+
+    private void testStoredProcedureCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // create..
         StoredProcedure storedProcedureDef = new StoredProcedure();
         storedProcedureDef.setId(GatewayTests.getUID());
         storedProcedureDef.setBody("function() {var x = 10;}");
 
-        StoredProcedure newStoredProcedure = client.createStoredProcedure(this.collectionForTest.getSelfLink(),
-                                                                          storedProcedureDef,
-                                                                          null).getResource();
+        StoredProcedure newStoredProcedure = client.createStoredProcedure(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                storedProcedureDef,
+                null).getResource();
         Assert.assertNotNull(newStoredProcedure.getBody());
         Assert.assertNotNull(newStoredProcedure.getETag());
 
@@ -1107,88 +1678,203 @@ public final class GatewayTests {
         newStoredProcedure = client.replaceStoredProcedure(newStoredProcedure, null).getResource();
         Assert.assertEquals(newStoredProcedure.getId(), id);
 
-        newStoredProcedure = client.readStoredProcedure(newStoredProcedure.getSelfLink(), null).getResource();
+        newStoredProcedure = client.readStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null).getResource();
 
         // read storedProcedures:
-        List<StoredProcedure> storedProcedures = client.readStoredProcedures(this.collectionForTest.getSelfLink(),
-                                                                             null).getQueryIterable().toList();
+        List<StoredProcedure> storedProcedures = client.readStoredProcedures(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null).getQueryIterable().toList();
         if (storedProcedures.size() > 0) {
             //
         } else {
             Assert.fail("Readfeeds fail to find StoredProcedure");
         }
 
-        storedProcedures = client.queryStoredProcedures(this.collectionForTest.getSelfLink(),
-                                                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                                         new SqlParameterCollection(new SqlParameter(
-                                                                                 "@id", newStoredProcedure.getId()))),
-                                                        null).getQueryIterable().toList();
+        storedProcedures = client.queryStoredProcedures(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", newStoredProcedure.getId()))),
+                 null).getQueryIterable().toList();
         if (storedProcedures.size() > 0) {
             //
         } else {
             Assert.fail("Query fail to find StoredProcedure");
         }
 
-        client.deleteStoredProcedure(newStoredProcedure.getSelfLink(), null);
+        client.deleteStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null);
+    }
+    
+    // Upsert test for StoredProcedure resource - self link version
+    @Test
+    public void testStoredProcedureUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testStoredProcedureUpsert(isNameBased);
+    }
+
+    // Upsert test for StoredProcedure resource - name based routing version
+    @Test
+    public void testStoredProcedureUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testStoredProcedureUpsert(isNameBased);
+    }
+
+    private void testStoredProcedureUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+        
+        // Read sprocs and get initial count
+        List<StoredProcedure> sprocs = client
+                .readStoredProcedures(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        int initialStoredProcedureCount = sprocs.size();
+        
+        // Create stored procedure definition
+        StoredProcedure storedProcedureDefinition = new StoredProcedure();
+        storedProcedureDefinition.setId(GatewayTests.getUID());
+        storedProcedureDefinition.setBody("function() {var x = 10;}");
+
+        // Upsert should create the sproc
+        StoredProcedure createdStoredProcedure = client.upsertStoredProcedure(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                storedProcedureDefinition, null).getResource();
+        
+        // Verify Id property
+        Assert.assertEquals(storedProcedureDefinition.getId(), createdStoredProcedure.getId());
+
+        // Read sprocs to check the count and it should increase
+        sprocs = client
+                .readStoredProcedures(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialStoredProcedureCount + 1, sprocs.size());
+        
+        // Update sproc
+        createdStoredProcedure.setBody("function() {var x = 20;}");
+        
+        // Upsert should replace the sproc
+        StoredProcedure upsertedStoredProcedure = client.upsertStoredProcedure(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdStoredProcedure, null).getResource();
+        
+        // Verify Id property
+        Assert.assertEquals(createdStoredProcedure.getId(), upsertedStoredProcedure.getId());
+        
+        // Verify updated property
+        Assert.assertEquals(createdStoredProcedure.getBody(), upsertedStoredProcedure.getBody());
+
+        // Read the sprocs and the count should remain the same
+        sprocs = client
+                .readStoredProcedures(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialStoredProcedureCount + 1, sprocs.size());
+        
+        // Update sproc id
+        createdStoredProcedure.setId(GatewayTests.getUID());
+        
+        // Upsert should create the sproc since id is changed
+        StoredProcedure newStoredProcedure = client.upsertStoredProcedure(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdStoredProcedure, null).getResource();
+        
+        // Verify Id property
+        Assert.assertEquals(createdStoredProcedure.getId(), newStoredProcedure.getId());
+
+        // Read the sprocs and the count should increase
+        sprocs = client
+                .readStoredProcedures(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialStoredProcedureCount + 2, sprocs.size());
+        
+        // Delete sprocs
+        client.deleteStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
+                upsertedStoredProcedure, isNameBased), null);
+        client.deleteStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
+                newStoredProcedure, isNameBased), null);
+        
+        // Read the sprocs and the count should remain the same
+        sprocs = client
+                .readStoredProcedures(
+                        this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialStoredProcedureCount, sprocs.size());
     }
 
     @Test
-    public void testStoredProcedureFunctionality()
+    public void testStoredProcedureFunctionality_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testStoredProcedureFunctionality(isNameBased);
+    }
+
+    @Test
+    public void testStoredProcedureFunctionality_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testStoredProcedureFunctionality(isNameBased);
+    }
+
+    private void testStoredProcedureFunctionality(boolean isNameBased)
             throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         StoredProcedure sproc1 = new StoredProcedure(
                 "{" +
-                "  'id': 'storedProcedure1'," +
-                "  'body':" +
-                "    'function () {" +
-                "      for (var i = 0; i < 1000; i++) {" +
-                "        var item = getContext().getResponse().getBody();" +
-                "        if (i > 0 && item != i - 1) throw \"body mismatch\";" +
-                "        getContext().getResponse().setBody(i);" +
-                "      }" +
-                "    }'" +
+                        "  'id': 'storedProcedure1'," +
+                                "  'body':" +
+                                "    'function () {" +
+                                "      for (var i = 0; i < 1000; i++) {" +
+                                "        var item = getContext().getResponse().getBody();" +
+                                "        if (i > 0 && item != i - 1) throw \"body mismatch\";" +
+                                "        getContext().getResponse().setBody(i);" +
+                                "      }" +
+                                "    }'" +
                 "}");
-        StoredProcedure retrievedSproc = client.createStoredProcedure(collectionForTest.getSelfLink(),
-                                                                      sproc1,
-                                                                      null).getResource();
-        String result = client.executeStoredProcedure(retrievedSproc.getSelfLink(), null).getResponseAsString();
+        StoredProcedure retrievedSproc = client.createStoredProcedure(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                sproc1,
+                null).getResource();
+        String result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc, isNameBased), null).getResponseAsString();
         Assert.assertEquals("999", result);
 
         StoredProcedure sproc2 = new StoredProcedure(
                 "{" +
-                "  'id': 'storedProcedure2'," +
-                "  'body':" +
-                "    'function () {" +
-                "      for (var i = 0; i < 10; i++) {" +
-                "        getContext().getResponse().appendValue(\"Body\", i);" +
-                "      }" +
-                "    }'" +
+                        "  'id': 'storedProcedure2'," +
+                        "  'body':" +
+                        "    'function () {" +
+                        "      for (var i = 0; i < 10; i++) {" +
+                        "        getContext().getResponse().appendValue(\"Body\", i);" +
+                        "      }" +
+                        "    }'" +
                 "}");
-        StoredProcedure retrievedSproc2 = client.createStoredProcedure(collectionForTest.getSelfLink(),
-                                                                       sproc2,
-                                                                       null).getResource();
-        result = client.executeStoredProcedure(retrievedSproc2.getSelfLink(), null).getResponseAsString();
+        StoredProcedure retrievedSproc2 = client.createStoredProcedure(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                sproc2,
+                null).getResource();
+        result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc2, isNameBased), null).getResponseAsString();
         Assert.assertEquals("\"0123456789\"", result);
 
         // String and Integer
         StoredProcedure sproc3 = new StoredProcedure(
                 "{" +
-                "  'id': 'storedProcedure3'," +
-                "  'body':" +
-                "    'function (value, num) {" +
-                "      getContext().getResponse().setBody(" +
-                "          \"a\" + value + num * 2);" +
-                "    }'" +
+                        "  'id': 'storedProcedure3'," +
+                        "  'body':" +
+                        "    'function (value, num) {" +
+                        "      getContext().getResponse().setBody(" +
+                        "          \"a\" + value + num * 2);" +
+                        "    }'" +
                 "}");
-        StoredProcedure retrievedSproc3 = client.createStoredProcedure(collectionForTest.getSelfLink(),
-                                                                       sproc3,
-                                                                       null).getResource();
-        result = client.executeStoredProcedure(retrievedSproc3.getSelfLink(),
-                                               new Object[] {"so", 123}).getResponseAsString();
+        StoredProcedure retrievedSproc3 = client.createStoredProcedure(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                sproc3,
+                null).getResource();
+        result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc3, isNameBased),
+                new Object[] {"so", 123}).getResponseAsString();
         Assert.assertEquals("\"aso246\"", result);
 
         // POJO
@@ -1199,47 +1885,58 @@ public final class GatewayTests {
         TempPOJO tempPOJO = new TempPOJO();
         StoredProcedure sproc4 = new StoredProcedure(
                 "{" +
-                "  'id': 'storedProcedure4'," +
-                "  'body':" +
-                "    'function (value) {" +
-                "      getContext().getResponse().setBody(" +
-                "          \"a\" + value.temp);" +
-                "    }'" +
+                        "  'id': 'storedProcedure4'," +
+                        "  'body':" +
+                        "    'function (value) {" +
+                        "      getContext().getResponse().setBody(" +
+                        "          \"a\" + value.temp);" +
+                        "    }'" +
                 "}");
-        StoredProcedure retrievedSproc4 = client.createStoredProcedure(collectionForTest.getSelfLink(),
-                                                                       sproc4,
-                                                                       null).getResource();
-        result = client.executeStoredProcedure(retrievedSproc4.getSelfLink(),
-                                               new Object[] {tempPOJO}).getResponseAsString();
+        StoredProcedure retrievedSproc4 = client.createStoredProcedure(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                sproc4,
+                null).getResource();
+        result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+                new Object[] {tempPOJO}).getResponseAsString();
         Assert.assertEquals("\"aso2\"", result);
 
         // JSONObject
         JSONObject jsonObject = new JSONObject("{'temp': 'so3'}");
-        result = client.executeStoredProcedure(retrievedSproc4.getSelfLink(),
-                                               new Object[] {jsonObject}).getResponseAsString();
+        result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+                new Object[] {jsonObject}).getResponseAsString();
         Assert.assertEquals("\"aso3\"", result);
 
         // Document
         Document document = new Document("{'temp': 'so4'}");
-        result = client.executeStoredProcedure(retrievedSproc4.getSelfLink(),
-                                               new Object[] {document}).getResponseAsString();
+        result = client.executeStoredProcedure(this.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+                new Object[] {document}).getResponseAsString();
         Assert.assertEquals("\"aso4\"", result);
     }
 
     @Test
-    public void testUserDefinedFunctionCrud() throws DocumentClientException {
+    public void testUserDefinedFunctionCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testUserDefinedFunctionCrud(isNameBased);
+    }
+
+    @Test
+    public void testUserDefinedFunctionCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testUserDefinedFunctionCrud(isNameBased);
+    }
+
+    private void testUserDefinedFunctionCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // create..
         UserDefinedFunction udfDef = new UserDefinedFunction();
         udfDef.setId(GatewayTests.getUID());
         udfDef.setBody("function() {var x = 10;}");
-        UserDefinedFunction newUdf = client.createUserDefinedFunction(this.collectionForTest.getSelfLink(),
-                                                                      udfDef,
-                                                                      null).getResource();
+        UserDefinedFunction newUdf = client.createUserDefinedFunction(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                udfDef,
+                null).getResource();
         Assert.assertNotNull(newUdf.getBody());
         Assert.assertNotNull(newUdf.getETag());
 
@@ -1250,13 +1947,13 @@ public final class GatewayTests {
         newUdf = client.replaceUserDefinedFunction(newUdf, null).getResource();
         Assert.assertEquals(newUdf.getId(), id);
 
-        newUdf = client.readUserDefinedFunction(newUdf.getSelfLink(), null).getResource();
+        newUdf = client.readUserDefinedFunction(this.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null).getResource();
         Assert.assertEquals(newUdf.getId(), id);
 
         // read udf feed:
         {
-            List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(this.collectionForTest.getSelfLink(),
-                                                                             null).getQueryIterable().toList();
+            List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                    null).getQueryIterable().toList();
             if (udfs.size() > 0) {
                 //
             } else {
@@ -1265,9 +1962,9 @@ public final class GatewayTests {
         }
         {
             List<UserDefinedFunction> udfs = client.queryUserDefinedFunctions(
-                    this.collectionForTest.getSelfLink(),
+                    this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                     new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                     new SqlParameterCollection(new SqlParameter("@id", newUdf.getId()))),
+                            new SqlParameterCollection(new SqlParameter("@id", newUdf.getId()))),
                     null).getQueryIterable().toList();
             if (udfs.size() > 0) {
                 //
@@ -1275,32 +1972,141 @@ public final class GatewayTests {
                 Assert.fail("Query fail to find UserDefinedFunction");
             }
         }
-        client.deleteUserDefinedFunction(newUdf.getSelfLink(), null);
+        client.deleteUserDefinedFunction(this.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null);
+    }
+    
+    // Upsert test for UserDefinedFunction resource - self link version
+    @Test
+    public void testUserDefinedFunctionUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testUserDefinedFunctionUpsert(isNameBased);
+    }
+
+    // Upsert test for UserDefinedFunction resource - name based routing version
+    @Test
+    public void testUserDefinedFunctionUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testUserDefinedFunctionUpsert(isNameBased);
+    }
+
+    private void testUserDefinedFunctionUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+        
+        // Read user defined functions and get initial count
+        List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null).getQueryIterable().toList();
+        
+        int initialUserDefinedFunctionCount = udfs.size();
+
+        // Create user defined function definition 
+        UserDefinedFunction udfDefinition = new UserDefinedFunction();
+        udfDefinition.setId(GatewayTests.getUID());
+        udfDefinition.setBody("function() {var x = 10;}");
+        
+        // Upsert should create the udf
+        UserDefinedFunction createdUserDefinedFunction = client.upsertUserDefinedFunction(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                udfDefinition, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(udfDefinition.getId(), createdUserDefinedFunction.getId());
+        
+        // Read udfs to check the count and it should increase
+        udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialUserDefinedFunctionCount + 1, udfs.size());
+        
+        // Update udf
+        createdUserDefinedFunction.setBody("function() {var x = 20;}");
+        
+        // Upsert should replace the trigger since it already exists
+        UserDefinedFunction upsertedUserDefinedFunction = client.upsertUserDefinedFunction(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdUserDefinedFunction, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdUserDefinedFunction.getId(), upsertedUserDefinedFunction.getId());
+        
+        // Verify updated property
+        Assert.assertEquals(createdUserDefinedFunction.getBody(), upsertedUserDefinedFunction.getBody());
+        
+        // Read udfs to check the count and it should remain the same
+        udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
+        .getQueryIterable().toList();
+
+        Assert.assertEquals(initialUserDefinedFunctionCount + 1, udfs.size());
+        
+        // Update udf id
+        createdUserDefinedFunction.setId(GatewayTests.getUID());
+        
+        // Upsert should create new udf since id is changed
+        UserDefinedFunction newUserDefinedFunction = client.upsertUserDefinedFunction(
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                createdUserDefinedFunction, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdUserDefinedFunction.getId(), newUserDefinedFunction.getId());
+        
+        // Read udfs to check the count and it should increase
+        udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
+        .getQueryIterable().toList();
+
+        Assert.assertEquals(initialUserDefinedFunctionCount + 2, udfs.size());        
+        
+        // Delete udfs
+        client.deleteUserDefinedFunction(this.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, upsertedUserDefinedFunction, isNameBased), null);
+        client.deleteUserDefinedFunction(this.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUserDefinedFunction, isNameBased), null);
+        
+        // Read udfs to check the count and it should remain same
+        udfs = client.readUserDefinedFunctions(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
+        .getQueryIterable().toList();
+
+        Assert.assertEquals(initialUserDefinedFunctionCount, udfs.size());
     }
 
     @Test
-    public void testUserCrud() throws DocumentClientException {
+    public void testUserCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testUserCrud(isNameBased);
+    }
+
+    @Test
+    public void testUserCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testUserCrud(isNameBased);
+    }
+
+    private void testUserCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // List users.
-        List<User> users = client.readUsers(databaseForTest.getSelfLink(), null).getQueryIterable().toList();
+        List<User> users = client.readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         int beforeCreateCount = users.size();
         // Create user.
-        User user = client.createUser(databaseForTest.getSelfLink(),
-                                      new User("{ 'id': 'new user' }"),
-                                      null).getResource();
+        User user = client.createUser(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                new User("{ 'id': 'new user' }"),
+                null).getResource();
         Assert.assertEquals("new user", user.getId());
         // List users after creation.
-        users = client.readUsers(databaseForTest.getSelfLink(), null).getQueryIterable().toList();
+        users = client.readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(beforeCreateCount + 1, users.size());
         // Query users.
-        users = client.queryUsers(databaseForTest.getSelfLink(),
-                                  new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                   new SqlParameterCollection(new SqlParameter("@id", "new user"))),
-                                  null).getQueryIterable().toList();
+        users = client.queryUsers(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter("@id", "new user"))),
+                null).getQueryIterable().toList();
         Assert.assertEquals(1, users.size());
 
         // Replace user.
@@ -1310,33 +2116,118 @@ public final class GatewayTests {
 
         Assert.assertEquals(user.getId(), replacedUser.getId());
         // Read user.
-        user = client.readUser(replacedUser.getSelfLink(), null).getResource();
+        user = client.readUser(this.getUserLink(this.databaseForTest, replacedUser, isNameBased), null).getResource();
         Assert.assertEquals(replacedUser.getId(), user.getId());
         // Delete user.
-        client.deleteUser(user.getSelfLink(), null);
+        client.deleteUser(this.getUserLink(this.databaseForTest, user, isNameBased), null);
         // Read user after deletion.
         try {
-            client.readUser(user.getSelfLink(), null);
+            client.readUser(this.getUserLink(this.databaseForTest, replacedUser, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
     }
+    
+    // Upsert test for User resource - self link version
+    @Test
+    public void testUserUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testUserUpsert(isNameBased);
+    }
+
+    // Upsert test for User resource - name based routing version
+    @Test
+    public void testUserUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testUserUpsert(isNameBased);
+    }
+
+    private void testUserUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+        
+        // Read users and get initial count
+        List<User> users = client
+                .readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        int initialUserCount = users.size();
+        
+        // Create user definition
+        User userDefinition = new User();
+        userDefinition.setId(GatewayTests.getUID());
+        
+        // Upsert should create the user
+        User createdUser = client.upsertUser(
+                this.getDatabaseLink(this.databaseForTest, isNameBased),
+                userDefinition, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(userDefinition.getId(), createdUser.getId());
+        
+        // Read users to check the count and it should increase
+        users = client.readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialUserCount + 1, users.size());
+        
+        // Update user id
+        userDefinition.setId(GatewayTests.getUID());
+        
+        // Upsert should create new user since id is changed
+        User newUser = client.upsertUser(
+                this.getDatabaseLink(this.databaseForTest, isNameBased),
+                userDefinition, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(userDefinition.getId(), newUser.getId());
+        
+        // Read users to check the count and it should increase
+        users = client.readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialUserCount + 2, users.size());        
+
+        // Delete users
+        client.deleteUser(this.getUserLink(this.databaseForTest, createdUser, isNameBased), null);
+        client.deleteUser(this.getUserLink(this.databaseForTest, newUser, isNameBased), null);
+        
+        // Read users to check the count and it should remain same
+        users = client.readUsers(this.getDatabaseLink(this.databaseForTest, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialUserCount, users.size());
+    }
 
     @Test
-    public void testPermissionCrud() throws DocumentClientException {
+    public void testPermissionCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testPermissionCrud(isNameBased);
+    }
+
+    @Test
+    public void testPermissionCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testPermissionCrud(isNameBased);
+    }
+
+    private void testPermissionCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // Create user.
-        User user = client.createUser(databaseForTest.getSelfLink(),
-                                      new User("{ 'id': 'new user' }"),
-                                      null).getResource();
+        User user = client.createUser(this.getDatabaseLink(this.databaseForTest, isNameBased),
+                new User("{ 'id': 'new user' }"),
+                null).getResource();
         // List permissions.
-        List<Permission> permissions = client.readPermissions(user.getSelfLink(), null).getQueryIterable().toList();
+        List<Permission> permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
         int beforeCreateCount = permissions.size();
         Permission permissionDefinition = new Permission();
         permissionDefinition.setId("new permission");
@@ -1344,51 +2235,159 @@ public final class GatewayTests {
         permissionDefinition.setResourceLink("dbs/AQAAAA==/colls/AQAAAJ0fgTc=");
 
         // Create permission.
-        Permission permission = client.createPermission(user.getSelfLink(), permissionDefinition, null).getResource();
+        Permission permission = client.createPermission(this.getUserLink(this.databaseForTest, user, isNameBased), permissionDefinition, null).getResource();
         Assert.assertEquals("new permission", permission.getId());
 
         // List permissions after creation.
-        permissions = client.readPermissions(user.getSelfLink(), null).getQueryIterable().toList();
+        permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(beforeCreateCount + 1, permissions.size());
 
         // Query permissions.
-        permissions = client.queryPermissions(user.getSelfLink(),
-                                              new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                                               new SqlParameterCollection(new SqlParameter(
-                                                                       "@id", permission.getId()))),
-                                              null).getQueryIterable().toList();
+        permissions = client.queryPermissions(this.getUserLink(this.databaseForTest, user, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", permission.getId()))),
+                null).getQueryIterable().toList();
         Assert.assertEquals(1, permissions.size());
 
         // Replace permission.
         permission.setId("replaced permission");
         Permission replacedPermission = client.replacePermission(
-            permission, null).getResource();
+                permission, null).getResource();
         Assert.assertEquals("replaced permission", replacedPermission.getId());
         Assert.assertEquals(permission.getId(), replacedPermission.getId());
 
         // Read permission.
-        permission = client.readPermission(replacedPermission.getSelfLink(), null).getResource();
+        permission = client.readPermission(this.getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null).getResource();
         Assert.assertEquals(replacedPermission.getId(), permission.getId());
         // Delete permission.
-        client.deletePermission(replacedPermission.getSelfLink(), null);
+        client.deletePermission(this.getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null);
         // Read permission after deletion.
         try {
-            client.readPermission(permission.getSelfLink(), null);
+            client.readPermission(this.getPermissionLink(this.databaseForTest, user, permission, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
     }
+    
+    // Upsert test for Permission resource - self link version
+    @Test
+    public void testPermissionUpsert_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testPermissionUpsert(isNameBased);
+    }
 
-    private void validateOfferResponseBody(Offer offer, String expectedCollLink, String expectedOfferType) {
+    // Upsert test for Permission resource - name based routing version
+    @Test
+    public void testPermissionUpsert_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testPermissionUpsert(isNameBased);
+    }
+
+    private void testPermissionUpsert(boolean isNameBased) throws DocumentClientException {
+        // Create document client
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Create user definition
+        User userDefinition = new User();
+        userDefinition.setId(GatewayTests.getUID());
+
+        // Create user.
+        User user = client.createUser(
+                this.getDatabaseLink(this.databaseForTest, isNameBased),
+                userDefinition, null).getResource();
+        
+        // Read permissions and get initial count
+        List<Permission> permissions = client
+                .readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        int initialPermissionCount = permissions.size();
+
+        // Create permission definition
+        Permission permissionDefinition = new Permission();
+        permissionDefinition.setId(GatewayTests.getUID());
+        permissionDefinition.setPermissionMode(PermissionMode.Read);
+        permissionDefinition.setResourceLink("dbs/AQAAAA==/colls/AQAAAJ0fgTc=");
+
+        // Upsert should create the permission
+        Permission createdPermission = client.upsertPermission(
+                this.getUserLink(this.databaseForTest, user, isNameBased),
+                permissionDefinition, null).getResource();
+        
+        // Verify Id property
+        Assert.assertEquals(permissionDefinition.getId(), createdPermission.getId());
+        
+        // Read permissions to check the count and it should increase
+        permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialPermissionCount + 1, permissions.size());
+        
+        // Update permission
+        createdPermission.setPermissionMode(PermissionMode.All);
+        
+        // Upsert should replace the permission since it already exists
+        Permission upsertedPermission = client.upsertPermission(
+                this.getUserLink(this.databaseForTest, user, isNameBased),
+                createdPermission, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdPermission.getId(), upsertedPermission.getId());
+        
+        // Verify updated property
+        Assert.assertEquals(createdPermission.getPermissionMode(), upsertedPermission.getPermissionMode());
+        
+        // Read permissions to check the count and it should remain the same
+        permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialPermissionCount + 1, permissions.size());
+        
+        // Update permission id
+        createdPermission.setId(GatewayTests.getUID());
+        // ResourceLink needs to be changed along with the ID in order to create a new permission 
+        createdPermission.setResourceLink("dbs/N9EdAA==/colls/N9EdAIugXgA=");
+        
+        // Upsert should create new permission since id is changed
+        Permission newPermission = client.upsertPermission(
+                this.getUserLink(this.databaseForTest, user, isNameBased),
+                createdPermission, null).getResource();
+
+        // Verify Id property
+        Assert.assertEquals(createdPermission.getId(), newPermission.getId());
+        
+        // Verify ResourceLink property
+        Assert.assertEquals(createdPermission.getResourceLink(), newPermission.getResourceLink());
+        
+        // Read permissions to check the count and it should increase
+        permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialPermissionCount + 2, permissions.size());
+        
+        // Delete permissions
+        client.deletePermission(this.getPermissionLink(this.databaseForTest, user, upsertedPermission, isNameBased), null);
+        client.deletePermission(this.getPermissionLink(this.databaseForTest, user, newPermission, isNameBased), null);
+        
+        // Read permissions to check the count and it should remain same
+        permissions = client.readPermissions(this.getUserLink(this.databaseForTest, user, isNameBased), null)
+                .getQueryIterable().toList();
+        
+        Assert.assertEquals(initialPermissionCount, permissions.size());
+    }
+
+    private void validateOfferResponseBody(Offer offer, String expectedOfferType) {
         Assert.assertNotNull("Id cannot be null", offer.getId());
         Assert.assertNotNull("Resource Id (Rid) cannot be null", offer.getResourceId());
         Assert.assertNotNull("Self link cannot be null", offer.getSelfLink());
         Assert.assertNotNull("Resource Link cannot be null", offer.getResourceLink());
         Assert.assertTrue("Offer id not contained in offer self link", offer.getSelfLink().contains(offer.getId()));
-        Assert.assertEquals(StringUtils.removeEnd(StringUtils.removeStart(expectedCollLink, "/"), "/"),
-                            StringUtils.removeEnd(StringUtils.removeStart(offer.getResourceLink(), "/"), "/"));
 
         if (expectedOfferType != null)
         {
@@ -1399,18 +2398,31 @@ public final class GatewayTests {
     @Test
     public void testOfferReadAndQuery() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         List<Offer> offerList = client.readOffers(null).getQueryIterable().toList();
-        Offer expectedOffer = offerList.get(0);
+        int originalOffersCount = offerList.size();
+        Offer expectedOffer = null;
+        
+        String trimmedCollectionLink = StringUtils.removeEnd(StringUtils.removeStart(this.collectionForTest.getSelfLink(), "/"), "/");
+        
+        for (Offer offer : offerList) {
+            String trimmedOfferResourceLink = StringUtils.removeEnd(StringUtils.removeStart(offer.getResourceLink(), "/"), "/");
+            if (trimmedOfferResourceLink.equals(trimmedCollectionLink)) {
+                expectedOffer = offer;
+                break;
+            }
+        }
+        // There is an offer for the test collection we have created
+        Assert.assertNotNull(expectedOffer);
 
-        this.validateOfferResponseBody(expectedOffer, this.collectionForTest.getSelfLink(), null);
+        this.validateOfferResponseBody(expectedOffer, null);
 
         // Read the offer
         Offer readOffer = client.readOffer(expectedOffer.getSelfLink()).getResource();
-        this.validateOfferResponseBody(readOffer, this.collectionForTest.getSelfLink(), expectedOffer.getOfferType());
+        this.validateOfferResponseBody(readOffer, expectedOffer.getOfferType());
         // Check if the read resource is what we expect
         Assert.assertEquals(expectedOffer.getId(), readOffer.getId());
         Assert.assertEquals(expectedOffer.getResourceId(), readOffer.getResourceId());
@@ -1420,10 +2432,17 @@ public final class GatewayTests {
         // Query for the offer.
         List<Offer> queryResultList = client.queryOffers(
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                 new SqlParameterCollection(new SqlParameter("@id", expectedOffer.getId()))),
+                        new SqlParameterCollection(new SqlParameter("@id", expectedOffer.getId()))),
                 null).getQueryIterable().toList();
+        
+        // We should find only one offer with the given id
+        Assert.assertEquals(queryResultList.size(), 1);
         Offer oneQueryResult = queryResultList.get(0);
-        this.validateOfferResponseBody(oneQueryResult, this.collectionForTest.getSelfLink(), expectedOffer.getOfferType());
+        
+        String trimmedOfferResourceLink = StringUtils.removeEnd(StringUtils.removeStart(oneQueryResult.getResourceLink(), "/"), "/");
+        Assert.assertTrue(trimmedCollectionLink.equals(trimmedOfferResourceLink));
+        
+        this.validateOfferResponseBody(oneQueryResult, expectedOffer.getOfferType());
         // Check if the query result is what we expect
         Assert.assertEquals(expectedOffer.getId(), oneQueryResult.getId());
         Assert.assertEquals(expectedOffer.getResourceId(), oneQueryResult.getResourceId());
@@ -1452,9 +2471,9 @@ public final class GatewayTests {
             Assert.assertEquals(404, ex.getStatusCode());
         }
 
-        // Make sure read feed returns 0 results.
+        // Make sure read offers returns one offer less that the original list of offers
         offerList = client.readOffers(null).getQueryIterable().toList();
-        Assert.assertEquals(0, offerList.size());
+        Assert.assertEquals(originalOffersCount-1, offerList.size());
     }
 
     @Test
@@ -1465,9 +2484,20 @@ public final class GatewayTests {
                 ConsistencyLevel.Session);
 
         List<Offer> offerList = client.readOffers(null).getQueryIterable().toList();
-        Offer expectedOffer = offerList.get(0);
+        Offer expectedOffer = null;
+        
+        String trimmedCollectionLink = StringUtils.removeEnd(StringUtils.removeStart(this.collectionForTest.getSelfLink(), "/"), "/");
+        
+        for (Offer offer : offerList) {
+            String trimmedOfferResourceLink = StringUtils.removeEnd(StringUtils.removeStart(offer.getResourceLink(), "/"), "/");
+            if (trimmedOfferResourceLink.equals(trimmedCollectionLink)) {
+                expectedOffer = offer;
+                break;
+            }
+        }
+        Assert.assertNotNull(expectedOffer);
 
-        this.validateOfferResponseBody(expectedOffer, this.collectionForTest.getSelfLink(), null);
+        this.validateOfferResponseBody(expectedOffer, null);
         Offer offerToReplace = new Offer(expectedOffer.toString());
 
         // Modify the offer
@@ -1475,7 +2505,7 @@ public final class GatewayTests {
 
         // Replace the offer
         Offer replacedOffer = client.replaceOffer(offerToReplace).getResource();
-        this.validateOfferResponseBody(replacedOffer, this.collectionForTest.getSelfLink(), "S2");
+        this.validateOfferResponseBody(replacedOffer, "S2");
 
         // Check if the replaced offer is what we expect
         Assert.assertEquals(offerToReplace.getId(), replacedOffer.getId());
@@ -1538,18 +2568,18 @@ public final class GatewayTests {
     @Test
     public void testDatabaseAccount() throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         DatabaseAccount dba = client.getDatabaseAccount();
         Assert.assertNotNull("dba Address link works", dba.getAddressesLink());
 
         if (dba.getConsistencyPolicy().getDefaultConsistencyLevel() == ConsistencyLevel.BoundedStaleness) {
             Assert.assertTrue("StaleInternal should be larger than 5 seconds",
-                              dba.getConsistencyPolicy().getMaxStalenessIntervalInSeconds() >= 5);
+                    dba.getConsistencyPolicy().getMaxStalenessIntervalInSeconds() >= 5);
             Assert.assertTrue("StaleInternal boundness should be larger than 10",
-                              dba.getConsistencyPolicy().getMaxStalenessPrefix() >= 10);
+                    dba.getConsistencyPolicy().getMaxStalenessPrefix() >= 10);
         }
 
     }
@@ -1558,9 +2588,9 @@ public final class GatewayTests {
     public void testAuthorization() throws DocumentClientException {
         // Sets up entities for this test.
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         // Create document1
         Document document1 = client.createDocument(
                 collectionForTest.getSelfLink(),
@@ -1577,44 +2607,44 @@ public final class GatewayTests {
                 null).getResource();
         // Create user1.
         User user1 = client.createUser(databaseForTest.getSelfLink(),
-                                       new User("{ 'id': 'user1' }"),
-                                       null).getResource();
+                new User("{ 'id': 'user1' }"),
+                null).getResource();
 
         Permission permission1Definition = new Permission(String.format(
                 "{" +
-                "  'id': 'permission On Coll1'," +
-                "  'permissionMode': 'Read'," +
-                "  'resource': '%s'" +
-                "}", collectionForTest.getSelfLink()));
+                        "  'id': 'permission On Coll1'," +
+                        "  'permissionMode': 'Read'," +
+                        "  'resource': '%s'" +
+                        "}", collectionForTest.getSelfLink()));
         // Create permission for collectionForTest
         Permission permission1 = client.createPermission(user1.getSelfLink(),
-                                                         permission1Definition,
-                                                         null).getResource();
+                permission1Definition,
+                null).getResource();
 
         // Create user 2.
         User user2 = client.createUser(databaseForTest.getSelfLink(),
-                                       new User("{ 'id': 'user2' }"),
-                                       null).getResource();
+                new User("{ 'id': 'user2' }"),
+                null).getResource();
 
         Permission permission2Definition = new Permission(String.format(
                 "{" +
-                "  'id': 'permission On coll2'," +
-                "  'permissionMode': 'All'," +
-                "  'resource': '%s'" +
-                "}", anotherCollectionForTest.getSelfLink()));
+                        "  'id': 'permission On coll2'," +
+                        "  'permissionMode': 'All'," +
+                        "  'resource': '%s'" +
+                        "}", anotherCollectionForTest.getSelfLink()));
         // Create permission on anotherCollectionForTest.
         Permission permission2 = client.createPermission(user2.getSelfLink(),
-                                                         permission2Definition,
-                                                         null).getResource();
+                permission2Definition,
+                null).getResource();
 
 
         // Now the resources for this test is fully prepared.
 
         // Client without any authorization will fail.
         DocumentClient badClient = new DocumentClient(HOST,
-                                                      "",
-                                                      ConnectionPolicy.GetDefault(),
-                                                      ConsistencyLevel.Session);
+                "",
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         try {
             badClient.readDatabases(null).getQueryIterable().toList();
@@ -1627,9 +2657,9 @@ public final class GatewayTests {
         List<Permission> resourceTokens1 = new ArrayList<Permission>();
         resourceTokens1.add(permission1);
         DocumentClient clientForCollection1 = new DocumentClient(HOST,
-                                                                 resourceTokens1,
-                                                                 ConnectionPolicy.GetDefault(),
-                                                                 ConsistencyLevel.Session);
+                resourceTokens1,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // 1. Success-- Use Col1 Permission to Read
         DocumentCollection obtainedCollection1 =
@@ -1645,53 +2675,64 @@ public final class GatewayTests {
 
         // 3. Success-- Use Col1 Permission to Read All Docs
         Assert.assertEquals("Expected 2 Documents to be succesfully read",
-                            2,
-                            clientForCollection1.readDocuments(obtainedCollection1.getSelfLink(),
-                                                               null).getQueryIterable().toList().size());
+                2,
+                clientForCollection1.readDocuments(obtainedCollection1.getSelfLink(),
+                        null).getQueryIterable().toList().size());
 
         // 4. Success-- Use Col1 Permission to Read Col1Doc1
         Document successDoc = clientForCollection1.readDocument(document1.getSelfLink(), null).getResource();
         Assert.assertEquals("Expected to read children using parent permissions",
-                            document1.getId(),
-                            successDoc.getId());
+                document1.getId(),
+                successDoc.getId());
 
         // Client with full access on the anotherDocumentForTest.
         List<Permission> resourceTokens2 = new ArrayList<Permission>();
         resourceTokens2.add(permission2);
         DocumentClient clientForCollection2 = new DocumentClient(HOST,
-                                                                 resourceTokens2,
-                                                                 ConnectionPolicy.GetDefault(),
-                                                                 ConsistencyLevel.Session);
+                resourceTokens2,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         Document newDocument2 = new Document(String.format(
                 "{" +
-                "  'CustomProperty1': 'BBBBBB'," +
-                "  'customProperty2': 1000," +
-                "  'id': '%s'" +
-                "}", document2.getId()));  // Same id.
+                        "  'CustomProperty1': 'BBBBBB'," +
+                        "  'customProperty2': 1000," +
+                        "  'id': '%s'" +
+                        "}", document2.getId()));  // Same id.
         successDoc = clientForCollection2.createDocument(anotherCollectionForTest.getSelfLink(),
-                                                         newDocument2,
-                                                         null,
-                                                         true).getResource();
+                newDocument2,
+                null,
+                true).getResource();
         Assert.assertEquals("document should have been created successfully",
-                            "BBBBBB",
-                            successDoc.getString("CustomProperty1"));
+                "BBBBBB",
+                successDoc.getString("CustomProperty1"));
     }
 
     @Test
-    public void testConflictCrud() throws DocumentClientException {
+    public void testConflictCrud_SelfLink() throws DocumentClientException {
+        boolean isNameBased = false;
+        testConflictCrud(isNameBased);
+    }
+
+    @Test
+    public void testConflictCrud_NameBased() throws DocumentClientException {
+        boolean isNameBased = true;
+        testConflictCrud(isNameBased);
+    }
+
+    private void testConflictCrud(boolean isNameBased) throws DocumentClientException {
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
         // Read conflicts.
-        client.readConflicts(this.collectionForTest.getSelfLink(), null).getQueryIterable().toList();
+        client.readConflicts(this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
 
         // Query for conflicts.
         client.queryConflicts(
-                this.collectionForTest.getSelfLink(),
+                this.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                                 new SqlParameterCollection(new SqlParameter("@id", "FakeId"))),
+                        new SqlParameterCollection(new SqlParameter("@id", "FakeId"))),
                 null).getQueryIterable().toList();
     }
 
@@ -1763,8 +2804,8 @@ public final class GatewayTests {
         doc.set("name", "name01");
 
         SqlQuerySpec query = new SqlQuerySpec(
-            "SELECT * FROM root r WHERE r.name=@name",
-            new SqlParameterCollection(new SqlParameter("@name", "name01")));
+                "SELECT * FROM root r WHERE r.name=@name",
+                new SqlParameterCollection(new SqlParameter("@name", "name01")));
 
         // Consistent-indexing collection
         {
@@ -1773,6 +2814,18 @@ public final class GatewayTests {
             consistentCollection = client.createCollection(this.databaseForTest.getSelfLink(), consistentCollection, null).getResource();
             ResourceResponse<DocumentCollection> collectionResponse = client.readCollection(consistentCollection.getSelfLink(), null);
             Assert.assertEquals(100, collectionResponse.getIndexTransformationProgress());
+            Assert.assertEquals(-1, collectionResponse.getLazyIndexingProgress());
+        }
+
+        // Lazy-indexing collection
+        {
+            DocumentCollection lazyCollection = new DocumentCollection();
+            lazyCollection.setId("Lazy Collection");
+            lazyCollection.getIndexingPolicy().setIndexingMode(IndexingMode.Lazy);
+            lazyCollection = client.createCollection(this.databaseForTest.getSelfLink(), lazyCollection, null).getResource();
+            ResourceResponse<DocumentCollection> collectionResponse = client.readCollection(lazyCollection.getSelfLink(), null);
+            Assert.assertEquals(100, collectionResponse.getIndexTransformationProgress());
+            Assert.assertTrue(collectionResponse.getLazyIndexingProgress() >= 0 && collectionResponse.getLazyIndexingProgress() <= 100);
         }
 
         // None-indexing collection
@@ -1784,16 +2837,17 @@ public final class GatewayTests {
             noneCollection = client.createCollection(this.databaseForTest.getSelfLink(), noneCollection, null).getResource();
             ResourceResponse<DocumentCollection> collectionResponse = client.readCollection(noneCollection.getSelfLink(), null);
             Assert.assertEquals(100, collectionResponse.getIndexTransformationProgress());
+            Assert.assertEquals(-1, collectionResponse.getLazyIndexingProgress());
         }
     }
-    
+
     @Test
     public void testIdValidation() throws DocumentClientException {
         // Sets up entities for this test.
         DocumentClient client = new DocumentClient(HOST,
-                                                   MASTER_KEY,
-                                                   ConnectionPolicy.GetDefault(),
-                                                   ConsistencyLevel.Session);
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
         // Id shouldn't end with a space.
         try {
             client.createDocument(
@@ -1838,6 +2892,225 @@ public final class GatewayTests {
             Assert.fail("An exception is expected.");
         } catch (IllegalArgumentException e) {
             Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+        }
+        // Id can begin with a space.
+        client.createDocument(
+                collectionForTest.getSelfLink(),
+                new Document("{ 'id': ' id_begin_space', 'key': 'value' }"), null, false).getResource();
+        Assert.assertTrue(true);
+
+        // Id can contain space within.
+        client.createDocument(
+                collectionForTest.getSelfLink(),
+                new Document("{ 'id': 'id containing space', 'key': 'value' }"), null, false).getResource();
+        Assert.assertTrue(true);
+    }
+
+    @Test
+    public void testIdCaseValidation() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        List<DocumentCollection> collections = client.readCollections(this.getDatabaseLink(this.databaseForTest, true),
+                null).getQueryIterable().toList();
+
+        int beforeCreateCollectionsCount = collections.size();
+
+        // pascalCase
+        DocumentCollection collectionDefinition1 = new DocumentCollection();
+        collectionDefinition1.setId("sampleCollection");
+
+        // CamelCase
+        DocumentCollection collectionDefinition2 = new DocumentCollection();
+        collectionDefinition2.setId("SampleCollection");
+
+        // Create 2 collections with different casing of IDs
+        DocumentCollection createdCollection1 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition1,
+                null).getResource();
+
+        DocumentCollection createdCollection2 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition2,
+                null).getResource();
+
+        // Verify if additional 2 collections got created
+        collections = client.readCollections(this.getDatabaseLink(this.databaseForTest, true), null).getQueryIterable().toList();
+        Assert.assertEquals(collections.size(), beforeCreateCollectionsCount+2);
+
+        // Verify that collections are created with specified IDs    
+        Assert.assertEquals(collectionDefinition1.getId(), createdCollection1.getId());
+        Assert.assertEquals(collectionDefinition2.getId(), createdCollection2.getId());
+    }
+
+    @Test
+    public void testIdUnicodeValidation() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Unicode chars in Hindi for Id which translates to: "Hindi is one of the main  languages of India"
+        DocumentCollection collectionDefinition1 = new DocumentCollection();
+        collectionDefinition1.setId("हिन्दी भारत के मुख्य भाषाओं में से एक है");
+
+        // Special chars for Id
+        DocumentCollection collectionDefinition2 = new DocumentCollection();
+        collectionDefinition2.setId("!@$%^&*()-~`'_[]{}|;:,.<>");
+
+        // verify that collections are created with specified IDs
+        DocumentCollection createdCollection1 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition1,
+                null).getResource();
+
+        DocumentCollection createdCollection2 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition2,
+                null).getResource();
+
+        // Verify that collections are created with specified IDs    
+        Assert.assertEquals(collectionDefinition1.getId(), createdCollection1.getId());
+        Assert.assertEquals(collectionDefinition2.getId(), createdCollection2.getId());
+    }
+
+    @Test
+    public void testSessionContainer() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        collectionDefinition.setId(GatewayTests.getUID());
+        DocumentCollection collection = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        // create a document
+        Document documentDefinition = new Document(
+                "{" +
+                        "  'name': 'sample document'," +
+                        "  'key': '0'" +
+                "}");
+
+        Document document = client.createDocument(this.getDocumentCollectionLink(this.databaseForTest, collection, false),
+                documentDefinition,
+                null,
+                false).getResource();
+
+
+        // Replace document.
+        for(int i=0; i<100; i++) {
+
+            // Update the "key" property in a tight loop
+            document.set("key", Integer.toString(i));
+            // Replace the document
+            Document replacedDocument = client.replaceDocument(document, null).getResource();
+
+            // Read the document.
+            Document documentFromRead = client.readDocument(this.getDocumentLink(this.databaseForTest, collection, replacedDocument, true), null).getResource();
+            // Verify that we read our own write(key property) 
+            Assert.assertEquals(replacedDocument.getString("key"), documentFromRead.getString("key"));
+        }		
+    }
+
+    private String getDatabaseLink(Database database, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return DATABASES_PATH_SEGMENT + "/" + database.getId();
+        }
+        else {
+            return database.getSelfLink();
+        }
+    }
+
+    private String getUserLink(Database database, User user, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDatabaseLink(database, true) + "/" + USERS_PATH_SEGMENT + "/"  + user.getId();
+        }
+        else {
+            return user.getSelfLink();
+        }
+    }
+
+    private String getPermissionLink(Database database, User user, Permission permission, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getUserLink(database, user, true) + "/" + PERMISSIONS_PATH_SEGMENT + "/"  + permission.getId();
+        }
+        else {
+            return permission.getSelfLink();
+        }
+    }
+
+    private String getDocumentCollectionLink(Database database, DocumentCollection coll, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDatabaseLink(database, true) + "/" + COLLECTIONS_PATH_SEGMENT + "/"  + coll.getId();
+        }
+        else {
+            return coll.getSelfLink();
+        }
+    }
+
+    private String getDocumentLink(Database database, DocumentCollection coll, Document doc, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentCollectionLink(database, coll, true) + "/" + DOCUMENTS_PATH_SEGMENT + "/" + doc.getId();
+        }
+        else {
+            return doc.getSelfLink();
+        }
+    }
+
+    private String getAttachmentLink(Database database, DocumentCollection coll, Document doc, Attachment attachment, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentLink(database, coll, doc, true) + "/" + ATTACHMENTS_PATH_SEGMENT + "/" + attachment.getId(); 
+        }
+        else {
+            return attachment.getSelfLink();
+        }
+    }
+
+    private String getTriggerLink(Database database, DocumentCollection coll, Trigger trigger, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentCollectionLink(database, coll, true) + "/" + TRIGGERS_PATH_SEGMENT + "/" + trigger.getId(); 
+        }
+        else {
+            return trigger.getSelfLink();
+        }
+    }
+
+    private String getStoredProcedureLink(Database database, DocumentCollection coll, StoredProcedure storedProcedure, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentCollectionLink(database, coll, true) + "/" + STORED_PROCEDURES_PATH_SEGMENT + "/" + storedProcedure.getId(); 
+        }
+        else {
+            return storedProcedure.getSelfLink();
+        }
+    }
+
+    private String getUserDefinedFunctionLink(Database database, DocumentCollection coll, UserDefinedFunction userDefinedFunction, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentCollectionLink(database, coll, true) + "/" + USER_DEFINED_FUNCTIONS_PATH_SEGMENT + "/" + userDefinedFunction.getId(); 
+        }
+        else {
+            return userDefinedFunction.getSelfLink();
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private String getConflictLink(Database database, DocumentCollection coll, Conflict conflict, boolean isNameBased)
+    {
+        if(isNameBased) {
+            return this.getDocumentCollectionLink(database, coll, true) + "/" + CONFLICTS_PATH_SEGMENT + "/" + conflict.getId(); 
+        }
+        else {
+            return conflict.getSelfLink();
         }
     }
 }

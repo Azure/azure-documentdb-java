@@ -9,14 +9,6 @@ import org.json.JSONObject;
 
 public class IncludedPath extends JsonSerializable {
 
-    // default number precisions
-    private static final short DEFAULT_NUMBER_HASH_PRECISION = 3;
-    private static final short DEFAULT_NUMBER_RANGE_PRECISION = -1;
-
-    // default string precision
-    private static final short DEFAULT_STRING_HASH_PRECISION = 3;
-    private static final short DEFAULT_STRING_RANGE_PRECISION = -1;
-
     private Collection<Index> indexes;
 
     /**
@@ -114,38 +106,12 @@ public class IncludedPath extends JsonSerializable {
 
     @Override
     void onSave() {
-        if (this.getIndexes().size() == 0) {
-            HashIndex hashIndex = new HashIndex(DataType.String);
-            hashIndex.setPrecision(IncludedPath.DEFAULT_STRING_HASH_PRECISION);
-            this.indexes.add(hashIndex);
-
-            RangeIndex rangeIndex = new RangeIndex(DataType.Number);
-            rangeIndex.setPrecision(IncludedPath.DEFAULT_NUMBER_RANGE_PRECISION);
-            this.indexes.add(rangeIndex);
-        }
-
-        for (Index index : this.indexes) {
-            if (index.getKind() == IndexKind.Hash) {
-                HashIndex hashIndex = (HashIndex)index;
-                if (!hashIndex.hasPrecision()) {
-                    if(hashIndex.getDataType() == DataType.Number) {
-                        hashIndex.setPrecision(IncludedPath.DEFAULT_NUMBER_HASH_PRECISION);
-                    } else if(hashIndex.getDataType() == DataType.String) {
-                        hashIndex.setPrecision(IncludedPath.DEFAULT_STRING_HASH_PRECISION);
-                    }
-                }
-            } else if(index.getKind() == IndexKind.Range) {
-                RangeIndex rangeIndex = (RangeIndex)index;
-                if (!rangeIndex.hasPrecision()) {
-                    if (rangeIndex.getDataType() == DataType.Number) {
-                        rangeIndex.setPrecision(IncludedPath.DEFAULT_NUMBER_RANGE_PRECISION);
-                    } else if (rangeIndex.getDataType() == DataType.String) {
-                        rangeIndex.setPrecision(IncludedPath.DEFAULT_STRING_RANGE_PRECISION);
-                    }
-                }
+        if (this.indexes != null) {
+            for (Index index : this.indexes) {
+                index.onSave();
             }
-        }
 
-        super.set(Constants.Properties.INDEXES, this.indexes);
+            super.set(Constants.Properties.INDEXES, this.indexes);
+        }
     }
 }

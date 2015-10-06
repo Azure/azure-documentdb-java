@@ -27,14 +27,14 @@ final class AuthorizationHelper {
      * This API is a helper method to create auth header based on client request using masterkey.
      * 
      * @param verb the verb.
-     * @param resourceId the resource id.
+     * @param resourceIdOrFullName the resource id or full name
      * @param resourceType the resource type.
      * @param headers the request headers.
      * @param masterKey the master key.
      * @return the key authorization signature.
      */
     public static String GenerateKeyAuthorizationSignature(String verb,
-                                                           String resourceId,
+                                                           String resourceIdOrFullName,
                                                            ResourceType resourceType,
                                                            Map<String, String> headers,
                                                            String masterKey) {
@@ -42,8 +42,8 @@ final class AuthorizationHelper {
             throw new IllegalArgumentException("verb");
         }
 
-        if (resourceId == null) {
-            resourceId = "";
+        if (resourceIdOrFullName == null) {
+            resourceIdOrFullName = "";
         }
 
         if (resourceType == null) {
@@ -60,26 +60,25 @@ final class AuthorizationHelper {
 
         byte[] decodedBytes = Base64.decodeBase64(masterKey.getBytes());
         SecretKey signingKey = new SecretKeySpec(decodedBytes, "HMACSHA256");
-
-        String text = String.format("%s\n%s\n%s\n",
-                                    verb,
-                                    AuthorizationHelper.getResourceSegement(resourceType),
-                                    resourceId.toLowerCase());
+        
+        // Skipping lower casing of resourceId since it may now contain "ID" of the resource as part of the FullName
+        String body = String.format("%s\n%s\n%s\n",
+                                    verb.toLowerCase(),
+                                    AuthorizationHelper.getResourceSegement(resourceType).toLowerCase(),
+                                    resourceIdOrFullName);
 
         if (headers.containsKey(HttpConstants.HttpHeaders.X_DATE)) {
-            text += headers.get(HttpConstants.HttpHeaders.X_DATE);
+            body += headers.get(HttpConstants.HttpHeaders.X_DATE).toLowerCase();
         }
 
-        text += '\n';
+        body += '\n';
 
         if (headers.containsKey(HttpConstants.HttpHeaders.HTTP_DATE)) {
-            text += headers.get(HttpConstants.HttpHeaders.HTTP_DATE);
+            body += headers.get(HttpConstants.HttpHeaders.HTTP_DATE).toLowerCase();
         }
 
-        text += '\n';
-
-        String body = text.toLowerCase();
-
+        body += '\n';
+        
         Mac mac = null;
         try {
             mac = Mac.getInstance("HMACSHA256");
@@ -96,7 +95,7 @@ final class AuthorizationHelper {
 
         byte[] digest = mac.doFinal(body.getBytes());
 
-        String auth = Helper.encodeBase64String(digest);
+        String auth = Utils.encodeBase64String(digest);
     
         String authtoken = "type=master&ver=1.0&sig=" + auth;
 

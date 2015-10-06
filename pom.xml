@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.microsoft.azure</groupId>
   <artifactId>azure-documentdb</artifactId>
-  <version>1.2.0</version>
+  <version>1.4.0</version>
   <name>${project.groupId}:${project.artifactId}</name>
   <description>Java SDK for Microsoft Azure DocumentDB</description>
   <url>http://azure.microsoft.com/en-us/services/documentdb/</url>
@@ -13,10 +13,13 @@
       <url>http://www.opensource.org/licenses/mit-license.php</url>
     </license>
   </licenses>
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
   <developers>
     <developer>
-      <name>Pu Shi</name>
-      <email>pushi@microsoft.com</email>
+      <name>Rajesh Nagpal</name>
+      <email>rnagpal@microsoft.com</email>
       <organization>Microsoft</organization>
       <organizationUrl>http://www.microsoft.com/</organizationUrl>
     </developer>

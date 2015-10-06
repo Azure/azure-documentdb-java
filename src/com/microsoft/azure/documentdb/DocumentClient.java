@@ -185,7 +185,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("databaseLink");
         }
         
-        String path = DocumentClient.joinPath(databaseLink, null);
+        String path = Utils.joinPath(databaseLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
                                                                        path,
@@ -207,7 +207,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("databaseLink");
         }
         
-        String path = DocumentClient.joinPath(databaseLink, null);
+        String path = Utils.joinPath(databaseLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
                                                                        path,
@@ -288,7 +288,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(collection);
 
-        String path = DocumentClient.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
@@ -315,7 +315,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(collection);
 
-        String path = DocumentClient.joinPath(collection.getSelfLink(), null);
+        String path = Utils.joinPath(collection.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
 
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
@@ -340,7 +340,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, null);
+        String path = Utils.joinPath(collectionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
@@ -363,7 +363,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, null);
+        String path = Utils.joinPath(collectionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
@@ -384,7 +384,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("databaseLink");
         }
 
-        String path = DocumentClient.joinPath(databaseLink,
+        String path = Utils.joinPath(databaseLink,
                                               Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
@@ -437,7 +437,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
@@ -465,6 +465,33 @@ public final class DocumentClient {
                                                      RequestOptions options,
                                                      boolean disableAutomaticIdGeneration)
             throws DocumentClientException {
+        DocumentServiceRequest request = getDocumentRequest(collectionLink, document, options,
+                disableAutomaticIdGeneration);
+        return new ResourceResponse<Document>(this.doCreate(request), Document.class);
+    }
+
+     /**
+     * Upserts a document.
+     * 
+     * @param collectionLink the collection link.
+     * @param document the document represented as a POJO or Document object to upsert.
+     * @param options the request options.
+     * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
+     * @return the resource response with the upserted document.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Document> upsertDocument(String collectionLink,
+                                                     Object document,
+                                                     RequestOptions options,
+                                                     boolean disableAutomaticIdGeneration)
+            throws DocumentClientException {
+        DocumentServiceRequest request = getDocumentRequest(collectionLink, document, options,
+                disableAutomaticIdGeneration);
+        return new ResourceResponse<Document>(this.doUpsert(request), Document.class);
+    }
+    
+    private DocumentServiceRequest getDocumentRequest(String collectionLink, Object document, RequestOptions options,
+            boolean disableAutomaticIdGeneration) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -481,15 +508,15 @@ public final class DocumentClient {
             // when represented as a string.
             typedDocument.setId(UUID.randomUUID().toString());
         }
-        String path = DocumentClient.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
                                                                        typedDocument,
                                                                        requestHeaders);
-        return new ResourceResponse<Document>(this.doCreate(request), Document.class);
+        return request;
     }
-
+    
     /**
      * Replaces a document using a POJO object.
      * 
@@ -512,7 +539,7 @@ public final class DocumentClient {
         Document typedDocument = Document.FromObject(document);
         DocumentClient.validateResource(typedDocument);
 
-        String path = DocumentClient.joinPath(documentLink, null);
+        String path = Utils.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
 
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
@@ -539,7 +566,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(document);
 
-        String path = DocumentClient.joinPath(document.getSelfLink(), null);
+        String path = Utils.joinPath(document.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
@@ -563,7 +590,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("documentLink");
         }
 
-        String path = DocumentClient.joinPath(documentLink, null);
+        String path = Utils.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
         return new ResourceResponse<Document>(this.doDelete(request), Document.class);
@@ -584,7 +611,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("documentLink");
         }
 
-        String path = DocumentClient.joinPath(documentLink, null);
+        String path = Utils.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
         return new ResourceResponse<Document>(this.doRead(request), Document.class);
@@ -603,7 +630,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
         return new FeedResponse<Document>(new QueryIterable<Document>(this, request, ReadType.Feed, Document.class));
@@ -646,7 +673,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }  
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
@@ -673,6 +700,30 @@ public final class DocumentClient {
                                                                    RequestOptions options)
             throws DocumentClientException {
 
+        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options);
+        return new ResourceResponse<StoredProcedure>(this.doCreate(request), StoredProcedure.class);
+    }    
+    
+    /**
+     * Upserts a stored procedure.
+     * 
+     * @param collectionLink the collection link.
+     * @param storedProcedure the stored procedure to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted stored procedure.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<StoredProcedure> upsertStoredProcedure(String collectionLink,
+                                                                   StoredProcedure storedProcedure,
+                                                                   RequestOptions options)
+            throws DocumentClientException {
+
+        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options);
+        return new ResourceResponse<StoredProcedure>(this.doUpsert(request), StoredProcedure.class);
+    }
+    
+    private DocumentServiceRequest getStoredProcedureRequest(String collectionLink, StoredProcedure storedProcedure,
+            RequestOptions options) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -682,13 +733,13 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(storedProcedure);
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
                                                                        storedProcedure,
                                                                        requestHeaders);
-        return new ResourceResponse<StoredProcedure>(this.doCreate(request), StoredProcedure.class);
+        return request;
     }
 
     /**
@@ -709,7 +760,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(storedProcedure);
 
-        String path = DocumentClient.joinPath(storedProcedure.getSelfLink(), null);
+        String path = Utils.joinPath(storedProcedure.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
@@ -733,7 +784,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("storedProcedureLink");
         }
 
-        String path = DocumentClient.joinPath(storedProcedureLink, null);
+        String path = Utils.joinPath(storedProcedureLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
@@ -756,7 +807,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("storedProcedureLink");
         }
 
-        String path = DocumentClient.joinPath(storedProcedureLink, null);
+        String path = Utils.joinPath(storedProcedureLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
@@ -777,7 +828,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
@@ -829,7 +880,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
                                                                        path,
@@ -852,7 +903,7 @@ public final class DocumentClient {
      */
     public StoredProcedureResponse executeStoredProcedure(String storedProcedureLink, Object[] procedureParams)
             throws DocumentClientException {
-        String path = DocumentClient.joinPath(storedProcedureLink, null);
+        String path = Utils.joinPath(storedProcedureLink, null);
         Map<String, String> requestHeaders = new HashMap<String, String>();
         requestHeaders.put(HttpConstants.HttpHeaders.ACCEPT, RuntimeConstants.MediaTypes.JSON);
         DocumentServiceRequest request = DocumentServiceRequest.create(
@@ -875,6 +926,27 @@ public final class DocumentClient {
     public ResourceResponse<Trigger> createTrigger(String collectionLink, Trigger trigger, RequestOptions options)
              throws DocumentClientException {
 
+        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options);
+        return new ResourceResponse<Trigger>(this.doCreate(request), Trigger.class);
+    }    
+    
+    /**
+     * Upserts a trigger.
+     * 
+     * @param collectionLink the collection link.
+     * @param trigger the trigger to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted trigger.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Trigger> upsertTrigger(String collectionLink, Trigger trigger, RequestOptions options)
+             throws DocumentClientException {
+
+        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options);
+        return new ResourceResponse<Trigger>(this.doUpsert(request), Trigger.class);
+    }
+    
+    private DocumentServiceRequest getTriggerRequest(String collectionLink, Trigger trigger, RequestOptions options) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -884,13 +956,13 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(trigger);
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
                                                                        path,
                                                                        trigger,
                                                                        requestHeaders);
-        return new ResourceResponse<Trigger>(this.doCreate(request), Trigger.class);
+        return request;
     }
 
     /**
@@ -910,7 +982,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(trigger);
 
-        String path = DocumentClient.joinPath(trigger.getSelfLink(), null);
+        String path = Utils.joinPath(trigger.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
                                                                        path,
@@ -934,7 +1006,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("triggerLink");
         }
 
-        String path = DocumentClient.joinPath(triggerLink, null);
+        String path = Utils.joinPath(triggerLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
         return new ResourceResponse<Trigger>(this.doDelete(request), Trigger.class);
@@ -955,7 +1027,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("triggerLink");
         }
 
-        String path = DocumentClient.joinPath(triggerLink, null);
+        String path = Utils.joinPath(triggerLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
         return new ResourceResponse<Trigger>(this.gatewayProxy.doRead(request), Trigger.class);
@@ -974,7 +1046,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
         return new FeedResponse<Trigger>(new QueryIterable<Trigger>(this, request, ReadType.Feed, Trigger.class));
@@ -1023,7 +1095,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
                                                                        path,
@@ -1048,6 +1120,31 @@ public final class DocumentClient {
              RequestOptions options)
              throws DocumentClientException {
         
+        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options);
+        return new ResourceResponse<UserDefinedFunction>(this.doCreate(request), UserDefinedFunction.class);
+    }    
+    
+    /**
+     * Upserts a user defined function.
+     * 
+     * @param collectionLink the collection link.
+     * @param udf the user defined function to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted user defined function.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<UserDefinedFunction> upsertUserDefinedFunction(
+             String collectionLink,
+             UserDefinedFunction udf,
+             RequestOptions options)
+             throws DocumentClientException {
+        
+        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options);
+        return new ResourceResponse<UserDefinedFunction>(this.doUpsert(request), UserDefinedFunction.class);
+    }
+    
+    private DocumentServiceRequest getUserDefinedFunctionRequest(String collectionLink, UserDefinedFunction udf,
+            RequestOptions options) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -1057,13 +1154,13 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(udf);
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
                                                                        udf,
                                                                        requestHeaders);
-        return new ResourceResponse<UserDefinedFunction>(this.doCreate(request), UserDefinedFunction.class);
+        return request;
     }
 
     /**
@@ -1083,7 +1180,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(udf);
 
-        String path = DocumentClient.joinPath(udf.getSelfLink(), null);
+        String path = Utils.joinPath(udf.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
@@ -1106,7 +1203,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("udfLink");
         }
         
-        String path = DocumentClient.joinPath(udfLink, null);
+        String path = Utils.joinPath(udfLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
@@ -1128,7 +1225,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("udfLink");
         }
         
-        String path = DocumentClient.joinPath(udfLink, null);
+        String path = Utils.joinPath(udfLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
@@ -1149,7 +1246,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
@@ -1203,7 +1300,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
                                                                        path,
@@ -1229,6 +1326,29 @@ public final class DocumentClient {
                                                          Attachment attachment,
                                                          RequestOptions options)
             throws DocumentClientException {
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options);
+        return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
+    }
+    
+    /**
+     * Upserts an attachment.
+     * 
+     * @param documentLink the document link.
+     * @param attachment the attachment to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted attachment.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Attachment> upsertAttachment(String documentLink,
+                                                         Attachment attachment,
+                                                         RequestOptions options)
+            throws DocumentClientException {
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options);
+        return new ResourceResponse<Attachment>(this.doUpsert(request), Attachment.class);
+    }
+    
+    private DocumentServiceRequest getAttachmentRequest(String documentLink, Attachment attachment,
+            RequestOptions options) {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
@@ -1238,15 +1358,15 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(attachment);
 
-        String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
                                                                        attachment,
                                                                        requestHeaders);
-        return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
+        return request;
     }
-
+    
     /**
      * Replaces an attachment.
      * 
@@ -1263,7 +1383,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(attachment);
 
-        String path = DocumentClient.joinPath(attachment.getSelfLink(), null);
+        String path = Utils.joinPath(attachment.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
@@ -1286,7 +1406,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("attachmentLink");
         }
         
-        String path = DocumentClient.joinPath(attachmentLink, null);
+        String path = Utils.joinPath(attachmentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
@@ -1308,7 +1428,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("attachmentLink");
         }
         
-        String path = DocumentClient.joinPath(attachmentLink, null);
+        String path = Utils.joinPath(attachmentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment, path, requestHeaders);
         return new ResourceResponse<Attachment>(this.doRead(request), Attachment.class);
@@ -1326,7 +1446,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("documentLink");
         }
         
-        String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
@@ -1374,7 +1494,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
@@ -1401,6 +1521,30 @@ public final class DocumentClient {
                                                          MediaOptions options)
             throws DocumentClientException {
 
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options);
+        return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
+    }
+        
+    /**
+     * Upserts an attachment to the media stream
+     * 
+     * @param documentLink the document link.
+     * @param mediaStream the media stream for upserting the attachment.
+     * @param options the media options.
+     * @return the resource response with the upserted attachment.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Attachment> upsertAttachment(String documentLink,
+                                                         InputStream mediaStream,
+                                                         MediaOptions options)
+            throws DocumentClientException {
+
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options);
+        return new ResourceResponse<Attachment>(this.doUpsert(request), Attachment.class);
+    }
+    
+    private DocumentServiceRequest getAttachmentRequest(String documentLink, InputStream mediaStream,
+            MediaOptions options) {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
@@ -1408,14 +1552,14 @@ public final class DocumentClient {
             throw new IllegalArgumentException("mediaStream");          
         }
 
-        String path = DocumentClient.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getMediaHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
                                                                        path,
                                                                        mediaStream,
                                                                        requestHeaders);
         request.setIsMedia(true);
-        return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
+        return request;
     }
 
     /**
@@ -1431,7 +1575,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("mediaLink");
         }
         
-        String path = DocumentClient.joinPath(mediaLink, null);
+        String path = Utils.joinPath(mediaLink, null);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Media, path, null);
         request.setIsMedia(true);
         return new MediaResponse(this.doRead(request),
@@ -1457,7 +1601,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("mediaStream");          
         }
         
-        String path = DocumentClient.joinPath(mediaLink, null);
+        String path = Utils.joinPath(mediaLink, null);
         Map<String, String> requestHeaders = this.getMediaHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Media,
                                                                        path,
@@ -1482,7 +1626,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("conflictLink");
         }
 
-        String path = DocumentClient.joinPath(conflictLink, null);
+        String path = Utils.joinPath(conflictLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict, path, requestHeaders);
         return new ResourceResponse<Conflict>(this.doRead(request), Conflict.class);
@@ -1502,7 +1646,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
         
-        String path = DocumentClient.joinPath(collectionLink,
+        String path = Utils.joinPath(collectionLink,
                                               Paths.CONFLICTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(
@@ -1551,7 +1695,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(collectionLink, Paths.CONFLICTS_PATH_SEGMENT);
+        String path = Utils.joinPath(collectionLink, Paths.CONFLICTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict,
                                                                        path,
@@ -1576,7 +1720,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("conflictLink");
         }
 
-        String path = DocumentClient.joinPath(conflictLink, null);
+        String path = Utils.joinPath(conflictLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict, path, requestHeaders);
         return new ResourceResponse<Conflict>(this.doDelete(request), Conflict.class);
@@ -1594,6 +1738,27 @@ public final class DocumentClient {
     public ResourceResponse<User> createUser(String databaseLink, User user, RequestOptions options)
             throws DocumentClientException {
 
+        DocumentServiceRequest request = getUserRequest(databaseLink, user, options);
+        return new ResourceResponse<User>(this.doCreate(request), User.class);
+    }
+        
+    /**
+     * Upserts a user.
+     * 
+     * @param databaseLink the database link.
+     * @param user the user to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted user.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<User> upsertUser(String databaseLink, User user, RequestOptions options)
+            throws DocumentClientException {
+
+        DocumentServiceRequest request = getUserRequest(databaseLink, user, options);
+        return new ResourceResponse<User>(this.doUpsert(request), User.class);
+    }
+    
+    private DocumentServiceRequest getUserRequest(String databaseLink, User user, RequestOptions options) {
         if (StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
         }
@@ -1603,10 +1768,10 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(user);
 
-        String path = DocumentClient.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
+        String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, user, requestHeaders);
-        return new ResourceResponse<User>(this.doCreate(request), User.class);
+        return request;
     }
 
     /**
@@ -1625,7 +1790,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(user);
 
-        String path = DocumentClient.joinPath(user.getSelfLink(), null);
+        String path = Utils.joinPath(user.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, user, requestHeaders);
         return new ResourceResponse<User>(this.doReplace(request), User.class);
@@ -1645,7 +1810,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("userLink");
         }
 
-        String path = DocumentClient.joinPath(userLink, null);
+        String path = Utils.joinPath(userLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
         return new ResourceResponse<User>(this.doDelete(request), User.class);
@@ -1665,7 +1830,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("userLink");
         }
 
-        String path = DocumentClient.joinPath(userLink, null);
+        String path = Utils.joinPath(userLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
         return new ResourceResponse<User>(this.doRead(request), User.class);
@@ -1684,7 +1849,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("databaseLink");
         }
 
-        String path = DocumentClient.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
+        String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
         return new FeedResponse<User>(new QueryIterable<User>(this, request, ReadType.Feed, User.class));
@@ -1729,7 +1894,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
+        String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User,
                                                                        path,
@@ -1751,6 +1916,28 @@ public final class DocumentClient {
     public ResourceResponse<Permission> createPermission(String userLink, Permission permission, RequestOptions options)
             throws DocumentClientException {
 
+        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options);
+        return new ResourceResponse<Permission>(this.doCreate(request), Permission.class);
+    }
+        
+    /**
+     * Upserts a permission.
+     * 
+     * @param userLink the user link.
+     * @param permission the permission to upsert.
+     * @param options the request options.
+     * @return the resource response with the upserted permission.
+     * @throws DocumentClientException the document client exception.
+     */
+    public ResourceResponse<Permission> upsertPermission(String userLink, Permission permission, RequestOptions options)
+            throws DocumentClientException {
+
+        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options);
+        return new ResourceResponse<Permission>(this.doUpsert(request), Permission.class);
+    }
+    
+    private DocumentServiceRequest getPermissionRequest(String userLink, Permission permission,
+            RequestOptions options) {
         if (StringUtils.isEmpty(userLink)) {
             throw new IllegalArgumentException("userLink");
         }
@@ -1760,13 +1947,13 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(permission);
 
-        String path = DocumentClient.joinPath(userLink, Paths.PERMISSIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(userLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
                                                                        path,
                                                                        permission,
                                                                        requestHeaders);
-        return new ResourceResponse<Permission>(this.doCreate(request), Permission.class);
+        return request;
     }
 
     /**
@@ -1786,7 +1973,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(permission);
 
-        String path = DocumentClient.joinPath(permission.getSelfLink(), null);
+        String path = Utils.joinPath(permission.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
                                                                        path,
@@ -1810,7 +1997,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("permissionLink");
         }
         
-        String path = DocumentClient.joinPath(permissionLink, null);
+        String path = Utils.joinPath(permissionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
         return new ResourceResponse<Permission>(this.doDelete(request), Permission.class);
@@ -1831,7 +2018,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("permissionLink");
         }
         
-        String path = DocumentClient.joinPath(permissionLink, null);
+        String path = Utils.joinPath(permissionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
         return new ResourceResponse<Permission>(this.doRead(request), Permission.class);
@@ -1849,7 +2036,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("permissionLink");
         }
 
-        String path = DocumentClient.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
         return new FeedResponse<Permission>(new QueryIterable<Permission>(this,
@@ -1899,7 +2086,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
+        String path = Utils.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
                                                                        path,
@@ -1927,7 +2114,7 @@ public final class DocumentClient {
 
         DocumentClient.validateResource(offer);
 
-        String path = DocumentClient.joinPath(offer.getSelfLink(), null);
+        String path = Utils.joinPath(offer.getSelfLink(), null);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
                                                                        path,
                                                                        offer,
@@ -1948,7 +2135,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("offerLink");
         }
         
-        String path = DocumentClient.joinPath(offerLink, null);
+        String path = Utils.joinPath(offerLink, null);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, null);
         return new ResourceResponse<Offer>(this.doRead(request), Offer.class);
     }
@@ -1960,7 +2147,7 @@ public final class DocumentClient {
      * @return the feed response with the read offers.
      */
     public FeedResponse<Offer> readOffers(FeedOptions options) {
-        String path = DocumentClient.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
+        String path = Utils.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, requestHeaders);
         return new FeedResponse<Offer>(new QueryIterable<Offer>(this, request, ReadType.Feed, Offer.class));
@@ -1993,7 +2180,7 @@ public final class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        String path = DocumentClient.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
+        String path = Utils.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
         Map<String, String> requestHeaders = this.getFeedHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
                                                                        path,
@@ -2035,6 +2222,24 @@ public final class DocumentClient {
         return response;
     }
     
+    private DocumentServiceResponse doUpsert(DocumentServiceRequest request) throws DocumentClientException {
+        this.ApplySessionToken(request);
+        
+        Map<String, String> headers = request.getHeaders();
+        
+        // headers can never be null, since it will be initialized even when no request options are specified,
+        // hence using assertion here instead of exception, being in the private method
+        assert(headers != null);
+        
+        if (headers != null) {
+            headers.put(HttpConstants.HttpHeaders.IS_UPSERT, "true");
+        }
+
+        DocumentServiceResponse response = this.gatewayProxy.doUpsert(request);
+        this.CaptureSessionToken(request, response);
+        return response;
+    }
+    
     private DocumentServiceResponse doReplace(DocumentServiceRequest request) throws DocumentClientException {
         this.ApplySessionToken(request);
 
@@ -2051,7 +2256,7 @@ public final class DocumentClient {
         if (request.getResourceType() != ResourceType.DocumentCollection) {
             this.CaptureSessionToken(request, response);
         } else {
-            this.ClearToken(ResourceId.parse(request.getResourceId()));
+            this.ClearToken(request, response);
         }
         return response;
     }
@@ -2092,7 +2297,7 @@ public final class DocumentClient {
 
         // Apply the ambient session.
         if (!StringUtils.isEmpty(request.getResourceId())) {
-            String sessionToken = this.sessionContainer.resolveSessionToken(ResourceId.parse(request.getResourceId()));
+            String sessionToken = this.sessionContainer.resolveSessionToken(request);
 
             if (!StringUtils.isEmpty(sessionToken)) {
                 headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, sessionToken);
@@ -2102,15 +2307,11 @@ public final class DocumentClient {
 
     private void CaptureSessionToken(DocumentServiceRequest request, DocumentServiceResponse response)
             throws DocumentClientException  {
-        String sessionToken = response.getResponseHeaders().get(HttpConstants.HttpHeaders.SESSION_TOKEN);
-
-        if (!StringUtils.isEmpty(sessionToken) && !StringUtils.isEmpty(request.getResourceId())) {
-            this.sessionContainer.setSessionToken(ResourceId.parse(request.getResourceId()), sessionToken);
+            this.sessionContainer.setSessionToken(request, response);
         }
-    }
 
-    private void ClearToken(ResourceId resourceId) {
-        this.sessionContainer.clearToken(resourceId);
+    private void ClearToken(DocumentServiceRequest request, DocumentServiceResponse response) {
+        this.sessionContainer.clearToken(request, response);
     }
 
     private Map<String, String> getRequestHeaders(RequestOptions options) {
@@ -2207,30 +2408,6 @@ public final class DocumentClient {
             }
         }
         return requestHeaders;
-    }
-
-    private static String joinPath(String path1, String path2) {
-        path1 = DocumentClient.trimBeginingAndEndingSlashes(path1);
-        String result = "/" + path1 + "/";
-
-        if (path2 != null && !path2.isEmpty()) {
-            path2 = DocumentClient.trimBeginingAndEndingSlashes(path2);
-            result += path2 + "/";
-        }
-
-        return result;
-    }
-
-    private static String trimBeginingAndEndingSlashes(String path) {
-        if (path.startsWith("/")) {
-            path = path.substring(1);
-        }
-
-        if (path.endsWith("/")) {
-            path = path.substring(0, path.length() - 1);
-        }
-
-        return path;
     }
 
     private static String serializeProcedureParams(Object[] objectArray) {

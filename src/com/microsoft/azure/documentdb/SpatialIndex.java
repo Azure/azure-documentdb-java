@@ -6,7 +6,19 @@ import org.json.JSONObject;
 public final class SpatialIndex extends Index {
 
     /**
-     * Constructor.
+     * Initializes a new instance of the SpatialIndex class.
+     * 
+     * Here is an example to instantiate SpatialIndex class passing in the DataType
+     * 
+     * <pre>
+     * {@code
+     * 
+     * SpatialIndex spatialIndex = new SpatialIndex(DataType.Point);
+     * 
+     * }
+     * </pre>
+     * 
+     * @param dataType specifies the target data type for the index path specification.
      */
     public SpatialIndex(DataType dataType) {
         super(IndexKind.Spatial);
@@ -14,7 +26,7 @@ public final class SpatialIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the SpatialIndex class.
      * 
      * @param jsonString the json string that represents the index.
      */
@@ -26,7 +38,7 @@ public final class SpatialIndex extends Index {
     }
 
     /**
-     * Constructor.
+     * Initializes a new instance of the SpatialIndex class.
      * 
      * @param jsonObject the json object that represents the index.
      */

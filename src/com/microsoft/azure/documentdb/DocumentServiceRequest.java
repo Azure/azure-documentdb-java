@@ -66,6 +66,7 @@ final class DocumentServiceRequest {
 
         this.body = body;
         this.headers = headers != null ? headers : new HashMap<String, String>();
+        this.isNameBased = Utils.isNameBased(path);
     }
 
     /**
@@ -232,7 +233,7 @@ final class DocumentServiceRequest {
             // We are cuting off the storage index.
             byte[] newBuffer = new byte[resoureIdLength];
             System.arraycopy(buffer, 0, newBuffer, 0, resoureIdLength);
-            attachmentId = Helper.encodeBase64String(newBuffer).replace('/', '-');
+            attachmentId = Utils.encodeBase64String(newBuffer).replace('/', '-');
         } else {
             attachmentId = mediaId;
         }
@@ -343,4 +344,15 @@ final class DocumentServiceRequest {
     public boolean getIsMedia() {
         return this.isMedia;
     }
+    
+    private boolean isNameBased = false;
+
+    public boolean getIsNameBased() {
+        return this.isNameBased;
+    }
+
+    void setIsNameBased(boolean isNameBased) {
+        this.isNameBased = isNameBased;
+    }
+
 }

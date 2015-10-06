@@ -283,6 +283,19 @@ public final class ResourceResponse<T extends Resource> {
     }
 
     /**
+     * Gets the progress of lazy indexing.
+     *
+     * @return the progress of lazy indexing.
+     */
+    public long getLazyIndexingProgress() {
+        String value = this.getResponseHeaders().get(HttpConstants.HttpHeaders.LAZY_INDEXING_PROGRESS);
+        if (StringUtils.isEmpty(value)) {
+          return -1;
+        }
+        return Long.valueOf(value);
+    }
+
+    /**
      * Deprecated.
      */
     @Deprecated
