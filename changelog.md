@@ -1,3 +1,7 @@
+## Changes in 1.5.0 : ##
+
+- Added Client-side sharding framework to the SDK. Implemented HashPartionResolver and RangePartitionResolver classes.
+
 ## Changes in 1.4.0 : ##
 
 - Implement Upsert. New upsertXXX methods added to support Upsert feature.
