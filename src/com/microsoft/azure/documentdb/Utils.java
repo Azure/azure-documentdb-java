@@ -60,6 +60,40 @@ class Utils {
 
         return false;
     }
+    
+    /**
+     * Checks whether the specified link is a Database Self Link or a Database ID based link
+     * 
+     * @param link the link to analyze.
+     * @return true or false
+     */
+    static boolean isDatabaseLink(String link) {
+        if(StringUtils.isEmpty(link)) {
+            return false;
+        }
+
+        // trimming the leading and trailing "/" from the input string
+        link = trimBeginingAndEndingSlashes(link);
+        
+        // Splitting the link(separated by "/") into parts 
+        String[] parts = link.split("/");
+        
+        if(parts.length != 2) {
+            return false;
+        }
+
+        // First part should be "dbs" 
+        if(StringUtils.isEmpty(parts[0]) || !parts[0].equalsIgnoreCase(Paths.DATABASES_PATH_SEGMENT)) {
+            return false;
+        }
+
+        // The second part is the database id(ResourceID or Name) and cannot be empty
+        if(StringUtils.isEmpty(parts[1])) {
+            return false;
+        }
+            
+        return true;
+    }
 
     /**
      * Checks whether the specified path segment is a resource type

@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,7 @@ public final class DocumentClient {
     private SessionContainer sessionContainer;
     private ConsistencyLevel desiredConsistencyLevel;
     private RetryPolicy retryPolicy;
+    private ConcurrentHashMap<String, PartitionResolver> partitionResolvers;
 
     /**
      * A client query compatibility mode when making query request. Can be used to force a specific query request
@@ -141,10 +143,38 @@ public final class DocumentClient {
                                              this.masterKey,
                                              this.resourceTokens,
                                              userAgentContainer);
+        
+        this.partitionResolvers = new ConcurrentHashMap<String, PartitionResolver>();
     }
 
     RetryPolicy getRetryPolicy() {
         return this.retryPolicy;
+    }
+    
+    /**
+     * Registers the partition resolver associated with the database link
+     * @throws DocumentClientException 
+     */
+    public void registerPartitionResolver(String databaseLink, PartitionResolver partitionResolver) 
+            throws DocumentClientException {
+        if(StringUtils.isEmpty(databaseLink)) {
+            throw new IllegalArgumentException("databaseLink");
+        }
+        if(partitionResolver == null) {
+            throw new IllegalArgumentException("partitionResolver");
+        }
+        
+        this.partitionResolvers.put(Utils.trimBeginingAndEndingSlashes(databaseLink), partitionResolver);
+    }
+    
+    /**
+     * Gets the partition resolver associated with the database link on the client
+     */
+    protected PartitionResolver getPartitionResolver(String databaseLink) {
+        if(StringUtils.isEmpty(databaseLink)) {
+            throw new IllegalArgumentException("databaseLink");
+        }
+        return this.partitionResolvers.get(Utils.trimBeginingAndEndingSlashes(databaseLink));
     }
 
     /**
@@ -453,19 +483,21 @@ public final class DocumentClient {
     /**
      * Creates a document.
      * 
-     * @param collectionLink the collection link.
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
      * @param document the document represented as a POJO or Document object.
      * @param options the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the created document.
      * @throws DocumentClientException the document client exception.
      */
-    public ResourceResponse<Document> createDocument(String collectionLink,
+    public ResourceResponse<Document> createDocument(String databaseOrDocumentCollectionLink,
                                                      Object document,
                                                      RequestOptions options,
                                                      boolean disableAutomaticIdGeneration)
             throws DocumentClientException {
-        DocumentServiceRequest request = getDocumentRequest(collectionLink, document, options,
+        String documentCollectionLink = this.getTargetDocumentCollectionLink(databaseOrDocumentCollectionLink, document);
+        
+        DocumentServiceRequest request = getDocumentRequest(documentCollectionLink, document, options,
                 disableAutomaticIdGeneration);
         return new ResourceResponse<Document>(this.doCreate(request), Document.class);
     }
@@ -473,32 +505,61 @@ public final class DocumentClient {
      /**
      * Upserts a document.
      * 
-     * @param collectionLink the collection link.
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
      * @param document the document represented as a POJO or Document object to upsert.
      * @param options the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the upserted document.
      * @throws DocumentClientException the document client exception.
      */
-    public ResourceResponse<Document> upsertDocument(String collectionLink,
+    public ResourceResponse<Document> upsertDocument(String databaseOrDocumentCollectionLink,
                                                      Object document,
                                                      RequestOptions options,
                                                      boolean disableAutomaticIdGeneration)
             throws DocumentClientException {
-        DocumentServiceRequest request = getDocumentRequest(collectionLink, document, options,
+        String documentCollectionLink = this.getTargetDocumentCollectionLink(databaseOrDocumentCollectionLink, document);
+        
+        DocumentServiceRequest request = getDocumentRequest(documentCollectionLink, document, options,
                 disableAutomaticIdGeneration);
         return new ResourceResponse<Document>(this.doUpsert(request), Document.class);
     }
     
-    private DocumentServiceRequest getDocumentRequest(String collectionLink, Object document, RequestOptions options,
-            boolean disableAutomaticIdGeneration) {
-        if (StringUtils.isEmpty(collectionLink)) {
-            throw new IllegalArgumentException("collectionLink");
+    protected static final String PartitionResolverErrorMessage = "Couldn't find any partition resolvers for the database link provided. Ensure that the link you used when registering the partition resolvers matches the link provided or you need to register both types of database link(self link as well as ID based link)."; 
+    
+    private String getTargetDocumentCollectionLink(String databaseOrDocumentCollectionLink, Object document) {
+        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
+            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
         }
         if (document == null) {
             throw new IllegalArgumentException("document");
         }
-
+        
+        String documentCollectionLink = databaseOrDocumentCollectionLink;
+        if(Utils.isDatabaseLink(databaseOrDocumentCollectionLink)) {
+            // Gets the partition resolver(if it exists) for the specified database link
+            PartitionResolver partitionResolver = this.getPartitionResolver(databaseOrDocumentCollectionLink);
+            
+            // If the partition resolver exists, get the collection to which the Create/Upsert should be directed using the partition key
+            if(partitionResolver != null) {
+                documentCollectionLink = partitionResolver.resolveForCreate(document);
+            }
+            else {
+                throw new IllegalArgumentException(PartitionResolverErrorMessage);
+            }
+        }
+        
+        return documentCollectionLink;
+    }
+    
+    private DocumentServiceRequest getDocumentRequest(String documentCollectionLink, Object document, RequestOptions options,
+            boolean disableAutomaticIdGeneration) {
+        if (StringUtils.isEmpty(documentCollectionLink)) {
+            throw new IllegalArgumentException("documentCollectionLink");
+        }
+        if (document == null) {
+            throw new IllegalArgumentException("document");
+        }
+        
         Document typedDocument = Document.FromObject(document);
 
         DocumentClient.validateResource(typedDocument);
@@ -508,7 +569,7 @@ public final class DocumentClient {
             // when represented as a string.
             typedDocument.setId(UUID.randomUUID().toString());
         }
-        String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+        String path = Utils.joinPath(documentCollectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
@@ -639,51 +700,87 @@ public final class DocumentClient {
     /**
      * Query for documents in a document collection.
      * 
-     * @param collectionLink the collection link.
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
      * @param query the query.
      * @param options the feed options.
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options) {
-
-        if (StringUtils.isEmpty(collectionLink)) {
-            throw new IllegalArgumentException("collectionLink");
+    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, String query, FeedOptions options) {
+        return this.queryDocuments(databaseOrDocumentCollectionLink, query, options, null);
+    }
+    
+    /**
+     * Query for documents in a document collection with a partitionKey
+     * 
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param query the query.
+     * @param options the feed options.
+     * @param partitionKey the partitionKey. 
+     * @return the feed response with the obtained documents.
+     */
+    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, String query, FeedOptions options, Object partitionKey) {
+        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
+            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
         }
         if (StringUtils.isEmpty(query)) {
             throw new IllegalArgumentException("query");
-        }  
-
-        return queryDocuments(collectionLink, new SqlQuerySpec(query, null), options);
+        }
+        
+        return queryDocuments(databaseOrDocumentCollectionLink, new SqlQuerySpec(query, null), options, partitionKey);
+    }
+    
+    /**
+     * Query for documents in a document collection.
+     * 
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param querySpec the SQL query specification.
+     * @param options the feed options.
+     * @return the feed response with the obtained documents.
+     */
+    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, SqlQuerySpec querySpec, FeedOptions options) {
+    	return this.queryDocuments(databaseOrDocumentCollectionLink, querySpec, options, null);
     }
 
     /**
      * Query for documents in a document collection.
      * 
-     * @param collectionLink the collection link.
+     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
      * @param querySpec the SQL query specification.
      * @param options the feed options.
+     * @param partitionKey the partitionKey. 
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
-
-        if (StringUtils.isEmpty(collectionLink)) {
-            throw new IllegalArgumentException("collectionLink");
+    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
+        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
+            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
         }
         if (querySpec == null) {
             throw new IllegalArgumentException("querySpec");
         }  
-
-        String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
-                                                                       path,
-                                                                       querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Document>(new QueryIterable<Document>(this,
-                                                                      request,
-                                                                      ReadType.Query,
-                                                                      Document.class));
+        
+        if(Utils.isDatabaseLink(databaseOrDocumentCollectionLink)) {
+                return new FeedResponse<Document>(new QueryIterable<Document>(this,
+                        databaseOrDocumentCollectionLink,
+                        querySpec,
+                        options,
+                        partitionKey,
+                        ReadType.Query,
+                        Document.class));
+        }
+        else {
+            String path = Utils.joinPath(databaseOrDocumentCollectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+            Map<String, String> requestHeaders = this.getFeedHeaders(options);
+            DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
+                                                                           path,
+                                                                           querySpec,
+                                                                           this.queryCompatibilityMode,
+                                                                           requestHeaders);
+            
+            return new FeedResponse<Document>(new QueryIterable<Document>(this,
+                    request,
+                    ReadType.Query,
+                    Document.class));
+        }
     }
 
     /**
@@ -2362,7 +2459,7 @@ public final class DocumentClient {
         return headers;
     }
 
-    private Map<String, String> getFeedHeaders(FeedOptions options) {
+    protected Map<String, String> getFeedHeaders(FeedOptions options) {
         if (options == null) return null;
 
         Map<String, String> headers = new HashMap<String, String>();
@@ -2440,7 +2537,7 @@ public final class DocumentClient {
         if (!StringUtils.isEmpty(resource.getId())) {
             if (resource.getId().indexOf('/') != -1 || resource.getId().indexOf('\\') != -1 ||
                     resource.getId().indexOf('?') != -1 || resource.getId().indexOf('#') != -1) {
-                throw new IllegalArgumentException("Id contains illagel chars.");
+                throw new IllegalArgumentException("Id contains illegal chars.");
             }
 
             if (resource.getId().endsWith(" ")) {
