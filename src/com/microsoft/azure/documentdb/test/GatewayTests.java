@@ -4,9 +4,17 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
@@ -38,6 +46,7 @@ import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.HashIndex;
+import com.microsoft.azure.documentdb.HashPartitionResolver;
 import com.microsoft.azure.documentdb.IncludedPath;
 import com.microsoft.azure.documentdb.Index;
 import com.microsoft.azure.documentdb.IndexKind;
@@ -49,7 +58,9 @@ import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.Permission;
 import com.microsoft.azure.documentdb.PermissionMode;
 import com.microsoft.azure.documentdb.QueryIterable;
+import com.microsoft.azure.documentdb.Range;
 import com.microsoft.azure.documentdb.RangeIndex;
+import com.microsoft.azure.documentdb.RangePartitionResolver;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 import com.microsoft.azure.documentdb.SpatialIndex;
@@ -152,12 +163,26 @@ public final class GatewayTests {
         };
 
         for (String id : allDatabaseIds) {
-            Database database = client.queryDatabases(
-                    new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                            new SqlParameterCollection(new SqlParameter("@id", id))),
-                    null).getQueryIterable().iterator().next();
-            if (database != null) {
-                client.deleteDatabase(getDatabaseLink(database, true), null);
+            try {
+                Database database = client.queryDatabases(
+                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                                new SqlParameterCollection(new SqlParameter("@id", id))),
+                        null).getQueryIterable().iterator().next();
+                if (database != null) {
+                    client.deleteDatabase(getDatabaseLink(database, true), null);
+                }
+            }
+            catch(IllegalStateException illegalStateException) {
+                Throwable causeException = illegalStateException.getCause();
+                
+                // The above code for querying databases has started throwing IOExceptions and causing the Java tests to fail once in a while
+                // Capturing the inner stack trace here so that we have this info when it fails next time and analyze it
+                // If that is a retryable error, we will add retries here but need to find out the cause first
+                
+                if(causeException instanceof IOException) {
+                    System.err.println("Detailed message for the exception thrown : " + causeException.toString());
+                }
+                throw illegalStateException;
             }
         }
     }
@@ -856,7 +881,7 @@ public final class GatewayTests {
         Document documentDefinition = new Document(
                 "{" +
                         "  'name': 'sample document'," +
-                        "  'foo': 'bar ä½ å¥½'," +  // foo contains some UTF-8 characters.
+                        "  'foo': 'bar Ã¤Â½Â Ã¥Â¥Â½'," +  // foo contains some UTF-8 characters.
                         "  'key': 'value'" +
                 "}");
 
@@ -2864,7 +2889,7 @@ public final class GatewayTests {
                     new Document("{ 'id': 'id_with_illegal/_chars/', 'key': 'value' }"), null, false).getResource();
             Assert.fail("An exception is expected.");
         } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+            Assert.assertEquals("Id contains illegal chars.", e.getMessage());
         }
         // Id shouldn't contain '\'.
         try {
@@ -2873,7 +2898,7 @@ public final class GatewayTests {
                     new Document("{ 'id': 'id_with_illegal\\\\_chars', 'key': 'value' }"), null, false).getResource();
             Assert.fail("An exception is expected.");
         } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+            Assert.assertEquals("Id contains illegal chars.", e.getMessage());
         }
         // Id shouldn't contain '?'.
         try {
@@ -2882,7 +2907,7 @@ public final class GatewayTests {
                     new Document("{ 'id': 'id_with_illegal?_?chars', 'key': 'value' }"), null, false).getResource();
             Assert.fail("An exception is expected.");
         } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+            Assert.assertEquals("Id contains illegal chars.", e.getMessage());
         }
         // Id shouldn't contain '#'.
         try {
@@ -2891,7 +2916,7 @@ public final class GatewayTests {
                     new Document("{ 'id': 'id_with_illegal#_chars', 'key': 'value' }"), null, false).getResource();
             Assert.fail("An exception is expected.");
         } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Id contains illagel chars.", e.getMessage());
+            Assert.assertEquals("Id contains illegal chars.", e.getMessage());
         }
         // Id can begin with a space.
         client.createDocument(
@@ -2953,7 +2978,7 @@ public final class GatewayTests {
 
         // Unicode chars in Hindi for Id which translates to: "Hindi is one of the main  languages of India"
         DocumentCollection collectionDefinition1 = new DocumentCollection();
-        collectionDefinition1.setId("हिन्दी भारत के मुख्य भाषाओं में से एक है");
+        collectionDefinition1.setId("à¤¹à¤¿à¤¨à¥�à¤¦à¥€ à¤­à¤¾à¤°à¤¤ à¤•à¥‡ à¤®à¥�à¤–à¥�à¤¯ à¤­à¤¾à¤·à¤¾à¤“à¤‚ à¤®à¥‡à¤‚ à¤¸à¥‡ à¤�à¤• à¤¹à¥ˆ");
 
         // Special chars for Id
         DocumentCollection collectionDefinition2 = new DocumentCollection();
@@ -3012,7 +3037,571 @@ public final class GatewayTests {
             Assert.assertEquals(replacedDocument.getString("key"), documentFromRead.getString("key"));
         }		
     }
+    
+    @Test
+    public void testPartitioning() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
 
+        // Create bunch of collections participating in partitioning
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        
+        collectionDefinition.setId("coll_0");
+        DocumentCollection collection0 = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        
+        collectionDefinition.setId("coll_1");
+        DocumentCollection collection1 = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        
+        collectionDefinition.setId("coll_2");
+        DocumentCollection collection2 = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        
+        // Iterator of ID based collection links
+        ArrayList<String> collectionLinks = new ArrayList<String>();
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collection0, true));
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collection1, true));
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collection2, true));
+        
+        // Instantiate PartitionResolver to be used for partitioning 
+        TestPartitionResolver partitionResolver = new TestPartitionResolver(collectionLinks);
+        
+        // Register the test database with partitionResolver created above
+        client.registerPartitionResolver(this.getDatabaseLink(this.databaseForTest, true), partitionResolver);
+        
+        // Create document definition used to create documents
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'id': '0'," +
+                        "  'name': 'sample document'," +
+                        "  'key': 'value'" + 
+                "}");
+        
+        documentDefinition.setId("0");
+        client.createDocument(this.getDatabaseLink(this.databaseForTest, true),
+                documentDefinition,
+                null,
+                false).getResource();
+        
+        // Read the documents in collection0 and verify that the count is 1 now
+        List<Document> list = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, collection0, true), null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Verify that it contains the document with Id 0
+        Assert.assertEquals("0", list.get(0).getId());
+        
+        documentDefinition.setId("1");
+        client.createDocument(this.getDatabaseLink(this.databaseForTest, true),
+                documentDefinition,
+                null,
+                false).getResource();
+        
+        // Read the documents in collection1 and verify that the count is 1 now
+        list = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, collection1, true), null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Verify that it contains the document with Id 1
+        Assert.assertEquals("1", list.get(0).getId());
+        
+        documentDefinition.setId("2");
+        client.createDocument(this.getDatabaseLink(this.databaseForTest, true),
+                documentDefinition,
+                null,
+                false).getResource();
+         
+        // Read the documents in collection2 and verify that the count is 1 now
+        list = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, collection2, true), null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Verify that it contains the document with Id 2
+        Assert.assertEquals("2", list.get(0).getId());
+        
+        // Updating the value of "key" property to test UpsertDocument(replace scenario)
+        documentDefinition.setId("0");
+        documentDefinition.set("key", "new value");
+        
+        client.upsertDocument(this.getDatabaseLink(this.databaseForTest, true),
+                documentDefinition,
+                null,
+                false).getResource();
+         
+        // Read the documents in collection0 and verify that the count is still 1
+        list = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, collection0, true), null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Verify that it contains the document with new key value
+        Assert.assertEquals(documentDefinition.getString("key"), list.get(0).getString("key"));
+        
+        // Query documents in all collections(since no partition key specified)
+        list = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r WHERE r.id='0'",
+                null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Updating the value of id property to test UpsertDocument(create scenario)
+        documentDefinition.setId("4");
+        
+        client.upsertDocument(this.getDatabaseLink(this.databaseForTest, true),
+                documentDefinition,
+                null,
+                false).getResource();
+         
+        // Read the documents in collection1 and verify that the count is 2 now
+        list = client.readDocuments(this.getDocumentCollectionLink(this.databaseForTest, collection1, true), null).getQueryIterable().toList();
+        Assert.assertEquals(2, list.size());
+        
+        // Query documents in all collections(since no partition key specified)
+        list = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", documentDefinition.getId()))),
+                null).getQueryIterable().toList();
+        Assert.assertEquals(1, list.size());
+        
+        // Query documents in collection(with partition key of "4" specified) which resolves to collection1
+        list = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r",
+                null, documentDefinition.getId()).getQueryIterable().toList();
+        Assert.assertEquals(2, list.size());
+        
+        // Query documents in collection(with partition key "5" specified) which resolves to collection2 but non existent document in that collection
+        list = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", documentDefinition.getId()))),
+                null, "5").getQueryIterable().toList();
+        Assert.assertEquals(0, list.size());
+    }
+    
+    @Test
+    public void testPartitionPaging() throws DocumentClientException {
+        DocumentClient client = new DocumentClient(HOST,
+                MASTER_KEY,
+                ConnectionPolicy.GetDefault(),
+                ConsistencyLevel.Session);
+
+        // Create bunch of collections participating in partitioning
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        
+        collectionDefinition.setId("coll_0");
+        DocumentCollection collection0 = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        
+        collectionDefinition.setId("coll_1");
+        DocumentCollection collection1 = client.createCollection(this.getDatabaseLink(this.databaseForTest, true),
+                collectionDefinition,
+                null).getResource();
+        
+        // Iterator of ID based collection links
+        ArrayList<String> collectionLinks = new ArrayList<String>();
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collection0, true));
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collection1, true));
+        
+        // Instantiate PartitionResolver to be used for partitioning 
+        TestPartitionResolver partitionResolver = new TestPartitionResolver(collectionLinks);
+        
+        // Register the test database with partitionResolver created above
+        client.registerPartitionResolver(this.getDatabaseLink(this.databaseForTest, true), partitionResolver);
+        
+        // Create document definition used to create documents
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'id': '0'," +
+                        "  'name': 'sample document'," +
+                        "  'key': 'value'" + 
+                "}");
+        
+        // Create 10 documents each with a different id starting from 0 to 9
+        for(int i=0; i<10; i++) {
+            documentDefinition.setId(Integer.toString(i));
+            try {
+                client.createDocument(this.getDatabaseLink(this.databaseForTest, true),
+                        documentDefinition,
+                        null,
+                        false).getResource();    
+                Thread.sleep(1500);
+            } catch (InterruptedException ie) {
+                System.out.println(ie.getMessage());
+            }
+        }
+        
+        // Query the documents to ensure that you get the correct count(no paging)
+        List<Document> list = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r WHERE r.id < '7'",
+                null).getQueryIterable().toList();
+        
+        Assert.assertEquals(7, list.size());
+        
+        // Setting PageSize to restrict the max number of documents returned
+        FeedOptions feedOptions = new FeedOptions();
+        feedOptions.setPageSize(3);
+        
+        QueryIterable<Document> query = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r WHERE r.id < '7'",
+                feedOptions).getQueryIterable();
+
+        // Query again and use the hasNext and next APIs to count the number of documents(with paging)
+        int docCount = 0;
+        while(query.iterator().hasNext()) {
+            if(query.iterator().next() != null)
+                docCount++;
+        }
+        
+        Assert.assertEquals(7, docCount);
+        
+        // Query again to test fetchNextBlock API to ensure that it returns the correct number of documents everytime it's called
+        query = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r WHERE r.id < '7'",
+                feedOptions).getQueryIterable();
+        
+        // Documents with id 0, 2, 4(in collection0)
+        Assert.assertEquals(3, query.fetchNextBlock().size());
+        // Documents with id 6(in collection0)
+        Assert.assertEquals(1, query.fetchNextBlock().size());
+        // Documents with id 1, 3, 5(in collection1)
+        Assert.assertEquals(3, query.fetchNextBlock().size());
+        // No more documents
+        Assert.assertNull(query.fetchNextBlock());
+        
+        // Set PageSzie to -1 to lift the limit on max documents returned by the query
+        feedOptions.setPageSize(-1);
+        // Query again to test fetchNextBlock API to ensure that it returns the correct number of documents from each collection
+        query = client.queryDocuments(this.getDatabaseLink(this.databaseForTest, true),
+                "SELECT * FROM root r WHERE r.id < '7'",
+                feedOptions).getQueryIterable();
+        
+        // Documents with id 0, 2, 4, 6(all docs in collection0 adhering to query condition)
+        Assert.assertEquals(4, query.fetchNextBlock().size());
+        // Documents with id 1, 3, 5(all docs in collection1 adhering to query condition)
+        Assert.assertEquals(3, query.fetchNextBlock().size());
+        // No more documents
+        Assert.assertNull(query.fetchNextBlock());
+    }
+    
+    @Test
+    public void testHashPartitionResolver() {
+        ArrayList<String> collectionLinks = new ArrayList<String>();
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        
+        // Create collectionLinks for the hash partition resolver
+        collectionDefinition.setId("coll_0");
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collectionDefinition, true));
+        
+        collectionDefinition.setId("coll_1");
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collectionDefinition, true));
+        
+        // Instantiating PartitionKeyExtractor which will be used to get the partition key
+        // (Id in this case, which is of type String) from the document
+        TestIdPartitionKeyExtractor testIdPartitionKeyExtractor = new TestIdPartitionKeyExtractor();
+        
+        // Instantiate HashPartitionResolver to be used for partitioning 
+        HashPartitionResolver hashPartitionResolver = new HashPartitionResolver(testIdPartitionKeyExtractor, collectionLinks);
+        
+        // Create document definition used to create documents
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'id': '0'," +
+                        "  'name': 'sample document'," +
+                        "  'val': 10" + 
+                "}");
+        
+        documentDefinition.setId("2");
+        // Get the collection link in which this document will be created
+        String createCollectionLink = hashPartitionResolver.resolveForCreate(documentDefinition);
+        
+        // Get the collection links in which this document is present
+        Iterable<String> readCollectionLinks = hashPartitionResolver.resolveForRead(documentDefinition.getId());
+        
+        // This document can be present only in one collection in which it was created
+        ArrayList<String> readCollections = new ArrayList<String>();
+        for(String link : readCollectionLinks) {
+            readCollections.add(link);
+        }
+        
+        Assert.assertEquals(1, readCollections.size());
+        Assert.assertEquals(createCollectionLink, readCollections.get(0));
+    }
+    
+    @Test
+    public void testConsistentRing() {
+        // Sample dataset to test the distribution of documents in the ring 
+        final int TotalDocumentsCount = 10000;
+        final int TotalCollectionsCount = 10;
+        final int AvgDocumentCountPerCollection = TotalDocumentsCount/TotalCollectionsCount;
+        
+        // Acceptable deviation of document count in each collection
+        final int acceptableDeviationinPercent = 10;
+        final int minExpectedDocumentCountPerCollection = (int) ((100.0 - acceptableDeviationinPercent)/100 * AvgDocumentCountPerCollection);
+        final int maxExpectedDocumentCountPerCollection = (int) ((100.0 + acceptableDeviationinPercent)/100 * AvgDocumentCountPerCollection);
+        
+        ArrayList<String> collectionLinks = new ArrayList<String>();
+        Map<String, Integer> hashMap = new HashMap<String, Integer>();
+        DocumentCollection coll = new DocumentCollection();
+        String collLink = StringUtils.EMPTY;
+        
+        // Populate the collections links for constructing the ring and initialize the hashMap
+        for(int i=0; i<TotalCollectionsCount; i++) {
+            coll.setId("coll" + i);
+            collLink = this.getDocumentCollectionLink(this.databaseForTest, coll, true);
+            collectionLinks.add(collLink);
+            hashMap.put(collLink, 0);
+        }
+        
+        // Instantiating PartitionKeyExtractor which will be used to get the partition key
+        // (Id in this case) from the document
+        TestIdPartitionKeyExtractor testIdPartitionKeyExtractor = new TestIdPartitionKeyExtractor();
+        
+        // Instantiate HashPartitionResolver to be used for partitioning 
+        HashPartitionResolver hashPartitionResolver = new HashPartitionResolver(testIdPartitionKeyExtractor, collectionLinks);
+        
+        // Create document definition used to create documents
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'id': '0'," +
+                        "  'name': 'sample document'," +
+                        "  'key': 'value'" + 
+                "}");
+        
+        // Create documents each with a different id and increment the count of documents 
+        // in which the document will be created based on the hashing algorithm
+        for(int i=0; i<TotalDocumentsCount; i++) {
+            documentDefinition.setId(Integer.toString(i));
+            collLink = hashPartitionResolver.resolveForCreate(documentDefinition);
+            hashMap.put(collLink, hashMap.get(collLink)+1);
+        }
+        
+        // Validates that the distribution of documents is uniform across the collections
+        for(String collectionLink : collectionLinks) {
+            this.validateCollectionDistribution(collectionLink, minExpectedDocumentCountPerCollection, maxExpectedDocumentCountPerCollection, hashMap);
+        }
+        
+        // Displaying these values as output for this test
+        System.out.print("minExpectedDocumentCountPerCollection: " + minExpectedDocumentCountPerCollection);
+        System.out.println();
+        System.out.print("maxExpectedDocumentCountPerCollection: " + maxExpectedDocumentCountPerCollection);
+        System.out.println();
+        System.out.print("AvgDocumentCountPerCollection: " + AvgDocumentCountPerCollection);
+    }
+    
+    private void validateCollectionDistribution(String collectionLink, int minExpectedDocumentCountPerCollection, int maxExpectedDocumentCountPerCollection, Map<String, Integer> hashMap) {
+        // Displaying these values as output for this test
+        System.out.print("Collection: " + collectionLink + " Size: " + hashMap.get(collectionLink));
+        System.out.println();
+        
+        // minExpectedDocumentCountPerCollection represents the lower end of documents count that is expected
+        Assert.assertTrue(hashMap.get(collectionLink) >= minExpectedDocumentCountPerCollection);
+        // maxExpectedDocumentCountPerCollection represents the higher end of documents count that is expected
+        Assert.assertTrue(hashMap.get(collectionLink) <= maxExpectedDocumentCountPerCollection);
+    }
+    
+    @Test
+    public void testMurmurHash() throws UnsupportedEncodingException {
+        Method method = null;
+        
+        // MurmurHash is a package-private class with a private computeHash method and hence using reflection to 
+        // call the method and unit testing it
+        try {
+            Class<?> c = Class.forName("com.microsoft.azure.documentdb.MurmurHash");
+            method = c.getDeclaredMethod("computeHash", byte[].class, Integer.TYPE, Integer.TYPE);
+            method.setAccessible(true);
+        } catch (ClassNotFoundException | NoSuchMethodException | SecurityException e) {
+            e.printStackTrace();
+        }
+        
+        try {
+            // The following tests are the unit tests for ensuring that MurmurHash
+            // returns the same hash across SDKs since we have the same set of tests
+            // in .NET and Nodejs checking for the same hash value
+            String str = "afdgdd";
+            byte[] strBytes = str.getBytes("UTF-8");
+            int strHashValue = (int)method.invoke(null, strBytes, strBytes.length, 0);
+        
+            // Java doesn't has unsigned types and since we need to compare the unsigned 32 bit
+            // representation of the returned hash, up-casting the returned value to long 
+            // and chopping of everything but the last 32 bits and then comparing the value
+            Assert.assertEquals(1099701186L, (long)strHashValue & 0x0FFFFFFFFL);
+            
+            double num = 374;
+            // Java's default "Endianess" is BigEndian but the MurmurHash we are using 
+            // across all SDKs assumes the byte order to be LittleEndian, so changing the ByteOrder
+            // so that we can compare the hashes as is
+            byte[] numBytes = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(num).array();
+            int numHashValue = (int)method.invoke(null, numBytes, numBytes.length, 0);
+            
+            Assert.assertEquals(3717946798L, (long)numHashValue & 0x0FFFFFFFFL);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+        
+        // The following test strings are from the indexing codebase which tests the hashes(in form of byte[]) returned from MurmurHash
+        this.validate("", 0x1B873593, new byte[]{(byte) 0xEE, (byte) 0xA8, (byte) 0xA2, (byte) 0x67}, method);
+        this.validate("1", 0xE82562E4, new byte[]{(byte) 0xD0, (byte) 0x92, (byte) 0x24, (byte) 0xED}, method);
+        this.validate("00", 0xB4C39035, new byte[]{(byte) 0xFA, (byte) 0x09, (byte) 0x64, (byte) 0x1B}, method);
+        this.validate("eyetooth", 0x8161BD86, new byte[]{(byte) 0x98, (byte) 0x62, (byte) 0x1C, (byte) 0x6F}, method);
+        this.validate("acid", 0x4DFFEAD7, new byte[]{(byte) 0x36, (byte) 0x92, (byte) 0xC0, (byte) 0xB9}, method);
+        this.validate("elevation", 0x1A9E1828, new byte[]{(byte) 0xA9, (byte) 0xB6, (byte) 0x40, (byte) 0xDF}, method);
+        this.validate("dent", 0xE73C4579, new byte[]{(byte) 0xD4, (byte) 0x59, (byte) 0xE1, (byte) 0xD3}, method);
+        this.validate("homeland", 0xB3DA72CA, new byte[]{(byte) 0x06, (byte) 0x4D, (byte) 0x72, (byte) 0xBB}, method);
+        this.validate("glamor", 0x8078A01B, new byte[]{(byte) 0x89, (byte) 0x89, (byte) 0xA2, (byte) 0xA7}, method);
+        this.validate("flags", 0x4D16CD6C, new byte[]{(byte) 0x52, (byte) 0x87, (byte) 0x66, (byte) 0x02}, method);
+        this.validate("democracy", 0x19B4FABD, new byte[]{(byte) 0xE4, (byte) 0x55, (byte) 0xD6, (byte) 0xB0}, method);
+        this.validate("bumble", 0xE653280E, new byte[]{(byte) 0xFE, (byte) 0xD7, (byte) 0xC3, (byte) 0x0C}, method);
+        this.validate("catch", 0xB2F1555F, new byte[]{(byte) 0x98, (byte) 0x4B, (byte) 0xB6, (byte) 0xCD}, method);
+        this.validate("omnomnomnivore", 0x7F8F82B0, new byte[]{(byte) 0x38, (byte) 0xC4, (byte) 0xCD, (byte) 0xFF}, method);
+        this.validate("The quick brown fox jumps over the lazy dog", 0x4C2DB001, new byte[]{(byte) 0x6D, (byte) 0xAB, (byte) 0x8D, (byte) 0xC9}, method);
+    }
+    
+    private void validate(String str, int seed, byte[] expectedHashBytes, Method method) throws UnsupportedEncodingException {
+        byte[] bytes = str.getBytes("UTF-8");
+        
+        try {
+            int hashValue = (int)method.invoke(null, bytes, bytes.length, seed);
+            
+            byte[] actualHashBytes = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(hashValue).array();
+            Assert.assertTrue(Arrays.equals(expectedHashBytes, actualHashBytes));
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    @Test
+    public void testGetBytes() throws UnsupportedEncodingException {
+        Method method = null;
+        
+        // ConsistentHashRing is a package-private class with a private getBytes method and hence using reflection to 
+        // call the method and unit testing it
+        try {
+            Class<?> c = Class.forName("com.microsoft.azure.documentdb.ConsistentHashRing");    
+            method = c.getDeclaredMethod("getBytes", Object.class);
+            method.setAccessible(true);
+        } catch (ClassNotFoundException | NoSuchMethodException | SecurityException e) {
+            e.printStackTrace();
+        }
+        
+        try {
+            byte[] actualBytes = (byte[])method.invoke(null, "documentdb");
+            byte[] expectedBytes = new byte[]{(byte) 0x64, (byte) 0x6F, (byte) 0x63, (byte) 0x75, (byte) 0x6D, (byte) 0x65, (byte) 0x6E, (byte) 0x74, (byte) 0x64, (byte) 0x62};
+            Assert.assertTrue(Arrays.equals(expectedBytes, actualBytes));
+            
+            actualBytes = (byte[])method.invoke(null, "azure");
+            expectedBytes = new byte[]{(byte) 0x61, (byte) 0x7A, (byte) 0x75, (byte) 0x72, (byte) 0x65};
+            Assert.assertTrue(Arrays.equals(expectedBytes, actualBytes));
+            
+            actualBytes = (byte[])method.invoke(null, "json");
+            expectedBytes = new byte[]{(byte) 0x6A, (byte) 0x73, (byte) 0x6F, (byte) 0x6E};
+            Assert.assertTrue(Arrays.equals(expectedBytes, actualBytes));
+            
+            actualBytes = (byte[])method.invoke(null, "nosql");
+            expectedBytes = new byte[]{(byte) 0x6E, (byte) 0x6F, (byte) 0x73, (byte) 0x71, (byte) 0x6C};
+            Assert.assertTrue(Arrays.equals(expectedBytes, actualBytes));
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
+    
+    @Test
+    public void testRangePartitionResolver() {
+        ArrayList<String> collectionLinks = new ArrayList<String>();
+        DocumentCollection collectionDefinition = new DocumentCollection();
+        
+        collectionDefinition.setId("coll_0");
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collectionDefinition, true));
+
+        collectionDefinition.setId("coll_1");
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collectionDefinition, true));
+
+        collectionDefinition.setId("coll_2");
+        collectionLinks.add(this.getDocumentCollectionLink(this.databaseForTest, collectionDefinition, true));
+        
+        // Instantiating PartitionKeyExtractor which will be used to get the partition key
+        // (Val in this case) from the document
+        TestValPartitionKeyExtractor testValPartitionKeyExtractor = new TestValPartitionKeyExtractor();
+        
+        // Creating a Map of Ranges with the associated collection to be used in Range partitioning
+        Map<Range<Integer>, String> partitionMap = new HashMap<Range<Integer>, String>();
+        partitionMap.put(new Range<Integer>(0,400), collectionLinks.get(0));
+        partitionMap.put(new Range<Integer>(401,800), collectionLinks.get(1));
+        partitionMap.put(new Range<Integer>(501,1200), collectionLinks.get(2));
+        
+        // Instantiate RangePartitionResolver to be used for partitioning
+        // The last parameter Integer.class represents the type of the partition key
+        RangePartitionResolver<Integer> rangePartitionResolver = new RangePartitionResolver<Integer>(testValPartitionKeyExtractor, partitionMap);
+        
+        // Create document definition used to create documents
+        Document documentDefinition = new Document(
+                "{" + 
+                        "  'id': '0'," +
+                        "  'name': 'sample document'," +
+                        "  'val': 0 " + 
+                "}");
+        
+        // Create document by setting the val property
+        documentDefinition.set("val", 400);
+        
+        // Verify that partition key 400 will fall under collection associated with range (0,400)
+        String collectionLink = rangePartitionResolver.resolveForCreate(documentDefinition);
+        Assert.assertEquals(collectionLinks.get(0), collectionLink);
+        
+        Iterable<String> readCollectionLinks = rangePartitionResolver.resolveForRead(600);
+        ArrayList<String> list = new ArrayList<String>();
+        for(String collLink : readCollectionLinks)
+            list.add(collLink);
+        
+        // Verify that partition key 600 will fall under collection associated with range (401,800) and (401,1200)
+        Assert.assertEquals(2, list.size());
+        Assert.assertTrue(list.contains(collectionLinks.get(1)));
+        Assert.assertTrue(list.contains(collectionLinks.get(2)));
+        
+        readCollectionLinks = rangePartitionResolver.resolveForRead(new Range<Integer>(250, 500));
+        list = new ArrayList<String>();
+        for(String collLink : readCollectionLinks)
+            list.add(collLink);
+        
+        // Verify that partition key range (250, 500) will fall under collection associated with range (0,400) and (401,800)
+        Assert.assertEquals(2, list.size());
+        Assert.assertTrue(list.contains(collectionLinks.get(0)));
+        Assert.assertTrue(list.contains(collectionLinks.get(1)));
+        
+        ArrayList<Integer> partitionKeyList = new ArrayList<Integer>();
+        partitionKeyList.add(50);
+        partitionKeyList.add(100);
+        partitionKeyList.add(600);
+        partitionKeyList.add(1000);
+        
+        readCollectionLinks = rangePartitionResolver.resolveForRead(partitionKeyList);
+        list = new ArrayList<String>();
+        for(String collLink : readCollectionLinks)
+            list.add(collLink);
+        
+        // Verify that partition key values 50,100,600,1000 will fall under collection associated with range (0,400), (401,800) and (501, 1200)
+        Assert.assertEquals(3, list.size());
+        Assert.assertTrue(list.contains(collectionLinks.get(0)));
+        Assert.assertTrue(list.contains(collectionLinks.get(1)));
+        Assert.assertTrue(list.contains(collectionLinks.get(2)));
+        
+        partitionKeyList = new ArrayList<Integer>();
+        partitionKeyList.add(100);
+        partitionKeyList.add(null);
+        
+        readCollectionLinks = rangePartitionResolver.resolveForRead(partitionKeyList);
+        list = new ArrayList<String>();
+        for(String collLink : readCollectionLinks)
+            list.add(collLink);
+        
+        // Since one of the partition keys is null, we return the complete collection set
+        Assert.assertEquals(3, list.size());
+        Assert.assertTrue(list.contains(collectionLinks.get(0)));
+        Assert.assertTrue(list.contains(collectionLinks.get(1)));
+        Assert.assertTrue(list.contains(collectionLinks.get(2)));
+    }
+    
     private String getDatabaseLink(Database database, boolean isNameBased)
     {
         if(isNameBased) {
