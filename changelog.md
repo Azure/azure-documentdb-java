@@ -1,3 +1,7 @@
+## Changes in 1.5.1 : ##
+
+- Fixed a bug in HashPartitionResolver to generate hash values in little-endian order to be consistent with other SDKs.
+
 ## Changes in 1.5.0 : ##
 
 - Added Client-side sharding framework to the SDK. Implemented HashPartionResolver and RangePartitionResolver classes.

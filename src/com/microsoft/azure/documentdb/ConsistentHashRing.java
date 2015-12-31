@@ -24,11 +24,16 @@ SOFTWARE.
 package com.microsoft.azure.documentdb;
 
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
- * The ConsistentHashRing class internally implements a consistent hash ring using the hash function specified
+ * The ConsistentHashRing class implements a consistent hash ring using the hash function specified
  */
 final class ConsistentHashRing {
     private HashGenerator hashGenerator;
@@ -36,14 +41,14 @@ final class ConsistentHashRing {
     private ArrayList<String> collectionLinks = new ArrayList<String>();
     
     /**
-     * ConsistentHashRing constructor taking in the collection links, total number of partitions 
+     * ConsistentHashRing constructor taking in the collection links, number of partitions per node 
      * and hash generator to initialize the ring.
      * 
      * @param collectionLinks the links of collections participating in partitioning.
-     * @param totalPartitions the total number of partitions.
+     * @param partitionsPerNode number of partitions per node.
      * @param hashGenerator the hash generator to be used for hashing algorithm.
      */
-    public ConsistentHashRing(Iterable<String> collectionLinks, int totalPartitions, HashGenerator hashGenerator) {
+    public ConsistentHashRing(Iterable<String> collectionLinks, int partitionsPerNode, HashGenerator hashGenerator) {
         if(collectionLinks == null) {
             throw new IllegalArgumentException("collectionLinks");
         }
@@ -52,8 +57,8 @@ final class ConsistentHashRing {
             this.collectionLinks.add(collectionLink);
         }
         
-        if(totalPartitions < this.collectionLinks.size()) {
-            throw new IllegalArgumentException("The total number of partitions must be at least the number of collections.");
+        if(partitionsPerNode <= 0) {
+            throw new IllegalArgumentException("The partitions per node must greater than 0.");
         }
         
         if(hashGenerator == null) {
@@ -61,7 +66,7 @@ final class ConsistentHashRing {
         }
         
         this.hashGenerator = hashGenerator;
-        this.partitions = this.constructPartitions(this.collectionLinks, totalPartitions);
+        this.partitions = this.constructPartitions(this.collectionLinks, partitionsPerNode);
     }
     
     /**
@@ -112,23 +117,18 @@ final class ConsistentHashRing {
      * using the hashing algorithm and then finally sorting the partitions based on the hash value.
      * 
      */
-    private Partition[] constructPartitions(ArrayList<String> collectionLinks, int totalPartitions) {
+    private Partition[] constructPartitions(ArrayList<String> collectionLinks, int partitionsPerNode) {
         int collectionsNodeCount = collectionLinks.size();
-        Partition[] partitions = new Partition[totalPartitions];
-        
-        int partitionsPerNode = totalPartitions/collectionsNodeCount;
-        int extraPartitions = totalPartitions - (partitionsPerNode * collectionsNodeCount);
+        Partition[] partitions = new Partition[partitionsPerNode * collectionsNodeCount];
         
         int index = 0;
         for(String collectionNode : collectionLinks) {
             byte[] hashValue = this.hashGenerator.computeHash(getBytes(collectionNode));
             
-            for(int i=0; i < partitionsPerNode + (extraPartitions > 0 ? 1 : 0); ++i) {
+            for(int i=0; i < partitionsPerNode; ++i) {
                 partitions[index++] = new Partition(hashValue, collectionNode);
                 hashValue = this.hashGenerator.computeHash(hashValue);
             }
-            
-            extraPartitions--;
         }
         
         Arrays.sort(partitions);
@@ -157,5 +157,21 @@ final class ConsistentHashRing {
         }
         
         return partitions.length-1;
-    }   
+    }
+    
+    /**
+     * Gets the serialized version of the consistentRing. Added this helper for the test code.
+     * 
+     */
+    List<Map.Entry<String,Long>> getSerializedPartitionList() {
+        List<Map.Entry<String,Long>> partitionList= new ArrayList<>();
+        
+        for(int i=0; i<this.partitions.length; i++) {
+            ByteBuffer wrapped = ByteBuffer.wrap(partitions[i].getHashValue()).order(ByteOrder.LITTLE_ENDIAN);
+            int num = wrapped.getInt();
+            partitionList.add(new AbstractMap.SimpleEntry<>(partitions[i].getNode(), (long)num & 0x0FFFFFFFFL));
+        }
+         
+        return partitionList;
+    }
 }

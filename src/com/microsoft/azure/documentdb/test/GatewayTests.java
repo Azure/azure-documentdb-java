@@ -9,6 +9,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -3331,74 +3332,92 @@ public final class GatewayTests {
     
     @Test
     public void testConsistentRing() {
-        // Sample dataset to test the distribution of documents in the ring 
-        final int TotalDocumentsCount = 10000;
-        final int TotalCollectionsCount = 10;
-        final int AvgDocumentCountPerCollection = TotalDocumentsCount/TotalCollectionsCount;
-        
-        // Acceptable deviation of document count in each collection
-        final int acceptableDeviationinPercent = 10;
-        final int minExpectedDocumentCountPerCollection = (int) ((100.0 - acceptableDeviationinPercent)/100 * AvgDocumentCountPerCollection);
-        final int maxExpectedDocumentCountPerCollection = (int) ((100.0 + acceptableDeviationinPercent)/100 * AvgDocumentCountPerCollection);
+        final int TotalCollectionsCount = 2;
         
         ArrayList<String> collectionLinks = new ArrayList<String>();
-        Map<String, Integer> hashMap = new HashMap<String, Integer>();
         DocumentCollection coll = new DocumentCollection();
         String collLink = StringUtils.EMPTY;
+        
+        Database databaseDefinition = new Database();
+        databaseDefinition.setId("db");
         
         // Populate the collections links for constructing the ring and initialize the hashMap
         for(int i=0; i<TotalCollectionsCount; i++) {
             coll.setId("coll" + i);
-            collLink = this.getDocumentCollectionLink(this.databaseForTest, coll, true);
+            collLink = this.getDocumentCollectionLink(databaseDefinition, coll, true);
             collectionLinks.add(collLink);
-            hashMap.put(collLink, 0);
         }
+        
+        List<Map.Entry<String,Long>> expectedPartitionList= new ArrayList<>();
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll0",1076200484L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll0",1302652881L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll0",2210251988L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll1",2341558382L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll0",2348251587L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll0",2887945459L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll1",2894403633L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll1",3031617259L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll1",3090861424L));
+        expectedPartitionList.add(new AbstractMap.SimpleEntry<>("dbs/db/colls/coll1",4222475028L));
+        
         
         // Instantiating PartitionKeyExtractor which will be used to get the partition key
         // (Id in this case) from the document
         TestIdPartitionKeyExtractor testIdPartitionKeyExtractor = new TestIdPartitionKeyExtractor();
         
         // Instantiate HashPartitionResolver to be used for partitioning 
-        HashPartitionResolver hashPartitionResolver = new HashPartitionResolver(testIdPartitionKeyExtractor, collectionLinks);
+        HashPartitionResolver hashPartitionResolver = new HashPartitionResolver(testIdPartitionKeyExtractor, collectionLinks, 5);
         
-        // Create document definition used to create documents
-        Document documentDefinition = new Document(
-                "{" + 
-                        "  'id': '0'," +
-                        "  'name': 'sample document'," +
-                        "  'key': 'value'" + 
-                "}");
+        Method method = null;
         
-        // Create documents each with a different id and increment the count of documents 
-        // in which the document will be created based on the hashing algorithm
-        for(int i=0; i<TotalDocumentsCount; i++) {
-            documentDefinition.setId(Integer.toString(i));
-            collLink = hashPartitionResolver.resolveForCreate(documentDefinition);
-            hashMap.put(collLink, hashMap.get(collLink)+1);
+        try {
+            Class<?> c = Class.forName("com.microsoft.azure.documentdb.HashPartitionResolver");
+            method = c.getDeclaredMethod("getSerializedPartitionList");
+            method.setAccessible(true);
+        } catch (ClassNotFoundException | NoSuchMethodException | SecurityException e) {
+            e.printStackTrace();
         }
         
-        // Validates that the distribution of documents is uniform across the collections
-        for(String collectionLink : collectionLinks) {
-            this.validateCollectionDistribution(collectionLink, minExpectedDocumentCountPerCollection, maxExpectedDocumentCountPerCollection, hashMap);
+        try {
+            @SuppressWarnings("unchecked")
+            List<Map.Entry<String,Long>> actualPartitionMap = (List<Map.Entry<String,Long>>)method.invoke(hashPartitionResolver);
+            
+            Assert.assertEquals(actualPartitionMap.size(), expectedPartitionList.size());
+            
+            for(int i=0; i < actualPartitionMap.size(); i++) {
+                Assert.assertEquals(actualPartitionMap.get(i).getKey(), expectedPartitionList.get(i).getKey());
+                Assert.assertEquals(actualPartitionMap.get(i).getValue(), expectedPartitionList.get(i).getValue());
+            }
+            
+            
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            e.printStackTrace();
         }
         
-        // Displaying these values as output for this test
-        System.out.print("minExpectedDocumentCountPerCollection: " + minExpectedDocumentCountPerCollection);
-        System.out.println();
-        System.out.print("maxExpectedDocumentCountPerCollection: " + maxExpectedDocumentCountPerCollection);
-        System.out.println();
-        System.out.print("AvgDocumentCountPerCollection: " + AvgDocumentCountPerCollection);
-    }
-    
-    private void validateCollectionDistribution(String collectionLink, int minExpectedDocumentCountPerCollection, int maxExpectedDocumentCountPerCollection, Map<String, Integer> hashMap) {
-        // Displaying these values as output for this test
-        System.out.print("Collection: " + collectionLink + " Size: " + hashMap.get(collectionLink));
-        System.out.println();
+        Iterable<String> readCollectionLink = hashPartitionResolver.resolveForRead("beadledom");
+        ArrayList<String> list = new ArrayList<String>();
+        for(String collectionLink : readCollectionLink)
+            list.add(collectionLink);
         
-        // minExpectedDocumentCountPerCollection represents the lower end of documents count that is expected
-        Assert.assertTrue(hashMap.get(collectionLink) >= minExpectedDocumentCountPerCollection);
-        // maxExpectedDocumentCountPerCollection represents the higher end of documents count that is expected
-        Assert.assertTrue(hashMap.get(collectionLink) <= maxExpectedDocumentCountPerCollection);
+        Assert.assertEquals(1, list.size());
+        
+        coll.setId("coll1");
+        collLink = this.getDocumentCollectionLink(databaseDefinition, coll, true);
+        
+        Assert.assertEquals(collLink, list.get(0));
+        
+        // Querying for a document and verifying that it's in the expected collection
+        readCollectionLink = hashPartitionResolver.resolveForRead("999");
+        list = new ArrayList<String>();
+        for(String collectionLink : readCollectionLink)
+            list.add(collectionLink);
+        
+        Assert.assertEquals(1, list.size());
+        
+        coll.setId("coll0");
+        collLink = this.getDocumentCollectionLink(databaseDefinition, coll, true);
+        
+        Assert.assertEquals(collLink, list.get(0));
     }
     
     @Test
@@ -3440,31 +3459,31 @@ public final class GatewayTests {
             e.printStackTrace();
         }
         
-        // The following test strings are from the indexing codebase which tests the hashes(in form of byte[]) returned from MurmurHash
-        this.validate("", 0x1B873593, new byte[]{(byte) 0xEE, (byte) 0xA8, (byte) 0xA2, (byte) 0x67}, method);
-        this.validate("1", 0xE82562E4, new byte[]{(byte) 0xD0, (byte) 0x92, (byte) 0x24, (byte) 0xED}, method);
-        this.validate("00", 0xB4C39035, new byte[]{(byte) 0xFA, (byte) 0x09, (byte) 0x64, (byte) 0x1B}, method);
-        this.validate("eyetooth", 0x8161BD86, new byte[]{(byte) 0x98, (byte) 0x62, (byte) 0x1C, (byte) 0x6F}, method);
-        this.validate("acid", 0x4DFFEAD7, new byte[]{(byte) 0x36, (byte) 0x92, (byte) 0xC0, (byte) 0xB9}, method);
-        this.validate("elevation", 0x1A9E1828, new byte[]{(byte) 0xA9, (byte) 0xB6, (byte) 0x40, (byte) 0xDF}, method);
-        this.validate("dent", 0xE73C4579, new byte[]{(byte) 0xD4, (byte) 0x59, (byte) 0xE1, (byte) 0xD3}, method);
-        this.validate("homeland", 0xB3DA72CA, new byte[]{(byte) 0x06, (byte) 0x4D, (byte) 0x72, (byte) 0xBB}, method);
-        this.validate("glamor", 0x8078A01B, new byte[]{(byte) 0x89, (byte) 0x89, (byte) 0xA2, (byte) 0xA7}, method);
-        this.validate("flags", 0x4D16CD6C, new byte[]{(byte) 0x52, (byte) 0x87, (byte) 0x66, (byte) 0x02}, method);
-        this.validate("democracy", 0x19B4FABD, new byte[]{(byte) 0xE4, (byte) 0x55, (byte) 0xD6, (byte) 0xB0}, method);
-        this.validate("bumble", 0xE653280E, new byte[]{(byte) 0xFE, (byte) 0xD7, (byte) 0xC3, (byte) 0x0C}, method);
-        this.validate("catch", 0xB2F1555F, new byte[]{(byte) 0x98, (byte) 0x4B, (byte) 0xB6, (byte) 0xCD}, method);
-        this.validate("omnomnomnivore", 0x7F8F82B0, new byte[]{(byte) 0x38, (byte) 0xC4, (byte) 0xCD, (byte) 0xFF}, method);
-        this.validate("The quick brown fox jumps over the lazy dog", 0x4C2DB001, new byte[]{(byte) 0x6D, (byte) 0xAB, (byte) 0x8D, (byte) 0xC9}, method);
+        this.validate("", 0x1B873593, new byte[]{(byte) 0x67, (byte) 0xA2, (byte) 0xA8, (byte) 0xEE}, 1738713326L, method);
+        this.validate("1", 0xE82562E4, new byte[]{(byte) 0xED, (byte) 0x24, (byte) 0x92, (byte) 0xD0}, 3978597072L, method);
+        this.validate("00", 0xB4C39035, new byte[]{(byte) 0x1B, (byte) 0x64, (byte) 0x09, (byte) 0xFA}, 459540986L, method);
+        this.validate("eyetooth", 0x8161BD86, new byte[]{(byte) 0x6F, (byte) 0x1C, (byte) 0x62, (byte) 0x98}, 1864131224L, method);
+        this.validate("acid", 0x4DFFEAD7, new byte[]{(byte) 0xB9, (byte) 0xC0, (byte) 0x92, (byte) 0x36}, 3116405302L, method);
+        this.validate("elevation", 0x1A9E1828, new byte[]{(byte) 0xDF, (byte) 0x40, (byte) 0xB6, (byte) 0xA9}, 3745560233L, method);
+        this.validate("dent", 0xE73C4579, new byte[]{(byte) 0xD3, (byte) 0xE1, (byte) 0x59, (byte) 0xD4}, 3554761172L, method);
+        this.validate("homeland", 0xB3DA72CA, new byte[]{(byte) 0xBB, (byte) 0x72, (byte) 0x4D, (byte) 0x06}, 3144830214L, method);
+        this.validate("glamor", 0x8078A01B, new byte[]{(byte) 0xA7, (byte) 0xA2, (byte) 0x89, (byte) 0x89}, 2812447113L, method);
+        this.validate("flags", 0x4D16CD6C, new byte[]{(byte) 0x02, (byte) 0x66, (byte) 0x87, (byte) 0x52}, 40273746L, method);
+        this.validate("democracy", 0x19B4FABD, new byte[]{(byte) 0xB0, (byte) 0xD6, (byte) 0x55, (byte) 0xE4}, 2966836708L, method);
+        this.validate("bumble", 0xE653280E, new byte[]{(byte) 0x0C, (byte) 0xC3, (byte) 0xD7, (byte) 0xFE}, 214161406L, method);
+        this.validate("catch", 0xB2F1555F, new byte[]{(byte) 0xCD, (byte) 0xB6, (byte) 0x4B, (byte) 0x98}, 3451276184L, method);
+        this.validate("omnomnomnivore", 0x7F8F82B0, new byte[]{(byte) 0xFF, (byte) 0xCD, (byte) 0xC4, (byte) 0x38}, 4291675192L, method);
+        this.validate("The quick brown fox jumps over the lazy dog", 0x4C2DB001, new byte[]{(byte) 0xC9, (byte) 0x8D, (byte) 0xAB, (byte) 0x6D}, 3381504877L, method);
     }
     
-    private void validate(String str, int seed, byte[] expectedHashBytes, Method method) throws UnsupportedEncodingException {
+    private void validate(String str, int seed, byte[] expectedHashBytes, long expectedValue, Method method) throws UnsupportedEncodingException {
         byte[] bytes = str.getBytes("UTF-8");
         
         try {
             int hashValue = (int)method.invoke(null, bytes, bytes.length, seed);
+            Assert.assertEquals(expectedValue, (long)hashValue & 0x0FFFFFFFFL);
             
-            byte[] actualHashBytes = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(hashValue).array();
+            byte[] actualHashBytes = ByteBuffer.allocate(4).putInt(hashValue).array();
             Assert.assertTrue(Arrays.equals(expectedHashBytes, actualHashBytes));
         } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             e.printStackTrace();

@@ -37,8 +37,7 @@ public class RangePartitionResolver<T extends Comparable<T>> implements Partitio
     private Map<Range<T>, String> partitionMap;
     
     /**
-     * RangePartitionResolver constructor taking in the PartitionKeyExtractor, a map of Ranges to collection links
-     * with the type of class used as the partition key.
+     * RangePartitionResolver constructor taking in the PartitionKeyExtractor, a map of Ranges to collection links.
      * 
      * @param partitionKeyExtractor an instance of class that implements PartitionKeyExtractor interface.
      * @param partitionMap the map of ranges to collection links.
@@ -69,10 +68,6 @@ public class RangePartitionResolver<T extends Comparable<T>> implements Partitio
           throw new IllegalArgumentException("document");
         }
         
-        if(this.partitionKeyExtractor == null) {
-            throw new UnsupportedOperationException("Unable to extract partition key from document. Ensure that you have provided a valid PartitionKeyExtractor function.");
-        }
-        
         Object partitionKey = this.partitionKeyExtractor.getPartitionKey(document);
         Range<T> containingRange = this.getContainingRange(partitionKey);
         
@@ -92,14 +87,7 @@ public class RangePartitionResolver<T extends Comparable<T>> implements Partitio
      */
     @Override
     public Iterable<String> resolveForRead(Object partitionKey) {
-        Set<Range<T>> intersectingRanges = null;
-        
-        if (partitionKey == null) {
-            intersectingRanges = this.partitionMap.keySet();
-        }
-        else {
-            intersectingRanges = this.getIntersectingRanges(partitionKey);
-        }
+        Set<Range<T>> intersectingRanges = this.getIntersectingRanges(partitionKey);
 
         ArrayList<String> collectionsLinks = new ArrayList<String>();
         for(Range<T> range : intersectingRanges) {
@@ -136,6 +124,10 @@ public class RangePartitionResolver<T extends Comparable<T>> implements Partitio
     private Set<Range<T>> getIntersectingRanges(Object partitionKey) {
         Set<Range<T>> intersectingRanges = new HashSet<Range<T>>();
         Set<Range<T>> partitionKeyRanges = new HashSet<Range<T>>();
+        
+        if (partitionKey == null) {
+            return this.partitionMap.keySet();
+        }
         
         try {
             // Check the type of partitionKey to be Range<T>. In Java the type information is erased at runtime due to type erasure.
