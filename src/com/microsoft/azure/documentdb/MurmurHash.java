@@ -24,6 +24,7 @@ SOFTWARE.
 package com.microsoft.azure.documentdb;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 /**
  *  The MurmurHash3 algorithm was created by Austin Appleby and placed in the public domain.
@@ -46,7 +47,10 @@ final class MurmurHash implements HashGenerator {
         }
         
         int hashValue = computeHash(data, data.length, 0);
-        return ByteBuffer.allocate(4).putInt(hashValue).array();
+        // Java's default "Endianess" is BigEndian but for all other SDKs  
+        // the default is LittleEndian, so changing the ByteOrder to be LittleEndian
+        // here so that we can be consistent across all SDKs.
+        return ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(hashValue).array();
     }
     
     /** Returns the MurmurHash3_x86_32 hash. */

@@ -24,6 +24,8 @@ SOFTWARE.
 package com.microsoft.azure.documentdb;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * HashPartitionResolver implements partitioning based on the value of a hash function, allowing you to evenly 
@@ -105,7 +107,7 @@ public class HashPartitionResolver implements PartitionResolver {
         }
         
         // Initialize the consistent ring to be used for the hashing algorithm by placing the virtual nodes along the ring
-        this.consistentHashRing = new ConsistentHashRing(this.collectionLinks, this.collectionLinks.size() * numberOfVirtualNodesPerCollection, hashGenerator);
+        this.consistentHashRing = new ConsistentHashRing(this.collectionLinks, numberOfVirtualNodesPerCollection, hashGenerator);
     }
     
     /**
@@ -119,10 +121,6 @@ public class HashPartitionResolver implements PartitionResolver {
     public String resolveForCreate(Object document) {
         if (document == null) {
             throw new IllegalArgumentException("document");
-        }
-        
-        if(this.partitionKeyExtractor == null) {
-            throw new IllegalStateException("Unable to extract partition key from document. Ensure that you have provided a valid PartitionKeyExtractor function.");
         }
         
         Object partitionKey = this.partitionKeyExtractor.getPartitionKey(document);
@@ -147,4 +145,13 @@ public class HashPartitionResolver implements PartitionResolver {
         collectionLinks.add(this.consistentHashRing.getCollectionNode(partitionKey));
         return collectionLinks;
     }
+    
+    /**
+     * Gets the serialized version of the consistentRing. Added this helper for the test code.
+     * 
+     */
+    @SuppressWarnings("unused") // used only by test code
+    private List<Map.Entry<String,Long>> getSerializedPartitionList() {
+        return this.consistentHashRing.getSerializedPartitionList();
+    } 
 }
