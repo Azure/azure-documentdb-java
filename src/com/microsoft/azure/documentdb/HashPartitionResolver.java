@@ -130,7 +130,7 @@ public class HashPartitionResolver implements PartitionResolver {
     /**
      * Resolves the collection for reading/querying the documents based on the partition key.
      * 
-     * @param document the document to be read/queried.
+     * @param partitionKey the partition Key to be read/queried.
      * 
      * @return collection Self link(s) or Name based link(s) which should handle the Read operation
      */
