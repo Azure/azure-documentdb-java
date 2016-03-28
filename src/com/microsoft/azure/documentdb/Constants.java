@@ -105,6 +105,18 @@ class Constants {
 
         //Offer resource
         static final String OFFER_TYPE = "offerType";
+        static final String OFFER_VERSION = "offerVersion";
+        static final String OFFER_CONTENT = "content";
+        static final String OFFER_THROUGHPUT = "offerThroughput";
+        static final String OFFER_VERSION_V1 = "V1";
+        static final String OFFER_VERSION_V2 = "V2";
+        static final String OFFER_RESOURCE_ID = "offerResourceId";
+        
+        //PartitionKey
+        static final String PARTITION_KEY = "partitionKey";
+        static final String PARTITION_KEY_PATHS = "paths";
+        static final String PARTITION_KIND = "kind";
+        static final String RESOURCE_PARTITION_KEY = "resourcePartitionKey";
     }
 
     static class ResourceKeys {

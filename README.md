@@ -68,6 +68,7 @@ public class SampleApp {
     // Define an id for your database and collection
     private static final String DATABASE_ID = "TestDB";
     private static final String COLLECTION_ID = "TestCollection";
+    private static final String COLLECTION_ID_PARTITIONED = "TestCollection_Partitioned";
 
     // We'll use Gson for POJO <=> JSON serialization for this sample.
     // Codehaus' Jackson is another great POJO <=> JSON serializer.
@@ -108,7 +109,38 @@ public class SampleApp {
         // Create a new document.
         myDocument = documentClient.createDocument(myCollection.getSelfLink(),
                 myDocument, null, false).getResource();
+                
+		 // The following code Illustrates how to create a partitioned collection and
+		 // use the partition key to access documents.
+		    
+		 // Create a partition key definition that specifies the path to the property
+		 // within a document that is used as the partition key.          
+        PartitionKeyDefinition partitionKeyDef = new PartitionKeyDefinition();
+        ArrayList<String> paths = new ArrayList<String>();
+        paths.add("/id");
+        partitionKeyDef.setPaths(paths);
+        
+        // Create a collection with the partition key definition and set the offer throughput
+        // to 10100 RU per second.
+        DocumentCollection myPartitionedCollection = new DocumentCollection();
+        myPartitionedCollection.setId(COLLECTION_ID_PARTITIONED);
+        myPartitionedCollection.setPartitionKey(partitionKeyDef);
+        		              
+        RequestOptions options = new RequestOptions();
+        options.setOfferThroughput(10100);
+        myPartitionedCollection = documentClient.createCollection(
+        	myDatabase.getSelfLink(), myCollection, options).getResource();
 
+        // Insert a document into the created collection.
+        String document = "{ 'id': 'document1', 'description': 'this is a test document.' }";
+        Document newDocument = new Document(document);
+        newDocument = documentClient.createDocument(myPartitionedCollection.getSelfLink(),
+                newDocument, null, false).getResource();
+                
+		 // Read the created document, specifying the required partition key in RequestOptions.
+        options = new RequestOptions();
+        options.setPartitionKey(new PartitionKey("document1"));
+        newDocument = documentClient.readDocument(newDocument.getSelfLink(), options).getResource();
     }
 }
 ```
@@ -117,7 +149,7 @@ Additional samples are provided in the unit tests.
 
 ##Need Help?
 
-Be sure to check out the [Developer Forums on Stack Overflow](http://stackoverflow.com/questions/tagged/azure-documentdb) if you have trouble with the provided code.
+Be sure to check out the Microsoft Azure [Developer Forums on MSDN](https://social.msdn.microsoft.com/forums/azure/en-US/home?forum=AzureDocumentDB) or the [Developer Forums on Stack Overflow](http://stackoverflow.com/questions/tagged/azure-documentdb) if you have trouble with the provided code.
 
 ##Contribute Code or Provide Feedback
 
@@ -130,4 +162,4 @@ If you encounter any bugs with the library please file an issue in the [Issues](
 * [Azure Developer Center](http://azure.microsoft.com/en-us/develop/java/)
 * [Azure DocumentDB Service](http://azure.microsoft.com/en-us/documentation/services/documentdb/)
 * [Azure DocumentDB Team Blog](http://blogs.msdn.com/b/documentdb/)
-* [JavaDocs](http://azure.github.io/azure-documentdb-java/)
+* [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc)
