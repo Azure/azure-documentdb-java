@@ -1017,7 +1017,7 @@ public final class DocumentClient {
      * Executes a stored procedure by the stored procedure link.
      * 
      * @param storedProcedureLink the stored procedure link.
-     * @options the request options.
+     * @param options the request options.
      * @param procedureParams the array of procedure parameter values.
      * @return the stored procedure response.
      * @throws DocumentClientException the document client exception.

@@ -50,7 +50,7 @@ public class OfferV2 extends Offer {
 	/**
 	 * Sets the offer throughput for this offer.
 	 * 
-	 * @param offergetOofferThroughput
+	 * @param throughput
 	 *            the throughput of this offer.
 	 */
 	public void setOfferThroughput(int throughput) {
