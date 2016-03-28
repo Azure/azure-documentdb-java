@@ -81,7 +81,7 @@ public class RangePartitionResolver<T extends Comparable<T>> implements Partitio
     /**
      * Resolves the collection for reading/querying the documents based on the partition key.
      * 
-     * @param partitionKey the partition key to be read/queried.
+     * @param document the document to be read/queried.
      * 
      * @return collection Self link(s) or Name based link(s) which should handle the Read operation.
      */

@@ -1,3 +1,10 @@
+## Changes in 1.6.0 : ##
+
+	- Added support to set offer throughput for collections created with variable pricing structure.
+	- Added support to create collections with multiple partitions by specifying a partition key definition.
+	- Added support to send partition key in RequestOptions and FeedOptions to specify the scope of the request or the query.
+	- Added support to specify a partition key in the Permission object to scope the permission to a partition. 
+     
 ## Changes in 1.5.1 : ##
 
 - Fixed a bug in HashPartitionResolver to generate hash values in little-endian order to be consistent with other SDKs.
