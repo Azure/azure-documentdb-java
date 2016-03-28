@@ -12,6 +12,7 @@ import org.json.JSONObject;
  * are application resources, they can be authorized using either the master key or resource keys.
  */
 public final class DocumentCollection extends Resource {
+
     /**
      * Initialize a document collection object.
      */
@@ -51,7 +52,7 @@ public final class DocumentCollection extends Resource {
 
         this.indexingPolicy = indexingPolicy;
     }
-    
+
     /**
      * Gets the indexing policy.
      * 
@@ -67,32 +68,6 @@ public final class DocumentCollection extends Resource {
         }
 
         return this.indexingPolicy;
-    }
-
-    /**
-     * Sets the collection's partition key definition.
-     * 
-     * @param partitionKey the partition key definition.
-     */
-    public void setPartitionKey(PartitionKeyDefinition partitionKey) {
-        if (partitionKey == null) {
-            throw new IllegalArgumentException("partitionKey cannot be null.");
-        }
-
-        super.set(Constants.Properties.PARTITION_KEY, partitionKey);
-    }
-
-    /**
-     * Gets the collection's partition key definition.
-     * 
-     * @return the partition key definition.
-     */
-    public PartitionKeyDefinition getPartitionKey() {
-    	if (super.has(Constants.Properties.PARTITION_KEY)) {
-    		return super.getObject(Constants.Properties.PARTITION_KEY, PartitionKeyDefinition.class);
-    	}
-    	
-    	return null;
     }
     
     /**
@@ -152,6 +127,7 @@ public final class DocumentCollection extends Resource {
         if (this.indexingPolicy == null) {
             this.getIndexingPolicy();
         }
+
         this.indexingPolicy.onSave();
         super.set(Constants.Properties.INDEXING_POLICY, this.indexingPolicy);
     }

@@ -4,128 +4,128 @@
 
 package com.microsoft.azure.documentdb;
 
-import java.util.Iterator;
-import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.lang3.StringUtils;
 
 final class SessionContainer {
-	private final ConcurrentHashMap<Long, ConcurrentHashMap<String, Long>> sessionTokens;
-	private final ConcurrentHashMap<String, ConcurrentHashMap<String, Long>> sessionTokensNameBased;
-	private final String hostName;
+    private final ConcurrentHashMap<Long, String> sessionTokens;
+    private final ConcurrentHashMap<String, String> sessionTokensNameBased;
+    private final String hostName;
 
-	public SessionContainer(final String hostName) {
-		this.hostName = hostName;
-		this.sessionTokens = new ConcurrentHashMap<Long, ConcurrentHashMap<String, Long>>();
-		this.sessionTokensNameBased = new ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>();
-	}
+    public SessionContainer(final String hostName) {
+        this.hostName = hostName;
+        this.sessionTokens = new ConcurrentHashMap<Long, String>();
+        this.sessionTokensNameBased = new ConcurrentHashMap<String, String>();
+    }
 
-	public String getHostName() {
-		return this.hostName;
-	}
+    public String getHostName() {
+        return this.hostName;
+    }
 
-	public String resolveSessionToken(final DocumentServiceRequest request) {
-		String result = null;
-		if (!request.getIsNameBased()) {
-			if (!StringUtils.isEmpty(request.getResourceId())) {
-				ResourceId resourceId = ResourceId.parse(request.getResourceId());
-				if (resourceId.getDocumentCollection() != 0) {
-					result = this.getCombinedSessionToken(
-							this.sessionTokens.get(resourceId.getUniqueDocumentCollectionId()));
-				}
-			}
-		} else {
-			String collectionName = Utils.getCollectionName(request.getPath());
-			if (!StringUtils.isEmpty(collectionName)) {
-				result = this.getCombinedSessionToken(this.sessionTokensNameBased.get(collectionName));
-			}
-		}
+    public String resolveSessionToken(final DocumentServiceRequest request) {
+        if(!request.getIsNameBased()) {
+            if(!StringUtils.isEmpty(request.getResourceId())) {
+                ResourceId resourceId = ResourceId.parse(request.getResourceId());
+                if (resourceId.getDocumentCollection() != 0) {// One token per collection.
+                    return this.sessionTokens.get(resourceId.getUniqueDocumentCollectionId());
+                }
+            }
+        }
+        else {
+            String collectionName = getCollectionName(request.getPath());
+            if(!StringUtils.isEmpty(collectionName)) {
+                return this.sessionTokensNameBased.get(collectionName);
+            }
+        }
+        return null;
+    }
 
-		return result;
-	}
+    public void clearToken(final DocumentServiceRequest request, final DocumentServiceResponse response)
+    {
+        String ownerFullName = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_FULL_NAME);
+        String ownerId = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_ID);
 
-	public void clearToken(final DocumentServiceRequest request, final DocumentServiceResponse response) {
-		String ownerFullName = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_FULL_NAME);
-		String ownerId = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_ID);
+        String collectionName = getCollectionName(ownerFullName);
 
-		String collectionName = Utils.getCollectionName(ownerFullName);
+        if (!request.getIsNameBased()) {
+            ownerId = request.getResourceId();
+        }
 
-		if (!request.getIsNameBased()) {
-			ownerId = request.getResourceId();
-		}
+        if (!StringUtils.isEmpty(ownerId)) {
+            ResourceId resourceId = ResourceId.parse(ownerId);
+            if (resourceId.getDocumentCollection() != 0 && !StringUtils.isEmpty(collectionName)) {
+                this.sessionTokens.remove(resourceId.getUniqueDocumentCollectionId());
+                this.sessionTokensNameBased.remove(collectionName);
+            }
+        }
+    }
 
-		if (!StringUtils.isEmpty(ownerId)) {
-			ResourceId resourceId = ResourceId.parse(ownerId);
-			if (resourceId.getDocumentCollection() != 0 && !StringUtils.isEmpty(collectionName)) {
-				this.sessionTokens.remove(resourceId.getUniqueDocumentCollectionId());
-				this.sessionTokensNameBased.remove(collectionName);
-			}
-		}
-	}
+    public void setSessionToken(DocumentServiceRequest request, DocumentServiceResponse response)
+    {
+        String sessionToken = response.getResponseHeaders().get(HttpConstants.HttpHeaders.SESSION_TOKEN);
 
-	public void setSessionToken(DocumentServiceRequest request, DocumentServiceResponse response) {
-		String sessionToken = response.getResponseHeaders().get(HttpConstants.HttpHeaders.SESSION_TOKEN);
+        if (!StringUtils.isEmpty(sessionToken)) {
+            String ownerFullName = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_FULL_NAME);
+            String ownerId = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_ID);
 
-		if (!StringUtils.isEmpty(sessionToken)) {
-			String ownerFullName = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_FULL_NAME);
-			String ownerId = response.getResponseHeaders().get(HttpConstants.HttpHeaders.OWNER_ID);
+            String collectionName = getCollectionName(ownerFullName);
 
-			String collectionName = Utils.getCollectionName(ownerFullName);
+            if (!request.getIsNameBased()) {
+                ownerId = request.getResourceId();
+            }
 
-			if (!request.getIsNameBased()) {
-				ownerId = request.getResourceId();
-			}
+            if (!StringUtils.isEmpty(ownerId)) {
+                ResourceId resourceId = ResourceId.parse(ownerId);
 
-			if (!StringUtils.isEmpty(ownerId)) {
-				ResourceId resourceId = ResourceId.parse(ownerId);
+                if (resourceId.getDocumentCollection() != 0 && !StringUtils.isEmpty(collectionName)) {
+                    long currentTokenValue = !StringUtils.isEmpty(sessionToken) ? Long.parseLong(sessionToken) : 0;
 
-				if (resourceId.getDocumentCollection() != 0 && !StringUtils.isEmpty(collectionName)) {
-					Long uniqueDocumentCollectionId = resourceId.getUniqueDocumentCollectionId();
-					this.sessionTokens.putIfAbsent(uniqueDocumentCollectionId, new ConcurrentHashMap<String, Long>());
-					this.compareAndSetToken(sessionToken, this.sessionTokens.get(uniqueDocumentCollectionId));
+                    String oldToken = this.sessionTokens.get(resourceId.getUniqueDocumentCollectionId());
 
-					this.sessionTokensNameBased.putIfAbsent(collectionName, new ConcurrentHashMap<String, Long>());
-					this.compareAndSetToken(sessionToken, this.sessionTokensNameBased.get(collectionName));
-				}
-			}
-		}
-	}
+                    if (oldToken == null) {
+                        this.sessionTokens.putIfAbsent(resourceId.getUniqueDocumentCollectionId(), sessionToken);
+                    } 
+                    else {
+                        long existingValue = Long.parseLong(oldToken);
+                        if (existingValue < currentTokenValue) {
+                            this.sessionTokens.put(resourceId.getUniqueDocumentCollectionId(), sessionToken);
+                        }
+                    }
 
-	private String getCombinedSessionToken(ConcurrentHashMap<String, Long> tokens) {
-		StringBuilder result = new StringBuilder();
-		if (tokens != null) {
-			for (Iterator<Entry<String, Long>> iterator = tokens.entrySet().iterator(); iterator.hasNext();) {
-				Entry<String, Long> entry = iterator.next();
-				result = result.append(entry.getKey()).append(":").append(entry.getValue());
-				if (iterator.hasNext()) {
-					result = result.append(",");
-				}
-			}
-		}
+                    String oldTokenNameBased = this.sessionTokensNameBased.get(collectionName);
 
-		return result.toString();
-	}
+                    if (oldTokenNameBased == null) {
+                        this.sessionTokensNameBased.putIfAbsent(collectionName, sessionToken);
+                    } 
+                    else {
+                        long existingValue = Long.parseLong(oldTokenNameBased);
+                        if (existingValue < currentTokenValue) {
+                            this.sessionTokensNameBased.put(collectionName, sessionToken);
+                        }
+                    }
+                }
+            }
+        }
+    }        
 
-	private void compareAndSetToken(String newToken, ConcurrentHashMap<String, Long> oldTokens) {
-		if (StringUtils.isNotEmpty(newToken)) {
-			String[] newTokenParts = newToken.split(":");
-			if (newTokenParts.length == 2) {
-				String range = newTokenParts[0];
-				Long newLSN = Long.parseLong(newTokenParts[1]);
-				Boolean success;
-				do {
-				    Long oldLSN = oldTokens.putIfAbsent(range, newLSN);
-				    // If there exists no previous value or if the previous value is greater than 
-				    // the current value, then we're done.
-				    success = (oldLSN == null || newLSN < oldLSN);
-				    if (!success)
-				    {
-				    	// replace the previous value with the current value.
-			            success = oldTokens.replace(range, oldLSN, newLSN);
-				    }
-				} while (!success);
-			}
-		}
-	}
+    private String getCollectionName(String resourceFullName)
+    {   
+        if (resourceFullName != null)
+        {
+            resourceFullName = Utils.trimBeginingAndEndingSlashes(resourceFullName);
+
+            int slashCount=0;
+            for(int i=0; i< resourceFullName.length(); i++)
+            {
+                if(resourceFullName.charAt(i) == '/') {
+                    slashCount++;
+                    if(slashCount == 4) {
+                        return resourceFullName.substring(0, i);
+                    }
+                }
+            }
+        }
+        return resourceFullName;
+    }
 }

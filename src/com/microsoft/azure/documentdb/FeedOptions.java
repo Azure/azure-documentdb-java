@@ -110,44 +110,4 @@ public final class FeedOptions {
     public void setEmitVerboseTracesInQuery(Boolean emitVerboseTracesInQuery) {
         this.emitVerboseTracesInQuery = emitVerboseTracesInQuery;
     }
-    
-    private PartitionKey partitionkey;
-
-    /**
-     * Gets the partition key used to identify the current request's target partition.
-     * 
-     * @return the partition key.
-     */
-    public PartitionKey getPartitionKey() {
-        return this.partitionkey;
-    }
-
-    /**
-     * Sets the partition key used to identify the current request's target partition.
-     * 
-     * @param partitionkey the partition key value.
-     */
-    public void setPartitionKey(PartitionKey partitionkey) {
-        this.partitionkey = partitionkey;
-    }
-    
-    private Boolean enableCrossPartitionQuery;
-
-    /**
-     * Gets the option to allow queries to run across all partitions of the collection.
-     * 
-     * @return whether to allow queries to run across all partitions of the collection.
-     */
-    public Boolean getEnableCrossPartitionQuery() {
-        return this.enableCrossPartitionQuery;
-    }
-
-    /**
-     * Sets the option to allow queries to run across all partitions of the collection.
-     * 
-     * @param enableCrossPartitionQuery whether to allow queries to run across all partitions of the collection.
-     */
-    public void setEnableCrossPartitionQuery(Boolean enableCrossPartitionQuery) {
-        this.enableCrossPartitionQuery = enableCrossPartitionQuery;
-    }
 }

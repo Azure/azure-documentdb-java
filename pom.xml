@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.microsoft.azure</groupId>
   <artifactId>azure-documentdb</artifactId>
-  <version>1.6.0</version>
+  <version>1.5.1</version>
   <name>${project.groupId}:${project.artifactId}</name>
   <description>Java SDK for Microsoft Azure DocumentDB</description>
   <url>http://azure.microsoft.com/en-us/services/documentdb/</url>
@@ -17,12 +17,6 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <developers>
-	<developer>
-      <name>Shelly Guo</name>
-      <email>shellyg@microsoft.com</email>
-      <organization>Microsoft</organization>
-      <organizationUrl>http://www.microsoft.com/</organizationUrl>
-    </developer>
     <developer>
       <name>Rajesh Nagpal</name>
       <email>rnagpal@microsoft.com</email>

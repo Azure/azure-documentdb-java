@@ -5,7 +5,6 @@
 package com.microsoft.azure.documentdb;
 
 import org.apache.commons.lang3.text.WordUtils;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -82,30 +81,5 @@ public class Permission extends Resource {
      */
     public String getToken() {
         return super.getString(Constants.Properties.TOKEN);
-    }
-    
-    /**
-     * Gets the resource partition key associated with this permission object.
-     * 
-     * @return the partition key.
-     */
-    public PartitionKey getResourcePartitionKey() {
-    	PartitionKey key = null;
-    	Object value = super.get(Constants.Properties.RESOURCE_PARTITION_KEY);
-    	if (value != null) {
-    		JSONArray arrayValue = (JSONArray)value;
-    		key = new PartitionKey(arrayValue.get(0));
-    	}
-
-    	return key;
-    }
-
-    /**
-     * Sets the resource partition key associated with this permission object.
-     * 
-     * @param partitionkey the partition key.
-     */
-    public void setResourcePartitionKey(PartitionKey partitionkey) {
-    	super.set(Constants.Properties.RESOURCE_PARTITION_KEY, partitionkey.getKey());
     }
 }

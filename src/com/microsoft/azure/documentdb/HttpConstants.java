@@ -69,7 +69,6 @@ class HttpConstants {
         // Query
         public static final String QUERY = "x-ms-documentdb-query";
         public static final String IS_QUERY = "x-ms-documentdb-isquery";
-        public static final String ENABLE_CROSS_PARTITION_QUERY = "x-ms-documentdb-query-enablecrosspartition";
 
         // Our custom DocDB headers
         public static final String CONTINUATION = "x-ms-continuation";
@@ -94,6 +93,7 @@ class HttpConstants {
         public static final String EMIT_VERBOSE_TRACES_IN_QUERY = "x-ms-documentdb-query-emit-traces";
 
         // Quota Info
+
         public static final String MAX_RESOURCE_QUOTA = "x-ms-resource-quota";
         public static final String CURRENT_RESOURCE_QUOTA_USAGE = "x-ms-resource-usage";
         public static final String MAX_MEDIA_STORAGE_USAGE_IN_MB = "x-ms-max-media-storage-usage-mb";
@@ -110,7 +110,6 @@ class HttpConstants {
         public static final String ITEM_COUNT = "x-ms-item-count";
         public static final String NEW_RESOURCE_ID = "x-ms-new-resource-id";
         public static final String USE_MASTER_COLLECTION_RESOLVER = "x-ms-use-master-collection-resolver";
-        
         // Admin Headers
         public static final String FULL_UPGRADE = "x-ms-force-full-upgrade";
         public static final String ONLY_UPGRADE_SYSTEM_APPLICATIONS = "x-ms-only-upgrade-system-applications";
@@ -145,7 +144,6 @@ class HttpConstants {
 
         // Offer header
         public static final String OFFER_TYPE = "x-ms-offer-type";
-        public static final String OFFER_THROUGHPUT = "x-ms-offer-throughput";
         
         // Upsert header
         public static final String IS_UPSERT = "x-ms-documentdb-is-upsert";
@@ -157,16 +155,13 @@ class HttpConstants {
         //Owner name
         public static final String OWNER_FULL_NAME = "x-ms-alt-content-path";
         
-        // Owner ID used for name based request in session token.
+        //Owner ID used for name based request in session token.
         public static final String OWNER_ID = "x-ms-content-path";
-        
-        // Partition headers
-        public static final String PARTITION_KEY = "x-ms-documentdb-partitionkey";
     }
 
     public static class Versions {
-        public static String CURRENT_VERSION = "2015-12-16";
-        public static String USER_AGENT = "documentdb-java-sdk-1.6.0";
+        public static String CURRENT_VERSION = "2015-08-06";
+        public static String USER_AGENT = "documentdb-java-sdk-1.5.1";
     }
     
     public static class StatusCodes {

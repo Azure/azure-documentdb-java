@@ -171,44 +171,4 @@ public final class RequestOptions {
     public void setOfferType(String offerType) {
         this.offerType = offerType;
     }
-    
-    private Integer offerThroughput;
-
-    /**
-     * Gets the throughput in the form of Request Units per second when creating a document collection.
-     * 
-     * @return the throughput value.
-     */
-    public Integer getOfferThroughput() {
-        return this.offerThroughput;
-    }
-
-    /**
-     * Sets the throughput in the form of Request Units per second when creating a document collection.
-     * 
-     * @param offerThroughput the throughput value.
-     */
-    public void setOfferThroughput(Integer offerThroughput) {
-        this.offerThroughput = offerThroughput;
-    }
-    
-    private PartitionKey partitionkey;
-
-    /**
-     * Gets the partition key used to identify the current request's target partition.
-     * 
-     * @return the partition key value.
-     */
-    public PartitionKey getPartitionKey() {
-        return this.partitionkey;
-    }
-
-    /**
-     * Sets the partition key used to identify the current request's target partition.
-     * 
-     * @param partitionkey the partition key value.
-     */
-    public void setPartitionKey(PartitionKey partitionkey) {
-        this.partitionkey = partitionkey;
-    }
 }
