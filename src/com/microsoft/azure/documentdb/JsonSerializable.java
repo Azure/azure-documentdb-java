@@ -167,7 +167,6 @@ class JsonSerializable {
                 throw new IllegalArgumentException("Can't serialize the object into the json string", e);
             }
         }
-
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -205,6 +204,20 @@ class JsonSerializable {
             }
     }
 
+    /**
+     * Gets a property value as Object.
+     * 
+     * @param propertyName the property to get.
+     * @return the value of the property.
+     */
+    public Object get(String propertyName) {
+        if (this.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
+            return this.propertyBag.get(propertyName);
+        } else {
+            return null;
+        }
+    }
+    
     /**
      * Gets a string value.
      * 
@@ -288,7 +301,7 @@ class JsonSerializable {
         if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             JSONObject jsonObj = this.propertyBag.getJSONObject(propertyName);
             if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                    Boolean.class.isAssignableFrom(c)) {
+                    Boolean.class.isAssignableFrom(c) || Object.class == c) {
                 // Number, String, Boolean
                 return c.cast(jsonObj);
             } else if (JsonSerializable.class.isAssignableFrom(c)) {
@@ -347,7 +360,7 @@ class JsonSerializable {
 
             // Check once.
             if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                Boolean.class.isAssignableFrom(c)) {
+                Boolean.class.isAssignableFrom(c) || Object.class == c) {
                 isBaseClass = true;
             } else if (JsonSerializable.class.isAssignableFrom(c)) {
                 isJsonSerializable = true;
@@ -426,6 +439,42 @@ class JsonSerializable {
     void onSave() {
     }
 
+    /**
+     * Gets the value of a property identified by an array of property names that forms the path.
+     * 
+     * @param propertyNames that form the path to the the property to get.
+     * @return the value of the property.
+     */
+    public Object getObjectByPath(Collection<String> propertyNames) {
+    	JSONObject propBag = this.propertyBag;
+    	Object value = null;
+    	String propertyName = null;
+    	Integer matchedProperties = 0;
+    	Iterator<String> iterator = propertyNames.iterator();
+    	if (iterator.hasNext()) {
+	    	do {
+	    		propertyName = iterator.next();
+		        if (propBag.has(propertyName)) {
+		        	matchedProperties++;
+		        	value = propBag.get(propertyName);
+		        	if (value.getClass() != JSONObject.class) {
+		        		break;
+		        	}
+		        	propBag = (JSONObject)value;
+		        }
+		        else {
+		        	break;
+		        }
+	    	} while (iterator.hasNext());
+	    	
+	    	if (value != null && matchedProperties == propertyNames.size()) {
+	    		return value;
+	    	}
+    	}
+    	
+    	return null;
+    }
+    
     /**
      * Converts to an Object (only POJOs and JSONObject are supported).
      * 
