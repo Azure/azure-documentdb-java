@@ -46,7 +46,7 @@ public class GatewayTestBase {
 	// Replace MASTER_KEY and HOST with values from your DocumentDB account.
 	protected static final String MASTER_KEY = "[REPLACE WITH YOUR APP MASTER KEY]";
 	protected static final String HOST = "[REPLACE WITH YOUR APP ENDPOINT, FOR EXAMPLE https://myapp.documents.azure.com:443]";
-	
+
 	protected static final String DATABASES_PATH_SEGMENT = "dbs";
 	protected static final String USERS_PATH_SEGMENT = "users";
 	protected static final String PERMISSIONS_PATH_SEGMENT = "permissions";

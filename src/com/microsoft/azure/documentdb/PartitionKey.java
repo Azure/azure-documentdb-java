@@ -28,7 +28,7 @@ public class PartitionKey {
 	 * Create a new instance of the PartitionKey object from a serialized JSON string.
 	 * 
 	 * @param jsonString
-	 *            the value of the partition key in JSON form.
+	 *            the JSON string representation of this PartitionKey object.
 	 *            
 	 * @return the PartitionKey instance.
 	 */

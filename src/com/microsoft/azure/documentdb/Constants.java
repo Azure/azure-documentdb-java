@@ -117,7 +117,11 @@ class Constants {
         static final String PARTITION_KEY_PATHS = "paths";
         static final String PARTITION_KIND = "kind";
         static final String RESOURCE_PARTITION_KEY = "resourcePartitionKey";
-    }
+
+        //Time-to-Live
+        static final String TTL = "ttl";
+        static final String DEFAULT_TTL = "defaultTtl";
+}
 
     static class ResourceKeys {
         static final String ATTACHMENTS = "Attachments";
