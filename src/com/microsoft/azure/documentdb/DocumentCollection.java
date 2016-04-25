@@ -96,6 +96,44 @@ public final class DocumentCollection extends Resource {
     }
     
     /**
+     * Sets the collection's default time-to-live value.
+     * <p>
+     * The default time-to-live value on a collection is an optional property. If set, the documents within the collection
+     * expires after the specified number of seconds since their last write time. The value of this property should be one of the following:
+     * 		null - indicates evaluation of time-to-live is disabled and documents within the collection will never expire, regardless whether
+     * 			individual documents have their time-to-live set.
+     * 		nonzero positive integer - indicates the default time-to-live value for all documents within the collection. This value can be overridden
+     * 			by individual documents' time-to-live value.
+     * 		-1 - indicates by default all documents within the collection never expire. This value can be overridden by individual documents' 
+     * 			time-to-live value.
+     * 
+     * @param timeToLive the default time-to-live value in seconds.
+     */
+    public void setDefaultTimeToLive(Integer timeToLive) {
+    	// a "null" value is represented as a missing element on the wire.
+    	// setting timeToLive to null should remove the property from the property bag.
+    	if (timeToLive != null) {
+    		super.set(Constants.Properties.DEFAULT_TTL, timeToLive);
+    	}
+    	else if (super.has(Constants.Properties.DEFAULT_TTL)) {
+    		super.remove(Constants.Properties.DEFAULT_TTL);
+    	}
+    }
+
+    /**
+     * Gets the collection's default time-to-live value.
+     * 
+     * @return the the default time-to-live value in seconds.
+     */
+    public Integer getDefaultTimeToLive() {
+    	if (super.has(Constants.Properties.DEFAULT_TTL)) {
+    		return super.getInt(Constants.Properties.DEFAULT_TTL);
+    	}
+    	
+    	return null;
+    }
+    
+    /**
      * Gets the self-link for documents in a collection.
      * 
      * @return the document link.

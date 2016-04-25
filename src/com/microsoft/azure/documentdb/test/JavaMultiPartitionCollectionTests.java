@@ -137,7 +137,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         Assert.assertTrue(readFail);
         
         // Read document1 with partition key.
-        document = client.readDocument(document.getSelfLink(), requestOptions).getResource();
+        document = this.client.readDocument(document.getSelfLink(), requestOptions).getResource();
         Assert.assertEquals(documentId, document.getString("id"));
         
         // Update document without partition key.
@@ -162,11 +162,11 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         Assert.assertTrue(deleteFail);
         
         // Delete document with partition key.
-        client.deleteDocument(document.getSelfLink(), requestOptions);
+        this.client.deleteDocument(document.getSelfLink(), requestOptions);
         
         readFail = false;
         try {
-        	client.readDocument(document.getSelfLink(), requestOptions).getResource();
+        	this.client.readDocument(document.getSelfLink(), requestOptions).getResource();
         } catch (DocumentClientException e) {
         	readFail = true;
             Assert.assertEquals(404, e.getStatusCode());
@@ -190,7 +190,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         // create document without partition key
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -220,7 +220,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
 
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -249,7 +249,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
 
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -279,7 +279,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId));
 
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -308,7 +308,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
 
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -337,7 +337,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
 
         String documentId = GatewayTests.getUID();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -368,7 +368,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         String documentId = GatewayTests.getUID();
         String name = JSONObject.NULL.toString();
         Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, name));
-        Document document = client.createDocument(
+        Document document = this.client.createDocument(
         		createdCollection.getSelfLink(),
         		sampleDocument,
         		null,
@@ -416,20 +416,20 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
 
     	FeedOptions feedOptions = new FeedOptions();
         feedOptions.setEnableCrossPartitionQuery(true);
-        List<Document> documents = client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
+        List<Document> documents = this.client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
         Assert.assertEquals(2, documents.size());
         
         // Read document feed with partition key.
         feedOptions = new FeedOptions();
         feedOptions.setEnableCrossPartitionQuery(true);
         feedOptions.setPartitionKey(new PartitionKey(documentId1));
-        documents = client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
+        documents = this.client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
         Assert.assertEquals(1, documents.size());
         Assert.assertEquals(sampleDocument1.getString("id"), documents.get(0).getString("id"));
         
         feedOptions = new FeedOptions();
         feedOptions.setPartitionKey(new PartitionKey(documentId2));
-        documents = client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
+        documents = this.client.readDocuments(createdCollection.getSelfLink(), feedOptions).getQueryIterable().toList();
         Assert.assertEquals(1, documents.size());
         Assert.assertEquals(sampleDocument2.getString("id"), documents.get(0).getString("id"));
     }
@@ -625,7 +625,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
     @Test
     public void testCreatePermissionWithPartitionKey() throws DocumentClientException {
         // Create user.
-        User user = client.createUser(
+        User user = this.client.createUser(
         		getDatabaseLink(this.databaseForTest, true),
                 new User("{ 'id': 'new user' }"),
                 null).getResource();

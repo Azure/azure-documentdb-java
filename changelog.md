@@ -1,3 +1,7 @@
+## Changes in 1.7.0 : ##
+
+	- Added support for expiring documents by setting the default time-to-live on collections and time-to-live override on documents.
+
 ## Changes in 1.6.0 : ##
 
 	- Added support to set offer throughput for collections created with variable pricing structure.
