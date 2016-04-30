@@ -44,17 +44,8 @@ import com.microsoft.azure.documentdb.UserDefinedFunction;
  */
 public class GatewayTestBase {
     // Replace MASTER_KEY and HOST with values from your DocumentDB account.
-    //protected static final String MASTER_KEY = "[REPLACE WITH YOUR APP MASTER KEY]";
-    //protected static final String HOST = "[REPLACE WITH YOUR APP ENDPOINT, FOR EXAMPLE https://myapp.documents.azure.com:443]";
-
-    //protected static final String MASTER_KEY = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
-    //protected static final String HOST = "https://localhost:443";
-    
-    protected static final String MASTER_KEY = "oKejyX6p+nQhXDBSKr6a/gJkmNWYDiuKhvFGtAYq5pcThobeNWExOLT7pTRYPh5H8C3mdb68hqOrZH4zm+Sy6Q==";
-    protected static final String HOST = "https://shellyg.documents.azure.com:443/";
-
-    //protected static final String MASTER_KEY = "wq79MNTxImpNxT4m9NzLeNtNU696RUXTUIytaalnTYZgNbzZEfp7eMYGcgnDtAPcmAZdRDSNy7jXdaNXKLRpPA==";
-    //protected static final String HOST = "https://javasdktest.documents.azure.com:443/";
+    protected static final String MASTER_KEY = "[REPLACE WITH YOUR APP MASTER KEY]";
+    protected static final String HOST = "[REPLACE WITH YOUR APP ENDPOINT, FOR EXAMPLE https://myapp.documents.azure.com:443]";
 
     protected static final String DATABASES_PATH_SEGMENT = "dbs";
     protected static final String USERS_PATH_SEGMENT = "users";
