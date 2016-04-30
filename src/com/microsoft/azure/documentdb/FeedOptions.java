@@ -8,7 +8,6 @@ package com.microsoft.azure.documentdb;
  * Specifies the options associated with feed methods (enumeration operations).
  */
 public final class FeedOptions {
-
     private Integer pageSize;
 
     /**

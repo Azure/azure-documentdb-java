@@ -1,4 +1,4 @@
-package com.microsoft.azure.documentdb.test;
+package com.microsoft.azure.documentdb;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -652,7 +652,7 @@ public final class GatewayTests extends GatewayTestBase {
 
     private void testDocumentCrud(boolean isNameBased) throws DocumentClientException {
 
-    	// Read documents.
+        // Read documents.
         List<Document> documents = client.readDocuments(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null).getQueryIterable().toList();
         Assert.assertEquals(0, documents.size());
@@ -1910,7 +1910,7 @@ public final class GatewayTests extends GatewayTestBase {
         
         // Upsert should create the user
         User createdUser = client.upsertUser(
-				getDatabaseLink(this.databaseForTest, isNameBased),
+                getDatabaseLink(this.databaseForTest, isNameBased),
                 userDefinition, null).getResource();
 
         // Verify Id property
@@ -2373,7 +2373,7 @@ public final class GatewayTests extends GatewayTestBase {
     @Test
     public void testIdValidation() throws DocumentClientException {
 
-    	// Id shouldn't end with a space.
+        // Id shouldn't end with a space.
         try {
             client.createDocument(
                     collectionForTest.getSelfLink(),
@@ -2523,7 +2523,7 @@ public final class GatewayTests extends GatewayTestBase {
             Document documentFromRead = client.readDocument(getDocumentLink(this.databaseForTest, collection, replacedDocument, true), null).getResource();
             // Verify that we read our own write(key property) 
             Assert.assertEquals(replacedDocument.getString("key"), documentFromRead.getString("key"));
-        }		
+        }       
     }
 
 }

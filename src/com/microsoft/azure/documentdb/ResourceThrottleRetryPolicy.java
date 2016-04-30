@@ -4,17 +4,14 @@ import java.util.logging.Logger;
 
 final class ResourceThrottleRetryPolicy {
     private final long defaultRetryInSeconds = 5;
-
-    private int maxAttemptCount;
+    private final int maxAttemptCount;
+    private final Logger logger;
     private int currentAttemptCount = 0;
-
     private long retryAfterInMilliseconds = 0;
-    
-    private final Logger logger = Logger.getLogger(
-        this.getClass().getPackage().getName());
 
     public ResourceThrottleRetryPolicy(int maxRetryCount) {
         this.maxAttemptCount = maxRetryCount;
+        this.logger = Logger.getLogger(this.getClass().getPackage().getName());
     }
 
     public long getRetryAfterInMilliseconds() {
@@ -27,7 +24,7 @@ final class ResourceThrottleRetryPolicy {
      * @param exception the exception to check.
      * @return true if should retry.
      */
-    public boolean shouldRetry(Exception exception) {
+    public boolean shouldRetry(DocumentClientException exception) {
         this.retryAfterInMilliseconds = 0;
 
         if (this.currentAttemptCount < this.maxAttemptCount &&
@@ -37,11 +34,9 @@ final class ResourceThrottleRetryPolicy {
                                            this.retryAfterInMilliseconds,
                                            exception.getMessage()));
             return true;
-        } else {
-            this.logger.warning(String.format("Operation will NOT be retried. Exception: %s",
-                                              exception.getMessage()));
-            return false;
         }
+
+        return false;
     }
 
     /**
@@ -50,24 +45,20 @@ final class ResourceThrottleRetryPolicy {
      * @param exception the exception to check.
      * @return true if return is needed.
      */
-    private boolean CheckIfRetryNeeded(Exception exception) {
+    private boolean CheckIfRetryNeeded(DocumentClientException exception) {
         this.retryAfterInMilliseconds = 0;
 
-        if (exception instanceof DocumentClientException) {
-            DocumentClientException dce = (DocumentClientException) exception;
+        if (exception.getStatusCode() == 429) {
+            this.retryAfterInMilliseconds =
+                    exception.getRetryAfterInMilliseconds();
 
-            if (dce.getStatusCode() == 429) {
-                this.retryAfterInMilliseconds =
-                    dce.getRetryAfterInMilliseconds();
-
-                if (this.retryAfterInMilliseconds == 0) {
-                    // we should never reach here as BE should turn non-zero of
-                    // retry delay.
-                    this.retryAfterInMilliseconds = this.defaultRetryInSeconds;
-                }
-
-                return true;
+            if (this.retryAfterInMilliseconds == 0) {
+                // we should never reach here as BE should turn non-zero of
+                // retry delay.
+                this.retryAfterInMilliseconds = this.defaultRetryInSeconds;
             }
+
+            return true;
         }
 
         return false;

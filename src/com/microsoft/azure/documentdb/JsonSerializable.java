@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.logging.Logger;
 
 import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONArray;
@@ -18,7 +19,8 @@ import org.json.JSONObject;
 import java.util.HashMap;
 
 class JsonSerializable {
-    JSONObject propertyBag = null;
+    protected JSONObject propertyBag = null;
+    private Logger logger = null;
 
     JsonSerializable() {
         this.propertyBag = new JSONObject();
@@ -40,6 +42,14 @@ class JsonSerializable {
      */
     JsonSerializable(JSONObject jsonObject) {
         this.propertyBag = new JSONObject(jsonObject);
+    }
+    
+    Logger getLogger() {
+        if (this.logger == null) {
+            this.logger = Logger.getLogger(this.getClass().getPackage().getName());
+        }
+        
+        return this.logger;
     }
 
     /**
@@ -163,7 +173,6 @@ class JsonSerializable {
             try {
                 this.propertyBag.put(propertyName, new JSONObject(mapper.writeValueAsString(value)));
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalArgumentException("Can't serialize the object into the json string", e);
             }
         }
@@ -197,7 +206,6 @@ class JsonSerializable {
                     try {
                         targetArray.put(new JSONObject(mapper.writeValueAsString(childValue)));
                     } catch (IOException e) {
-                        e.printStackTrace();
                         throw new IllegalArgumentException("Can't serialize the object into the json string", e);
                     }
                 }
@@ -321,7 +329,6 @@ class JsonSerializable {
                 try {
                     return new ObjectMapper().readValue(jsonObj.toString(), c);
                 } catch (IOException e) {
-                    e.printStackTrace();
                     throw new IllegalStateException("Failed to get POJO.", e);
                 }
             }
@@ -389,7 +396,6 @@ class JsonSerializable {
                     try {
                         result.add(mapper.readValue(jsonObject.toString(), c));
                     } catch (IOException e) {
-                        e.printStackTrace();
                         throw new IllegalStateException("Failed to get POJO.", e);
                     }
                 }
@@ -446,33 +452,33 @@ class JsonSerializable {
      * @return the value of the property.
      */
     public Object getObjectByPath(Collection<String> propertyNames) {
-    	JSONObject propBag = this.propertyBag;
-    	Object value = null;
-    	String propertyName = null;
-    	Integer matchedProperties = 0;
-    	Iterator<String> iterator = propertyNames.iterator();
-    	if (iterator.hasNext()) {
-	    	do {
-	    		propertyName = iterator.next();
-		        if (propBag.has(propertyName)) {
-		        	matchedProperties++;
-		        	value = propBag.get(propertyName);
-		        	if (value.getClass() != JSONObject.class) {
-		        		break;
-		        	}
-		        	propBag = (JSONObject)value;
-		        }
-		        else {
-		        	break;
-		        }
-	    	} while (iterator.hasNext());
-	    	
-	    	if (value != null && matchedProperties == propertyNames.size()) {
-	    		return value;
-	    	}
-    	}
-    	
-    	return null;
+        JSONObject propBag = this.propertyBag;
+        Object value = null;
+        String propertyName = null;
+        Integer matchedProperties = 0;
+        Iterator<String> iterator = propertyNames.iterator();
+        if (iterator.hasNext()) {
+            do {
+                propertyName = iterator.next();
+                if (propBag.has(propertyName)) {
+                    matchedProperties++;
+                    value = propBag.get(propertyName);
+                    if (value.getClass() != JSONObject.class) {
+                        break;
+                    }
+                    propBag = (JSONObject)value;
+                }
+                else {
+                    break;
+                }
+            } while (iterator.hasNext());
+            
+            if (value != null && matchedProperties == propertyNames.size()) {
+                return value;
+            }
+        }
+        
+        return null;
     }
     
     /**
@@ -500,7 +506,6 @@ class JsonSerializable {
             try {
                 return new ObjectMapper().readValue(this.toString(), c);
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalStateException("Failed to get POJO.", e);
             }
         }

@@ -128,7 +128,8 @@ public final class IndexingPolicy extends JsonSerializable {
         try {
             result = IndexingMode.valueOf(WordUtils.capitalize(super.getString(Constants.Properties.INDEXING_MODE)));
         } catch(IllegalArgumentException e) {
-            e.printStackTrace();
+            this.getLogger().warning(
+                    String.format("Invalid indexingMode value %s.", super.getString(Constants.Properties.INDEXING_MODE)));
         }
         return result;
     }

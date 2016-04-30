@@ -4,6 +4,8 @@
 
 package com.microsoft.azure.documentdb;
 
+import java.util.logging.Logger;
+
 import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
@@ -17,19 +19,14 @@ public final class ConsistencyPolicy extends JsonSerializable {
     private static final int DEFAULT_MAX_STALENESS_INTERVAL = 5;
     private static final int DEFAULT_MAX_STALENESS_PREFIX = 100;
 
-    /*
-    private static final int MAX_STALENESS_INTERVAL_IN_SECONDS_MIN_VALUE = 5;
-    private static final int MAX_STALENESS_INTERVAL_IN_SECONDS_MAX_VALUE = 600;
-
-    private static final int MAX_STALENESS_PREFIX_MIN_VALUE = 10;
-    private static final int MAX_STALENESS_PREFIX_MAX_VALUE = 1000;
-    */
+    private Logger logger = null;
 
     /**
      * Constructor.
      */
     ConsistencyPolicy() {
         super();
+        this.logger = Logger.getLogger(this.getClass().getPackage().getName());
     }
 
     /**
@@ -63,7 +60,8 @@ public final class ConsistencyPolicy extends JsonSerializable {
                     WordUtils.capitalize(super.getString(Constants.Properties.DEFAULT_CONSISTENCY_LEVEL)));
         } catch (IllegalArgumentException e) {
             // ignore the exception and return the default
-            e.printStackTrace();
+            this.logger.warning(
+                    String.format("Unknown consistency level %s, value ignored.", super.getString(Constants.Properties.DEFAULT_CONSISTENCY_LEVEL)));
         }
         return result;
     }
@@ -121,8 +119,5 @@ public final class ConsistencyPolicy extends JsonSerializable {
      */
     public void setMaxStalenessIntervalInSeconds(int maxStalenessIntervalInSeconds) {
         super.set(Constants.Properties.MAX_STALENESS_INTERVAL_IN_SECONDS, maxStalenessIntervalInSeconds);
-    }
-
-    void Validate() {
     }
 }

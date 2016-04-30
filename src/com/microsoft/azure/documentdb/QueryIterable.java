@@ -16,7 +16,6 @@ import org.apache.commons.lang3.StringUtils;
 public class QueryIterable<T extends Resource> implements Iterable<T> {
 
     private DocumentClient client = null;
-    private ResourceThrottleRetryPolicy retryPolicy = null;
     private DocumentServiceRequest request = null;
     private ReadType readType;
     private Class<T> classT;
@@ -101,9 +100,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private void initialize(DocumentClient client,
             ReadType readType,
             Class<T> classT) {
-        this.client = client;
-        this.retryPolicy = new ResourceThrottleRetryPolicy(
-                client.getRetryPolicy().getMaxRetryAttemptsOnQuery());
+        this.client = client;        
         this.readType = readType;
         this.classT = classT;
     }
@@ -147,7 +144,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     public Iterator<T> iterator() {
         Iterator<T> it = new Iterator<T>() {
 
-            private BackoffRetryUtilityDelegate delegate = new BackoffRetryUtilityDelegate() {
+            private QueryBackoffRetryUtilityDelegate delegate = new QueryBackoffRetryUtilityDelegate() {
 
                 @Override
                 public void apply() throws Exception {
@@ -166,7 +163,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             @Override
             public boolean hasNext() {
                 if (currentIndex >= items.size() && hasNext) {
-                    BackoffRetryUtility.execute(this.delegate, retryPolicy);
+                    BackoffRetryUtility.execute(this.delegate, client.getConnectionPolicy().getMaxRetryOnThrottledAttempts());
                 }
 
                 return hasNext;
@@ -180,7 +177,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             @Override
             public T next() {
                 if (currentIndex >= items.size() && hasNext) {
-                    BackoffRetryUtility.execute(this.delegate, retryPolicy);
+                    BackoffRetryUtility.execute(this.delegate, client.getConnectionPolicy().getMaxRetryOnThrottledAttempts());
                 }
                 
                 if (!hasNext) return null;

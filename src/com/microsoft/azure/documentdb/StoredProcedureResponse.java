@@ -1,12 +1,14 @@
 package com.microsoft.azure.documentdb;
 
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Represents the response returned from a stored procedure. Wraps the response body and headers.
  */
 public final class StoredProcedureResponse {
     private DocumentServiceResponse response;
+    private Logger logger;
 
     /**
      * Constructs StoredProcedureResponse.
@@ -15,6 +17,7 @@ public final class StoredProcedureResponse {
      */
     StoredProcedureResponse(DocumentServiceResponse response) {
         this.response = response;
+        this.logger = Logger.getLogger(this.getClass().getPackage().getName());
     }
 
     /**
@@ -73,7 +76,8 @@ public final class StoredProcedureResponse {
         try {
             return Double.valueOf(value);
         } catch (NumberFormatException e) {
-            e.printStackTrace();
+            this.logger.warning(
+                    String.format("Invalid x-ms-request-charge value %s.", value));
             return 0;
         }
     }

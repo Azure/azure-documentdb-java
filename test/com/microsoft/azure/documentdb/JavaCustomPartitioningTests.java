@@ -1,4 +1,4 @@
-package com.microsoft.azure.documentdb.test;
+package com.microsoft.azure.documentdb;
 
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -31,10 +31,10 @@ import com.microsoft.azure.documentdb.SqlQuerySpec;
 
 public class JavaCustomPartitioningTests extends GatewayTestBase {
 
-	@Test
-	public void testPartitioning() throws DocumentClientException {
+    @Test
+    public void testPartitioning() throws DocumentClientException {
 
-		// Create bunch of collections participating in partitioning
+        // Create bunch of collections participating in partitioning
         DocumentCollection collectionDefinition = new DocumentCollection();
         
         collectionDefinition.setId("coll_0");
