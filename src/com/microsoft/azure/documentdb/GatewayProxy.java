@@ -29,6 +29,8 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.params.CookiePolicy;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
 import org.apache.http.impl.conn.ProxySelectorRoutePlanner;
@@ -38,7 +40,7 @@ import org.apache.http.params.HttpParams;
 import org.apache.http.util.EntityUtils;
 
 
-final class GatewayProxy {
+class GatewayProxy {
 
     private URI serviceEndpoint;
     private Map<String, String> defaultHeaders;
@@ -169,6 +171,10 @@ final class GatewayProxy {
         
         HttpClient httpClient = defaultHttpClient;
         HttpParams httpParams = httpClient.getParams();
+        
+        // Setting Cookie policy on httpclient to ignoring server cookies as we don't use them
+        httpParams.setParameter("http.protocol.single-cookie-header", true);
+        httpParams.setParameter(ClientPNames.COOKIE_POLICY, CookiePolicy.IGNORE_COOKIES);
 
         if (isForMedia) {
             HttpConnectionParams.setConnectionTimeout(httpParams,

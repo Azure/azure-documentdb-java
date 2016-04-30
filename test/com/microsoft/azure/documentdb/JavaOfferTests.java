@@ -1,4 +1,4 @@
-package com.microsoft.azure.documentdb.test;
+package com.microsoft.azure.documentdb;
 
 import java.util.ArrayList;
 import java.util.List;

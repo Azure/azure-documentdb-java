@@ -161,7 +161,6 @@ final class DocumentServiceResponse implements AutoCloseable {
             try {
                 EntityUtils.consume(this.httpEntity);
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalStateException(e);
             }
         }

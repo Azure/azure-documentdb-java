@@ -47,7 +47,6 @@ public class Document extends Resource {
             try {
                 return new Document (mapper.writeValueAsString(document));
             } catch (IOException e) {
-                e.printStackTrace();
                 throw new IllegalArgumentException("Can't serialize the object into the json string", e);
             }
         }

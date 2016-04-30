@@ -27,6 +27,7 @@ import org.json.JSONObject;
  */
 public final class DocumentClient {
 
+    private int maxRetryAttempts;
     private URI serviceEndpoint;
     private String masterKey;
     private Map<String, String> resourceTokens;
@@ -34,9 +35,8 @@ public final class DocumentClient {
     private GatewayProxy gatewayProxy;
     private SessionContainer sessionContainer;
     private ConsistencyLevel desiredConsistencyLevel;
-    private RetryPolicy retryPolicy;
     private ConcurrentHashMap<String, PartitionResolver> partitionResolvers;
-	private PartitionKeyDefinitionMap partitionKeyDefinitionMap;
+    private PartitionKeyDefinitionMap partitionKeyDefinitionMap;
 
     /**
      * A client query compatibility mode when making query request. Can be used to force a specific query request
@@ -127,7 +127,7 @@ public final class DocumentClient {
             this.connectionPolicy = new ConnectionPolicy();
         }
 
-        this.retryPolicy = RetryPolicy.getDefault();
+        this.maxRetryAttempts = this.connectionPolicy.getMaxRetryOnThrottledAttempts();
 
         this.sessionContainer = new SessionContainer(this.serviceEndpoint.getHost());
         this.desiredConsistencyLevel = desiredConsistencyLevel;
@@ -150,10 +150,6 @@ public final class DocumentClient {
         this.partitionKeyDefinitionMap = new InMemoryPartitionKeyDefinitionMap(this);
     }
 
-    RetryPolicy getRetryPolicy() {
-        return this.retryPolicy;
-    }
-    
     /**
      * Registers the partition resolver associated with the database link
      * @throws DocumentClientException 
@@ -179,7 +175,21 @@ public final class DocumentClient {
         }
         return this.partitionResolvers.get(Utils.trimBeginingAndEndingSlashes(databaseLink));
     }
-
+    
+    // used by unit test to mock gateway proxy.
+    void setGatewayProxyOverride(GatewayProxy proxyOverride) {
+        this.gatewayProxy = proxyOverride;
+    }
+    
+    // used by unit test to mock partition key definition map.
+    void setPartitionKeyDefinitionMapOverride(PartitionKeyDefinitionMap mapOverride) {
+        this.partitionKeyDefinitionMap = mapOverride;
+    }
+    
+    ConnectionPolicy getConnectionPolicy() {
+        return this.connectionPolicy;
+    }
+    
     /**
      * Creates a database.
      * 
@@ -748,7 +758,7 @@ public final class DocumentClient {
      * @return the feed response with the obtained documents.
      */
     public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, SqlQuerySpec querySpec, FeedOptions options) {
-    	return this.queryDocuments(databaseOrDocumentCollectionLink, querySpec, options, null);
+        return this.queryDocuments(databaseOrDocumentCollectionLink, querySpec, options, null);
     }
 
     /**
@@ -1029,9 +1039,9 @@ public final class DocumentClient {
         Map<String, String> requestHeaders = new HashMap<String, String>();
         requestHeaders.put(HttpConstants.HttpHeaders.ACCEPT, RuntimeConstants.MediaTypes.JSON);
         if (options != null) {
-        	if (options.getPartitionKey() != null) {
-        		requestHeaders.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
-    		}
+            if (options.getPartitionKey() != null) {
+                requestHeaders.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
+            }
         }
         
         DocumentServiceRequest request = DocumentServiceRequest.create(
@@ -2344,14 +2354,29 @@ public final class DocumentClient {
     }
     
     private DocumentServiceResponse doCreate(DocumentServiceRequest request) throws DocumentClientException {
-        this.applySessionToken(request);
+        BackoffRetryUtilityDelegate createDelegate = new BackoffRetryUtilityDelegate() {
 
-        DocumentServiceResponse response = this.gatewayProxy.doCreate(request);
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doCreate(requestInner);
+            }
+        };
+        
+        this.applySessionToken(request);
+        DocumentServiceResponse response = BackoffRetryUtility.execute(createDelegate, request, this.maxRetryAttempts);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doUpsert(DocumentServiceRequest request) throws DocumentClientException {
+        BackoffRetryUtilityDelegate upsertDelegate = new BackoffRetryUtilityDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doUpsert(requestInner);
+            }
+        };
+        
         this.applySessionToken(request);
         
         Map<String, String> headers = request.getHeaders();
@@ -2364,23 +2389,39 @@ public final class DocumentClient {
             headers.put(HttpConstants.HttpHeaders.IS_UPSERT, "true");
         }
 
-        DocumentServiceResponse response = this.gatewayProxy.doUpsert(request);
+        DocumentServiceResponse response = BackoffRetryUtility.execute(upsertDelegate, request, this.maxRetryAttempts);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doReplace(DocumentServiceRequest request) throws DocumentClientException {
+        BackoffRetryUtilityDelegate replaceDelegate = new BackoffRetryUtilityDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doReplace(requestInner);
+            }
+        };
+        
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = this.gatewayProxy.doReplace(request);
+        DocumentServiceResponse response = BackoffRetryUtility.execute(replaceDelegate, request, this.maxRetryAttempts);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doDelete(DocumentServiceRequest request) throws DocumentClientException {
+        BackoffRetryUtilityDelegate deleteDelegate = new BackoffRetryUtilityDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doDelete(requestInner);
+            }
+        };
+        
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = this.gatewayProxy.doDelete(request);
+        DocumentServiceResponse response = BackoffRetryUtility.execute(deleteDelegate, request, this.maxRetryAttempts);
 
         if (request.getResourceType() != ResourceType.DocumentCollection) {
             this.captureSessionToken(request, response);
@@ -2391,9 +2432,17 @@ public final class DocumentClient {
     }
     
     private DocumentServiceResponse doRead(DocumentServiceRequest request) throws DocumentClientException {
+        BackoffRetryUtilityDelegate readDelegate = new BackoffRetryUtilityDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doRead(requestInner);
+            }
+        };
+        
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = this.gatewayProxy.doRead(request);
+        DocumentServiceResponse response = BackoffRetryUtility.execute(readDelegate, request, this.maxRetryAttempts);
         this.captureSessionToken(request, response);
         return response;
     }
@@ -2444,97 +2493,97 @@ public final class DocumentClient {
     }
 
     private Map<String, String> getRequestHeaders(RequestOptions options) {
-		if (options == null)
-			return null;
+        if (options == null)
+            return null;
 
-		Map<String, String> headers = new HashMap<String, String>();
+        Map<String, String> headers = new HashMap<String, String>();
 
-		if (options.getAccessCondition() != null) {
-			if (options.getAccessCondition().getType() == AccessConditionType.IfMatch) {
-				headers.put(HttpConstants.HttpHeaders.IF_MATCH, options.getAccessCondition().getCondition());
-			} else {
-				headers.put(HttpConstants.HttpHeaders.IF_NONE_MATCH, options.getAccessCondition().getCondition());
-			}
-		}
+        if (options.getAccessCondition() != null) {
+            if (options.getAccessCondition().getType() == AccessConditionType.IfMatch) {
+                headers.put(HttpConstants.HttpHeaders.IF_MATCH, options.getAccessCondition().getCondition());
+            } else {
+                headers.put(HttpConstants.HttpHeaders.IF_NONE_MATCH, options.getAccessCondition().getCondition());
+            }
+        }
 
-		if (options.getConsistencyLevel() != null) {
+        if (options.getConsistencyLevel() != null) {
 
-			headers.put(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL, options.getConsistencyLevel().name());
-		}
+            headers.put(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL, options.getConsistencyLevel().name());
+        }
 
-		if (options.getIndexingDirective() != null) {
-			headers.put(HttpConstants.HttpHeaders.INDEXING_DIRECTIVE, options.getIndexingDirective().name());
-		}
+        if (options.getIndexingDirective() != null) {
+            headers.put(HttpConstants.HttpHeaders.INDEXING_DIRECTIVE, options.getIndexingDirective().name());
+        }
 
-		if (options.getPostTriggerInclude() != null && options.getPostTriggerInclude().size() > 0) {
-			String postTriggerInclude = StringUtils.join(options.getPostTriggerInclude(), ",");
-			headers.put(HttpConstants.HttpHeaders.POST_TRIGGER_INCLUDE, postTriggerInclude);
-		}
+        if (options.getPostTriggerInclude() != null && options.getPostTriggerInclude().size() > 0) {
+            String postTriggerInclude = StringUtils.join(options.getPostTriggerInclude(), ",");
+            headers.put(HttpConstants.HttpHeaders.POST_TRIGGER_INCLUDE, postTriggerInclude);
+        }
 
-		if (options.getPreTriggerInclude() != null && options.getPreTriggerInclude().size() > 0) {
-			String preTriggerInclude = StringUtils.join(options.getPreTriggerInclude(), ",");
-			headers.put(HttpConstants.HttpHeaders.PRE_TRIGGER_INCLUDE, preTriggerInclude);
-		}
+        if (options.getPreTriggerInclude() != null && options.getPreTriggerInclude().size() > 0) {
+            String preTriggerInclude = StringUtils.join(options.getPreTriggerInclude(), ",");
+            headers.put(HttpConstants.HttpHeaders.PRE_TRIGGER_INCLUDE, preTriggerInclude);
+        }
 
-		if (options.getSessionToken() != null && !options.getSessionToken().isEmpty()) {
-			headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, options.getSessionToken());
-		}
+        if (options.getSessionToken() != null && !options.getSessionToken().isEmpty()) {
+            headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, options.getSessionToken());
+        }
 
-		if (options.getResourceTokenExpirySeconds() != null) {
-			headers.put(HttpConstants.HttpHeaders.RESOURCE_TOKEN_EXPIRY,
-					String.valueOf(options.getResourceTokenExpirySeconds()));
-		}
+        if (options.getResourceTokenExpirySeconds() != null) {
+            headers.put(HttpConstants.HttpHeaders.RESOURCE_TOKEN_EXPIRY,
+                    String.valueOf(options.getResourceTokenExpirySeconds()));
+        }
 
-		if (options.getOfferThroughput() != null && options.getOfferThroughput() >= 0) {
-			headers.put(HttpConstants.HttpHeaders.OFFER_THROUGHPUT, options.getOfferThroughput().toString());
-		} else if (options.getOfferType() != null) {
-			headers.put(HttpConstants.HttpHeaders.OFFER_TYPE, options.getOfferType());
-		}
+        if (options.getOfferThroughput() != null && options.getOfferThroughput() >= 0) {
+            headers.put(HttpConstants.HttpHeaders.OFFER_THROUGHPUT, options.getOfferThroughput().toString());
+        } else if (options.getOfferType() != null) {
+            headers.put(HttpConstants.HttpHeaders.OFFER_TYPE, options.getOfferType());
+        }
 
-		if (options.getPartitionKey() != null) {
-			headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
-		}
-		
-		return headers;
-	}
+        if (options.getPartitionKey() != null) {
+            headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
+        }
+        
+        return headers;
+    }
 
     protected Map<String, String> getFeedHeaders(FeedOptions options) {
-		if (options == null)
-			return null;
+        if (options == null)
+            return null;
 
-		Map<String, String> headers = new HashMap<String, String>();
+        Map<String, String> headers = new HashMap<String, String>();
 
-		if (options.getPageSize() != null) {
-			headers.put(HttpConstants.HttpHeaders.PAGE_SIZE, options.getPageSize().toString());
-		}
+        if (options.getPageSize() != null) {
+            headers.put(HttpConstants.HttpHeaders.PAGE_SIZE, options.getPageSize().toString());
+        }
 
-		if (options.getRequestContinuation() != null) {
-			headers.put(HttpConstants.HttpHeaders.CONTINUATION, options.getRequestContinuation());
-		}
+        if (options.getRequestContinuation() != null) {
+            headers.put(HttpConstants.HttpHeaders.CONTINUATION, options.getRequestContinuation());
+        }
 
-		if (options.getSessionToken() != null) {
-			headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, options.getSessionToken());
-		}
+        if (options.getSessionToken() != null) {
+            headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, options.getSessionToken());
+        }
 
-		if (options.getEnableScanInQuery() != null) {
-			headers.put(HttpConstants.HttpHeaders.ENABLE_SCAN_IN_QUERY, options.getEnableScanInQuery().toString());
-		}
+        if (options.getEnableScanInQuery() != null) {
+            headers.put(HttpConstants.HttpHeaders.ENABLE_SCAN_IN_QUERY, options.getEnableScanInQuery().toString());
+        }
 
-		if (options.getEmitVerboseTracesInQuery() != null) {
-			headers.put(HttpConstants.HttpHeaders.EMIT_VERBOSE_TRACES_IN_QUERY,
-					options.getEmitVerboseTracesInQuery().toString());
-		}
+        if (options.getEmitVerboseTracesInQuery() != null) {
+            headers.put(HttpConstants.HttpHeaders.EMIT_VERBOSE_TRACES_IN_QUERY,
+                    options.getEmitVerboseTracesInQuery().toString());
+        }
 
-		if (options.getPartitionKey() != null) {
-			headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
-		}
+        if (options.getPartitionKey() != null) {
+            headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
+        }
 
-		if (options.getEnableCrossPartitionQuery() != null) {
-			headers.put(HttpConstants.HttpHeaders.ENABLE_CROSS_PARTITION_QUERY, options.getEnableCrossPartitionQuery().toString());
-		}
+        if (options.getEnableCrossPartitionQuery() != null) {
+            headers.put(HttpConstants.HttpHeaders.ENABLE_CROSS_PARTITION_QUERY, options.getEnableCrossPartitionQuery().toString());
+        }
 
-		return headers;
-	}
+        return headers;
+    }
 
     private Map<String, String> getMediaHeaders(MediaOptions options) {
         Map<String, String> requestHeaders = new HashMap<String, String>();
@@ -2556,53 +2605,53 @@ public final class DocumentClient {
     }
 
     private Boolean isCollectionPartitioned(String documentCollectionLink) {
-		PartitionKeyDefinition partitionKeyDef = this.getPartitionKeyDefinition(documentCollectionLink);
-		return (partitionKeyDef != null && partitionKeyDef.getPaths() != null && !partitionKeyDef.getPaths().isEmpty());
-	}
+        PartitionKeyDefinition partitionKeyDef = this.getPartitionKeyDefinition(documentCollectionLink);
+        return (partitionKeyDef != null && partitionKeyDef.getPaths() != null && !partitionKeyDef.getPaths().isEmpty());
+    }
 
-	private RequestOptions insertPartitionKeyIfNeeded(String documentCollectionLink, Document document, RequestOptions options) {
-		RequestOptions returnOptions = options;
-		if (returnOptions == null) {
-			returnOptions = new RequestOptions();
-		}
-		
-		if (returnOptions.getPartitionKey() != null) {
-			return returnOptions;
-		}
+    private RequestOptions insertPartitionKeyIfNeeded(String documentCollectionLink, Document document, RequestOptions options) {
+        RequestOptions returnOptions = options;
+        if (returnOptions == null) {
+            returnOptions = new RequestOptions();
+        }
+        
+        if (returnOptions.getPartitionKey() != null) {
+            return returnOptions;
+        }
 
-		if (!this.isCollectionPartitioned(documentCollectionLink)) {
-			return returnOptions;
-		}
+        if (!this.isCollectionPartitioned(documentCollectionLink)) {
+            return returnOptions;
+        }
 
-		this.extractPartitionKeyValueFromDocument(documentCollectionLink, document, returnOptions);
-		return returnOptions;
-	}
+        this.extractPartitionKeyValueFromDocument(documentCollectionLink, document, returnOptions);
+        return returnOptions;
+    }
 
-	private void extractPartitionKeyValueFromDocument(String documentCollectionLink, Document document, RequestOptions options) {
-		 PartitionKeyDefinition keyDef = this.getPartitionKeyDefinition(documentCollectionLink);
-		 
-		 if (keyDef != null) {
-			 String path = keyDef.getPaths().iterator().next();
-			 Collection<String> parts = PathParser.getPathParts(path);
+    private void extractPartitionKeyValueFromDocument(String documentCollectionLink, Document document, RequestOptions options) {
+         PartitionKeyDefinition keyDef = this.getPartitionKeyDefinition(documentCollectionLink);
+         
+         if (keyDef != null) {
+             String path = keyDef.getPaths().iterator().next();
+             Collection<String> parts = PathParser.getPathParts(path);
              if (parts.size() >= 1) {
-	             Object value = document.getObjectByPath(parts);
-				 if (value == null || value.getClass() == JSONObject.class) {
-					 value = Undefined.Value();
-				 }
-				 
-				 options.setPartitionKey(new PartitionKey(value));
+                 Object value = document.getObjectByPath(parts);
+                 if (value == null || value.getClass() == JSONObject.class) {
+                     value = Undefined.Value();
+                 }
+                 
+                 options.setPartitionKey(new PartitionKey(value));
              }
-		 }
-	}
+         }
+    }
 
-	private PartitionKeyDefinition getPartitionKeyDefinition(String documentCollectionLink) {
-		if (Utils.isDatabaseLink(documentCollectionLink)) {
-			return null;
-		}
+    private PartitionKeyDefinition getPartitionKeyDefinition(String documentCollectionLink) {
+        if (Utils.isDatabaseLink(documentCollectionLink)) {
+            return null;
+        }
 
-		return this.partitionKeyDefinitionMap.getPartitionKeyDefinition(documentCollectionLink);
-	}
-	
+        return this.partitionKeyDefinitionMap.getPartitionKeyDefinition(documentCollectionLink);
+    }
+    
     private static String serializeProcedureParams(Object[] objectArray) {
         ObjectMapper mapper = null;
         String[] stringArray = new String[objectArray.length];
@@ -2620,7 +2669,6 @@ public final class DocumentClient {
                 try {
                     stringArray[i] = mapper.writeValueAsString(object);
                 } catch (IOException e) {
-                    e.printStackTrace();
                     throw new IllegalArgumentException("Can't serialize the object into the json string", e);
                 }
             }

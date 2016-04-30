@@ -1,3 +1,10 @@
+## Changes in 1.7.1 : ##
+
+    - Setting Cookie policy on httpclient to ignoring server cookies as we don't use them.
+    - Added support to retry on throttled requests.
+    - Removed e.printstacktrace from source code and replaced with Logger operations as appropriate.
+    - Changed test code structure and added mocking framework for unit testing.
+
 ## Changes in 1.7.0 : ##
 
 	- Added support for expiring documents by setting the default time-to-live on collections and time-to-live override on documents.

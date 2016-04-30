@@ -18,7 +18,7 @@ import org.apache.http.entity.StringEntity;
  * This is core Transport/Connection agnostic request to DocumentService. It is marked internal today. If needs arises
  * for client to do no-serialized processing we can open this up to public.
  */
-final class DocumentServiceRequest {
+final class DocumentServiceRequest {    
 
     /**
      * Creates a DocumentServiceRequest with an HttpEntity.
@@ -354,5 +354,4 @@ final class DocumentServiceRequest {
     void setIsNameBased(boolean isNameBased) {
         this.isNameBased = isNameBased;
     }
-
 }

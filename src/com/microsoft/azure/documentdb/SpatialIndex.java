@@ -59,7 +59,8 @@ public final class SpatialIndex extends Index {
         try {
             result = DataType.valueOf(WordUtils.capitalize(super.getString(Constants.Properties.DATA_TYPE)));
         } catch(IllegalArgumentException e) {
-            e.printStackTrace();
+            this.getLogger().warning(
+                    String.format("Invalid index dataType value %s.", super.getString(Constants.Properties.DATA_TYPE)));
         }
         return result;
     }

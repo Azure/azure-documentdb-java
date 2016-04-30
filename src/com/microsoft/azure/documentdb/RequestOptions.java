@@ -11,7 +11,6 @@ import java.util.List;
  * DocumentDB service.
  */
 public final class RequestOptions {
-
     private List<String> preTriggerInclude;
 
     /**
