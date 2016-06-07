@@ -48,6 +48,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      * QueryIterable constructor taking in the individual parameters for creating a DocumentServiceRequest
      * This constructor is used for partitioning scenarios when multiple DocumentServiceRequests need to be created
      */
+    @SuppressWarnings("deprecation")
     protected QueryIterable(DocumentClient client,
             String databaseOrDocumentCollectionLink,
             SqlQuerySpec querySpec,
@@ -144,17 +145,6 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     public Iterator<T> iterator() {
         Iterator<T> it = new Iterator<T>() {
 
-            private QueryBackoffRetryUtilityDelegate delegate = new QueryBackoffRetryUtilityDelegate() {
-
-                @Override
-                public void apply() throws Exception {
-                    List<T> results = fetchNextBlock();
-                    if (results == null) {
-                        hasNext = false;
-                    }
-                }
-            };
-
             /**
              * Returns true if the iterator has a next value.
              * 
@@ -163,7 +153,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             @Override
             public boolean hasNext() {
                 if (currentIndex >= items.size() && hasNext) {
-                    BackoffRetryUtility.execute(this.delegate, client.getConnectionPolicy().getMaxRetryOnThrottledAttempts());
+                    fetchNext();
                 }
 
                 return hasNext;
@@ -177,7 +167,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             @Override
             public T next() {
                 if (currentIndex >= items.size() && hasNext) {
-                    BackoffRetryUtility.execute(this.delegate, client.getConnectionPolicy().getMaxRetryOnThrottledAttempts());
+                    fetchNext();
                 }
                 
                 if (!hasNext) return null;
@@ -191,7 +181,17 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
             public void remove() {
                 throw new UnsupportedOperationException("remove");
             }
-
+            
+            private void fetchNext() {
+                try {
+                    List<T> results = fetchNextBlock();
+                    if (results == null) {
+                        hasNext = false;
+                    }
+                } catch (DocumentClientException e) {
+                    throw new IllegalStateException(String.format("Exception not retriable. %s", e.toString()), e);
+                }
+            }
         };
         return it;
     }
@@ -237,6 +237,11 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         while(fetchedItems == null) {
             if(this.documentCollectionLinks != null && this.currentCollectionIndex < this.documentCollectionLinks.size()) {
                 String path = Utils.joinPath(this.documentCollectionLinks.get(this.currentCollectionIndex), Paths.DOCUMENTS_PATH_SEGMENT);
+                // Clear the session token so we don't re-use the same token for a different collection.
+                if (this.requestHeaders != null) {
+                    this.requestHeaders.remove(HttpConstants.HttpHeaders.SESSION_TOKEN);
+                }
+                
                 this.request = DocumentServiceRequest.create(ResourceType.Document,
                         path,
                         this.querySpec,

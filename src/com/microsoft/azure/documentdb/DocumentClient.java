@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -25,9 +26,8 @@ import org.json.JSONObject;
  * <p>
  * The service client encapsulates the endpoint and credentials used to access the DocumentDB service.
  */
-public final class DocumentClient {
+public class DocumentClient {
 
-    private int maxRetryAttempts;
     private URI serviceEndpoint;
     private String masterKey;
     private Map<String, String> resourceTokens;
@@ -35,8 +35,11 @@ public final class DocumentClient {
     private GatewayProxy gatewayProxy;
     private SessionContainer sessionContainer;
     private ConsistencyLevel desiredConsistencyLevel;
-    private ConcurrentHashMap<String, PartitionResolver> partitionResolvers;
     private PartitionKeyDefinitionMap partitionKeyDefinitionMap;
+    private GlobalEndpointManager globalEndpointManager;
+    private Logger logger;
+    @SuppressWarnings("deprecation")
+    private ConcurrentHashMap<String, PartitionResolver> partitionResolvers;
 
     /**
      * A client query compatibility mode when making query request. Can be used to force a specific query request
@@ -115,19 +118,19 @@ public final class DocumentClient {
         this.initialize(uri, connectionPolicy, desiredConsistencyLevel);
     }
 
+    @SuppressWarnings("deprecation") // use of PartitionResolver is deprecated.
     private void initialize(URI serviceEndpoint,
                             ConnectionPolicy connectionPolicy,
                             ConsistencyLevel desiredConsistencyLevel) {
 
         this.serviceEndpoint = serviceEndpoint;
-
+        this.logger = Logger.getLogger(this.getClass().getPackage().getName());
+        
         if (connectionPolicy != null) {
             this.connectionPolicy = connectionPolicy;
         } else {
             this.connectionPolicy = new ConnectionPolicy();
         }
-
-        this.maxRetryAttempts = this.connectionPolicy.getMaxRetryOnThrottledAttempts();
 
         this.sessionContainer = new SessionContainer(this.serviceEndpoint.getHost());
         this.desiredConsistencyLevel = desiredConsistencyLevel;
@@ -137,23 +140,26 @@ public final class DocumentClient {
         if(userAgentSuffix != null && userAgentSuffix.length() > 0) {
             userAgentContainer.setSuffix(userAgentSuffix);
         }
-
-        this.gatewayProxy = new GatewayProxy(this.serviceEndpoint,
-                                             this.connectionPolicy,
+        
+        this.partitionKeyDefinitionMap = new InMemoryPartitionKeyDefinitionMap(this);
+        this.globalEndpointManager = new GlobalEndpointManager(this);
+        this.gatewayProxy = new GatewayProxy(this.connectionPolicy,
                                              desiredConsistencyLevel,
                                              this.queryCompatibilityMode,
                                              this.masterKey,
                                              this.resourceTokens,
-                                             userAgentContainer);
+                                             userAgentContainer,
+                                             this.globalEndpointManager);
         
+        // use of PartitionResolver is deprecated.
         this.partitionResolvers = new ConcurrentHashMap<String, PartitionResolver>();
-        this.partitionKeyDefinitionMap = new InMemoryPartitionKeyDefinitionMap(this);
     }
 
     /**
      * Registers the partition resolver associated with the database link
      * @throws DocumentClientException 
      */
+    @Deprecated
     public void registerPartitionResolver(String databaseLink, PartitionResolver partitionResolver) 
             throws DocumentClientException {
         if(StringUtils.isEmpty(databaseLink)) {
@@ -169,6 +175,7 @@ public final class DocumentClient {
     /**
      * Gets the partition resolver associated with the database link on the client
      */
+    @Deprecated
     protected PartitionResolver getPartitionResolver(String databaseLink) {
         if(StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
@@ -176,18 +183,51 @@ public final class DocumentClient {
         return this.partitionResolvers.get(Utils.trimBeginingAndEndingSlashes(databaseLink));
     }
     
+    /**
+     * Gets the default service endpoint as passed in by the 
+     * user during construction.
+     */
+    public URI getServiceEndpoint() {
+        return this.serviceEndpoint;
+    }
+    
+    /**
+     * Gets the current write endpoint chosen based on availability and preference.
+     */
+    public URI getWriteEndpoint() {
+        return this.globalEndpointManager.getWriteEndpoint();
+    }
+
+    /**
+     * Gets the current read endpoint chosen based on availability and preference.
+     */
+    public URI getReadEndpoint() {
+        return this.globalEndpointManager.getReadEndpoint();
+    }
+
     // used by unit test to mock gateway proxy.
     void setGatewayProxyOverride(GatewayProxy proxyOverride) {
         this.gatewayProxy = proxyOverride;
     }
     
-    // used by unit test to mock partition key definition map.
-    void setPartitionKeyDefinitionMapOverride(PartitionKeyDefinitionMap mapOverride) {
-        this.partitionKeyDefinitionMap = mapOverride;
-    }
-    
     ConnectionPolicy getConnectionPolicy() {
         return this.connectionPolicy;
+    }
+    
+    GlobalEndpointManager getGlobalEndpointManager() {
+        return this.globalEndpointManager;
+    }
+    
+    void setGlobalEndpointManager(GlobalEndpointManager endpointManager) {
+        this.globalEndpointManager = endpointManager;
+    }
+    
+    void setPartitionKeyDefinitionMap(PartitionKeyDefinitionMap partitionKeyDefinitionMap) {
+        this.partitionKeyDefinitionMap = partitionKeyDefinitionMap;
+    }
+    
+    PartitionKeyDefinitionMap getPartitionKeyDefinitionMap() {
+        return this.partitionKeyDefinitionMap;
     }
     
     /**
@@ -337,6 +377,7 @@ public final class DocumentClient {
                                                                        path,
                                                                        collection,
                                                                        requestHeaders);
+        
         return new ResourceResponse<DocumentCollection>(this.doCreate(request), DocumentCollection.class);
     }
 
@@ -406,11 +447,21 @@ public final class DocumentClient {
             throw new IllegalArgumentException("collectionLink");
         }
 
+        return this.readCollection(collectionLink, options, false);
+    }
+    
+    ResourceResponse<DocumentCollection> readCollection(String collectionLink, RequestOptions options, boolean useWriteEndpoint)
+            throws DocumentClientException {
+        
         String path = Utils.joinPath(collectionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
                                                                        path,
                                                                        requestHeaders);
+        if (useWriteEndpoint) {
+            request.setEndpointOverride(this.getGlobalEndpointManager().getWriteEndpoint());
+        }
+        
         return new ResourceResponse<DocumentCollection>(this.doRead(request), DocumentCollection.class);
     }
 
@@ -496,61 +547,86 @@ public final class DocumentClient {
     /**
      * Creates a document.
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param document the document represented as a POJO or Document object.
      * @param options the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the created document.
      * @throws DocumentClientException the document client exception.
      */
-    public ResourceResponse<Document> createDocument(String databaseOrDocumentCollectionLink,
+    public ResourceResponse<Document> createDocument(String collectionLink,
                                                      Object document,
                                                      RequestOptions options,
                                                      boolean disableAutomaticIdGeneration)
             throws DocumentClientException {
-        String documentCollectionLink = this.getTargetDocumentCollectionLink(databaseOrDocumentCollectionLink, document);
         
-        DocumentServiceRequest request = getDocumentRequest(documentCollectionLink, document, options,
-                disableAutomaticIdGeneration);
-        return new ResourceResponse<Document>(this.doCreate(request), Document.class);
+        final String documentCollectionLink = this.getTargetDocumentCollectionLink(collectionLink, document);
+        final Object documentLocal = document;
+        final RequestOptions optionsLocal = options;
+        final boolean disableAutomaticIdGenerationLocal = disableAutomaticIdGeneration;
+        
+        RetryCreateDocumentDelegate createDelegate = new RetryCreateDocumentDelegate() {
+
+            @Override
+            public ResourceResponse<Document> apply() throws DocumentClientException {
+                DocumentServiceRequest request = getCreateDocumentRequest(documentCollectionLink, documentLocal, optionsLocal,
+                        disableAutomaticIdGenerationLocal);
+                return new ResourceResponse<Document>(doCreate(request), Document.class);   
+            }
+        };
+        
+        return  RetryUtility.execute(createDelegate, this, documentCollectionLink);
     }
 
      /**
      * Upserts a document.
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param document the document represented as a POJO or Document object to upsert.
      * @param options the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the upserted document.
      * @throws DocumentClientException the document client exception.
      */
-    public ResourceResponse<Document> upsertDocument(String databaseOrDocumentCollectionLink,
+    public ResourceResponse<Document> upsertDocument(String collectionLink,
                                                      Object document,
                                                      RequestOptions options,
                                                      boolean disableAutomaticIdGeneration)
             throws DocumentClientException {
-        String documentCollectionLink = this.getTargetDocumentCollectionLink(databaseOrDocumentCollectionLink, document);
+        final String documentCollectionLink = this.getTargetDocumentCollectionLink(collectionLink, document);
+        final Object documentLocal = document;
+        final RequestOptions optionsLocal = options;
+        final boolean disableAutomaticIdGenerationLocal = disableAutomaticIdGeneration;
         
-        DocumentServiceRequest request = getDocumentRequest(documentCollectionLink, document, options,
-                disableAutomaticIdGeneration);
-        return new ResourceResponse<Document>(this.doUpsert(request), Document.class);
+        RetryCreateDocumentDelegate upsertDelegate = new RetryCreateDocumentDelegate() {
+
+            @Override
+            public ResourceResponse<Document> apply() throws DocumentClientException {
+                DocumentServiceRequest request = getCreateDocumentRequest(documentCollectionLink, documentLocal, optionsLocal,
+                        disableAutomaticIdGenerationLocal);
+                return new ResourceResponse<Document>(doUpsert(request), Document.class);
+            }
+        };
+        
+        return  RetryUtility.execute(upsertDelegate, this, documentCollectionLink);
     }
     
+    @Deprecated
     protected static final String PartitionResolverErrorMessage = "Couldn't find any partition resolvers for the database link provided. Ensure that the link you used when registering the partition resolvers matches the link provided or you need to register both types of database link(self link as well as ID based link)."; 
     
-    private String getTargetDocumentCollectionLink(String databaseOrDocumentCollectionLink, Object document) {
-        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
-            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
+    @SuppressWarnings("deprecation")
+    private String getTargetDocumentCollectionLink(String collectionLink, Object document) {
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
         }
         if (document == null) {
             throw new IllegalArgumentException("document");
         }
         
-        String documentCollectionLink = databaseOrDocumentCollectionLink;
-        if(Utils.isDatabaseLink(databaseOrDocumentCollectionLink)) {
+        String documentCollectionLink = collectionLink;
+        if(Utils.isDatabaseLink(collectionLink)) {
             // Gets the partition resolver(if it exists) for the specified database link
-            PartitionResolver partitionResolver = this.getPartitionResolver(databaseOrDocumentCollectionLink);
+            PartitionResolver partitionResolver = this.getPartitionResolver(collectionLink);
             
             // If the partition resolver exists, get the collection to which the Create/Upsert should be directed using the partition key
             if(partitionResolver != null) {
@@ -564,7 +640,7 @@ public final class DocumentClient {
         return documentCollectionLink;
     }
     
-    private DocumentServiceRequest getDocumentRequest(String documentCollectionLink, Object document, RequestOptions options,
+    private DocumentServiceRequest getCreateDocumentRequest(String documentCollectionLink, Object document, RequestOptions options,
             boolean disableAutomaticIdGeneration) {
         if (StringUtils.isEmpty(documentCollectionLink)) {
             throw new IllegalArgumentException("documentCollectionLink");
@@ -609,23 +685,13 @@ public final class DocumentClient {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
+        
         if (document == null) {
             throw new IllegalArgumentException("document");          
         }
 
         Document typedDocument = Document.FromObject(document);
-        DocumentClient.validateResource(typedDocument);
-
-        options = this.insertPartitionKeyIfNeeded(Utils.getCollectionName(documentLink), typedDocument, options);
-        
-        String path = Utils.joinPath(documentLink, null);
-        Map<String, String> requestHeaders = this.getRequestHeaders(options);
-
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
-                                                                       path,
-                                                                       typedDocument,
-                                                                       requestHeaders);
-        return new ResourceResponse<Document>(this.doReplace(request), Document.class);
+        return this.replaceDocumentInternal(documentLink, typedDocument, options);
     }
 
     /**
@@ -643,17 +709,26 @@ public final class DocumentClient {
             throw new IllegalArgumentException("document");          
         }
 
+        return this.replaceDocumentInternal(document.getSelfLink(), document, options);
+    }
+    
+    private ResourceResponse<Document> replaceDocumentInternal(String documentLink, Document document, RequestOptions options)
+            throws DocumentClientException {
+
+        if (document == null) {
+            throw new IllegalArgumentException("document");          
+        }
+
         DocumentClient.validateResource(document);
         
-        options = this.insertPartitionKeyIfNeeded(Utils.getCollectionName(document.getSelfLink()), document, options);
-
-        String path = Utils.joinPath(document.getSelfLink(), null);
-        Map<String, String> requestHeaders = this.getRequestHeaders(options);
+        options = insertPartitionKeyIfNeeded(Utils.getCollectionName(documentLink), document, options);
+        String path = Utils.joinPath(documentLink, null);
+        Map<String, String> requestHeaders = getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                        path,
                                                                        document,
                                                                        requestHeaders);
-        return new ResourceResponse<Document>(this.doReplace(request), Document.class);
+        return new ResourceResponse<Document>(this.doReplace(request), Document.class);                
     }
 
     /**
@@ -720,67 +795,67 @@ public final class DocumentClient {
     /**
      * Query for documents in a document collection.
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param query the query.
      * @param options the feed options.
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, String query, FeedOptions options) {
-        return this.queryDocuments(databaseOrDocumentCollectionLink, query, options, null);
+    public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options) {
+        return this.queryDocuments(collectionLink, query, options, null);
     }
     
     /**
      * Query for documents in a document collection with a partitionKey
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param query the query.
      * @param options the feed options.
      * @param partitionKey the partitionKey. 
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, String query, FeedOptions options, Object partitionKey) {
-        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
-            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
+    public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options, Object partitionKey) {
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
         }
         if (StringUtils.isEmpty(query)) {
             throw new IllegalArgumentException("query");
         }
         
-        return queryDocuments(databaseOrDocumentCollectionLink, new SqlQuerySpec(query, null), options, partitionKey);
+        return queryDocuments(collectionLink, new SqlQuerySpec(query, null), options, partitionKey);
     }
     
     /**
      * Query for documents in a document collection.
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param querySpec the SQL query specification.
      * @param options the feed options.
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, SqlQuerySpec querySpec, FeedOptions options) {
-        return this.queryDocuments(databaseOrDocumentCollectionLink, querySpec, options, null);
+    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
+        return this.queryDocuments(collectionLink, querySpec, options, null);
     }
 
     /**
      * Query for documents in a document collection.
      * 
-     * @param databaseOrDocumentCollectionLink the database link when using partitioning, otherwise document collection link.
+     * @param collectionLink the link to the parent document collection.
      * @param querySpec the SQL query specification.
      * @param options the feed options.
      * @param partitionKey the partitionKey. 
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String databaseOrDocumentCollectionLink, SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
-        if (StringUtils.isEmpty(databaseOrDocumentCollectionLink)) {
-            throw new IllegalArgumentException("databaseOrDocumentCollectionLink");
+    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
         }
         if (querySpec == null) {
             throw new IllegalArgumentException("querySpec");
         }  
         
-        if(Utils.isDatabaseLink(databaseOrDocumentCollectionLink)) {
+        if(Utils.isDatabaseLink(collectionLink)) {
                 return new FeedResponse<Document>(new QueryIterable<Document>(this,
-                        databaseOrDocumentCollectionLink,
+                        collectionLink,
                         querySpec,
                         options,
                         partitionKey,
@@ -788,7 +863,7 @@ public final class DocumentClient {
                         Document.class));
         }
         else {
-            String path = Utils.joinPath(databaseOrDocumentCollectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
+            String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
             Map<String, String> requestHeaders = this.getFeedHeaders(options);
             DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
                                                                            path,
@@ -1169,7 +1244,7 @@ public final class DocumentClient {
         String path = Utils.joinPath(triggerLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
         DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
-        return new ResourceResponse<Trigger>(this.gatewayProxy.doRead(request), Trigger.class);
+        return new ResourceResponse<Trigger>(this.doRead(request), Trigger.class);
     }
 
     /**
@@ -2354,7 +2429,7 @@ public final class DocumentClient {
     }
     
     private DocumentServiceResponse doCreate(DocumentServiceRequest request) throws DocumentClientException {
-        BackoffRetryUtilityDelegate createDelegate = new BackoffRetryUtilityDelegate() {
+        RetryRequestDelegate createDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
@@ -2362,14 +2437,15 @@ public final class DocumentClient {
             }
         };
         
+        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);
-        DocumentServiceResponse response = BackoffRetryUtility.execute(createDelegate, request, this.maxRetryAttempts);
+        DocumentServiceResponse response = RetryUtility.execute(createDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doUpsert(DocumentServiceRequest request) throws DocumentClientException {
-        BackoffRetryUtilityDelegate upsertDelegate = new BackoffRetryUtilityDelegate() {
+        RetryRequestDelegate upsertDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
@@ -2377,10 +2453,9 @@ public final class DocumentClient {
             }
         };
         
-        this.applySessionToken(request);
-        
+        request.setOperationType(OperationType.Write);
+        this.applySessionToken(request);        
         Map<String, String> headers = request.getHeaders();
-        
         // headers can never be null, since it will be initialized even when no request options are specified,
         // hence using assertion here instead of exception, being in the private method
         assert(headers != null);
@@ -2389,13 +2464,13 @@ public final class DocumentClient {
             headers.put(HttpConstants.HttpHeaders.IS_UPSERT, "true");
         }
 
-        DocumentServiceResponse response = BackoffRetryUtility.execute(upsertDelegate, request, this.maxRetryAttempts);
+        DocumentServiceResponse response = RetryUtility.execute(upsertDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doReplace(DocumentServiceRequest request) throws DocumentClientException {
-        BackoffRetryUtilityDelegate replaceDelegate = new BackoffRetryUtilityDelegate() {
+        RetryRequestDelegate replaceDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
@@ -2403,15 +2478,15 @@ public final class DocumentClient {
             }
         };
         
+        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);
-
-        DocumentServiceResponse response = BackoffRetryUtility.execute(replaceDelegate, request, this.maxRetryAttempts);
+        DocumentServiceResponse response = RetryUtility.execute(replaceDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doDelete(DocumentServiceRequest request) throws DocumentClientException {
-        BackoffRetryUtilityDelegate deleteDelegate = new BackoffRetryUtilityDelegate() {
+        RetryRequestDelegate deleteDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
@@ -2419,9 +2494,9 @@ public final class DocumentClient {
             }
         };
         
+        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);
-
-        DocumentServiceResponse response = BackoffRetryUtility.execute(deleteDelegate, request, this.maxRetryAttempts);
+        DocumentServiceResponse response = RetryUtility.execute(deleteDelegate, this, request);
 
         if (request.getResourceType() != ResourceType.DocumentCollection) {
             this.captureSessionToken(request, response);
@@ -2432,7 +2507,7 @@ public final class DocumentClient {
     }
     
     private DocumentServiceResponse doRead(DocumentServiceRequest request) throws DocumentClientException {
-        BackoffRetryUtilityDelegate readDelegate = new BackoffRetryUtilityDelegate() {
+        RetryRequestDelegate readDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
@@ -2440,27 +2515,74 @@ public final class DocumentClient {
             }
         };
         
+        request.setOperationType(OperationType.Read);
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = BackoffRetryUtility.execute(readDelegate, request, this.maxRetryAttempts);
+        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
-    protected DocumentServiceResponse doReadFeed(DocumentServiceRequest request) throws DocumentClientException {
+    DocumentServiceResponse doReadFeed(DocumentServiceRequest request) throws DocumentClientException {
+        RetryRequestDelegate readDelegate = new RetryRequestDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doReadFeed(requestInner);
+            }
+        };
+        
+        request.setOperationType(OperationType.Read);
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = this.gatewayProxy.doReadFeed(request);
+        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
-    protected DocumentServiceResponse doQuery(DocumentServiceRequest request) throws DocumentClientException {
+    DocumentServiceResponse doQuery(DocumentServiceRequest request) throws DocumentClientException {
+        RetryRequestDelegate readDelegate = new RetryRequestDelegate() {
+
+            @Override
+            public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
+                return gatewayProxy.doSQLQuery(requestInner);
+            }
+        };
+        
+        request.setOperationType(OperationType.Read);
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = this.gatewayProxy.doSQLQuery(request);
+        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
         this.captureSessionToken(request, response);
         return response;
+    }
+    
+    DatabaseAccount getDatabaseAccountFromEndpoint(URI endpoint) throws DocumentClientException {
+        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DatabaseAccount, "", null);
+        DocumentServiceResponse response = null;
+        try {
+            request.setEndpointOverride(endpoint);
+            response = this.gatewayProxy.doRead(request);
+        } catch (IllegalStateException e) {
+            // Ignore all errors. Discover is an optimization.
+            String message = "Failed to retrieve database account information. %s";
+            Throwable cause = e.getCause();
+            if (cause != null) {
+                message = String.format(message, cause.toString());
+            }
+            else {
+                message = String.format(message, e.toString());
+            }
+            
+            this.logger.warning(message);
+        }
+        
+        if (response != null) {
+            return response.getResource(DatabaseAccount.class);
+        }
+        else {
+            return null;
+        }
     }
     
     private void applySessionToken(DocumentServiceRequest request) throws DocumentClientException{
@@ -2547,7 +2669,7 @@ public final class DocumentClient {
         return headers;
     }
 
-    protected Map<String, String> getFeedHeaders(FeedOptions options) {
+    Map<String, String> getFeedHeaders(FeedOptions options) {
         if (options == null)
             return null;
 
@@ -2623,11 +2745,15 @@ public final class DocumentClient {
             return returnOptions;
         }
 
-        this.extractPartitionKeyValueFromDocument(documentCollectionLink, document, returnOptions);
+        PartitionKey partitionKey = this.extractPartitionKeyValueFromDocument(documentCollectionLink, document);
+        if (partitionKey != null) {
+            returnOptions.setPartitionKey(partitionKey);
+        }
+        
         return returnOptions;
     }
 
-    private void extractPartitionKeyValueFromDocument(String documentCollectionLink, Document document, RequestOptions options) {
+    private PartitionKey extractPartitionKeyValueFromDocument(String documentCollectionLink, Document document) {
          PartitionKeyDefinition keyDef = this.getPartitionKeyDefinition(documentCollectionLink);
          
          if (keyDef != null) {
@@ -2639,9 +2765,11 @@ public final class DocumentClient {
                      value = Undefined.Value();
                  }
                  
-                 options.setPartitionKey(new PartitionKey(value));
+                 return new PartitionKey(value);
              }
          }
+         
+         return null;
     }
 
     private PartitionKeyDefinition getPartitionKeyDefinition(String documentCollectionLink) {

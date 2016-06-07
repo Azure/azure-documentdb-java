@@ -37,6 +37,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         
         String collectionId = GatewayTestBase.getUID();
         DocumentCollection createdCollection = this.createMultiPartitionCollection(collectionId, "/id");
+        Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(createdCollection.getSelfLink()));
         
         Assert.assertEquals(collectionId, createdCollection.getId());
         PartitionKeyDefinition partitionKeyDef = createdCollection.getPartitionKey();
@@ -683,7 +684,73 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         newDocument = this.client.readDocument(newDocument.getSelfLink(), options).getResource();
     }
     
+    @Test
+    public void testPartitionKeyChanged() throws DocumentClientException {
+        // Test create document on partition key change.
+        String collectionId = GatewayTests.getUID();
+        DocumentCollection createdCollection = this.createMultiPartitionCollection(collectionId, "/id");
+        
+        String documentDef1 = "{ 'id': 'document1', 'description': 'this is a test document.' }";
+        Document newDocument1 = new Document(documentDef1);
+        newDocument1 = this.client.createDocument(
+                getDocumentCollectionLink(this.databaseForTest, createdCollection, true),
+                newDocument1, null, false).getResource();
+        
+        this.client.deleteCollection(createdCollection.getSelfLink(), null);
+        
+        // Create a collection with the same id but different partition key.
+        String documentDef2 = "{ 'order': 1, 'description': 'this is a test document.' }";
+        createdCollection = this.createMultiPartitionCollection(collectionId, "/order");
+        Document newDocument2 = new Document(documentDef2);
+        
+        newDocument2 = this.client.createDocument(
+                getDocumentCollectionLink(this.databaseForTest, createdCollection, true),
+                newDocument2, null, false).getResource();
+        Assert.assertNotNull(newDocument2);
+        
+        // Test upsert document on partition key change.
+        collectionId = GatewayTests.getUID();
+        createdCollection = this.createMultiPartitionCollection(collectionId, "/id");
+        
+        documentDef1 = "{ 'id': 'document1', 'description': 'this is a test document.' }";
+        newDocument1 = new Document(documentDef1);
+        newDocument1 = this.client.upsertDocument(
+                getDocumentCollectionLink(this.databaseForTest, createdCollection, true),
+                newDocument1, null, false).getResource();
+        
+        this.client.deleteCollection(createdCollection.getSelfLink(), null);
+        
+        documentDef2 = "{ 'order': 1, 'description': 'this is a test document.' }";
+        createdCollection = this.createMultiPartitionCollection(collectionId, "/order");
+        newDocument2 = new Document(documentDef2);
+        
+        newDocument2 = this.client.upsertDocument(
+                getDocumentCollectionLink(this.databaseForTest, createdCollection, true),
+                newDocument2, null, false).getResource();
+        Assert.assertNotNull(newDocument2);
+    }
+    
+    @Test
+    public void testPartitionKeyCache() throws DocumentClientException {
+        String collectionId = GatewayTests.getUID();
+        DocumentCollection createdCollection = this.createMultiPartitionCollection(collectionId, "/id");
+        Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(createdCollection.getSelfLink()));
+        String collectionLink = getDocumentCollectionLink(this.databaseForTest, createdCollection, true);
+        Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(collectionLink));
+        
+        collectionId = GatewayTests.getUID();
+        createdCollection = this.createMultiPartitionCollection(collectionId, "/id", false);
+        Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(createdCollection.getSelfLink()));
+        collectionLink = getDocumentCollectionLink(this.databaseForTest, createdCollection, true);
+        Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(collectionLink));
+    }
+    
     private DocumentCollection createMultiPartitionCollection(String collectionId, String partitionKeyPath) 
+            throws DocumentClientException {
+        return this.createMultiPartitionCollection(collectionId, partitionKeyPath, true);
+    }
+    
+    private DocumentCollection createMultiPartitionCollection(String collectionId, String partitionKeyPath, boolean isNameBased)
             throws DocumentClientException {
         PartitionKeyDefinition partitionKeyDef = new PartitionKeyDefinition();
         ArrayList<String> paths = new ArrayList<String>();
@@ -696,7 +763,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         collectionDefinition.setId(collectionId);
         collectionDefinition.setPartitionKey(partitionKeyDef);
         DocumentCollection createdCollection = this.client.createCollection(
-                getDatabaseLink(this.databaseForTest, true),
+                getDatabaseLink(this.databaseForTest, isNameBased),
                 collectionDefinition,
                 options).getResource();
         

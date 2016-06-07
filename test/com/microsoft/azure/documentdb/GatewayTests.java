@@ -924,25 +924,6 @@ public final class GatewayTests extends GatewayTestBase {
     }
 
     private void testAttachmentCrud(boolean isNameBased) throws DocumentClientException {
-        class ReadableStream extends InputStream {
-
-            byte[] bytes;
-            int index;
-
-            ReadableStream(String content) {
-                this.bytes = content.getBytes();
-                this.index = 0;
-            }
-
-            @Override
-            public int read() throws IOException {
-                if (this.index < this.bytes.length) {
-                    return this.bytes[this.index++];
-                }
-                return -1;
-            }
-        }
-
         // Create document.
         Document documentDefinition = new Document(
                 "{" +
@@ -1022,7 +1003,7 @@ public final class GatewayTests extends GatewayTestBase {
         Assert.assertEquals("new author", attachment.getString("Author"));
         // Read attachment media.
         InputStream mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("stream content.", GatewayTests.getStringFromInputStream(mediaResponse));
+        Assert.assertEquals("stream content.", GatewayTestBase.getStringFromInputStream(mediaResponse));
 
         mediaStream = new ReadableStream("updated stream content");
         // Update attachment media.
@@ -1031,14 +1012,14 @@ public final class GatewayTests extends GatewayTestBase {
         // Read attachment media after update.
         // read media buffered (default).
         mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("updated stream content", GatewayTests.getStringFromInputStream(mediaResponse));
+        Assert.assertEquals("updated stream content", GatewayTestBase.getStringFromInputStream(mediaResponse));
 
         // read media streamed, should still work.
         ConnectionPolicy streamPolicy = new ConnectionPolicy();
         streamPolicy.setMediaReadMode(MediaReadMode.Streamed);
         client = new DocumentClient(HOST, MASTER_KEY, streamPolicy, ConsistencyLevel.Session);
         mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("updated stream content", GatewayTests.getStringFromInputStream(mediaResponse));
+        Assert.assertEquals("updated stream content", GatewayTestBase.getStringFromInputStream(mediaResponse));
 
         // Share attachment with a second document.
         documentDefinition = new Document("{'id': 'document 2'}");
@@ -2139,7 +2120,7 @@ public final class GatewayTests extends GatewayTestBase {
         // Sets up entities for this test.
         DocumentClient client = new DocumentClient(HOST,
                 MASTER_KEY,
-                ConnectionPolicy.GetDefault(),
+                new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         // Create document1
         Document document1 = client.createDocument(
@@ -2193,7 +2174,7 @@ public final class GatewayTests extends GatewayTestBase {
         // Client without any authorization will fail.
         DocumentClient badClient = new DocumentClient(HOST,
                 "",
-                ConnectionPolicy.GetDefault(),
+                new ConnectionPolicy(),
                 ConsistencyLevel.Session);
 
         try {
@@ -2208,7 +2189,7 @@ public final class GatewayTests extends GatewayTestBase {
         resourceTokens1.add(permission1);
         DocumentClient clientForCollection1 = new DocumentClient(HOST,
                 resourceTokens1,
-                ConnectionPolicy.GetDefault(),
+                new ConnectionPolicy(),
                 ConsistencyLevel.Session);
 
         // 1. Success-- Use Col1 Permission to Read
@@ -2240,7 +2221,7 @@ public final class GatewayTests extends GatewayTestBase {
         resourceTokens2.add(permission2);
         DocumentClient clientForCollection2 = new DocumentClient(HOST,
                 resourceTokens2,
-                ConnectionPolicy.GetDefault(),
+                new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         Document newDocument2 = new Document(String.format(
                 "{" +
@@ -2284,7 +2265,7 @@ public final class GatewayTests extends GatewayTestBase {
 
     @Test
     public void testCustomizedUserAgentCrud() throws DocumentClientException {
-        ConnectionPolicy policy = ConnectionPolicy.GetDefault();
+        ConnectionPolicy policy = new ConnectionPolicy();
         policy.setUserAgentSuffix("My-Custom-User-Agent");
         Assert.assertEquals("User-agent suffix should've been added", "My-Custom-User-Agent", policy.getUserAgentSuffix());
     }
@@ -2294,7 +2275,6 @@ public final class GatewayTests extends GatewayTestBase {
     public void testQuotaHeaders() {
 
         try {
-            cleanUpGeneratedDatabases();
             Database dbToCreate = new Database();
             dbToCreate.setId("DocumentQuotaDB" + getUID());
             Database db = client.createDatabase(dbToCreate, null).getResource();

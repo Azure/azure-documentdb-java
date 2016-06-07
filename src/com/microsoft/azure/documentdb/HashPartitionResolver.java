@@ -31,6 +31,7 @@ import java.util.Map;
  * HashPartitionResolver implements partitioning based on the value of a hash function, allowing you to evenly 
  * distribute requests and data across a number of partitions by implementing PartitionResolver interface. 
  */
+@Deprecated
 public class HashPartitionResolver implements PartitionResolver {
     // 128 virtual nodes per collections seems to produce good distribution of nodes, so choosing that as default  
     private static final int defaultNumberOfVirtualNodesPerCollection = 128;

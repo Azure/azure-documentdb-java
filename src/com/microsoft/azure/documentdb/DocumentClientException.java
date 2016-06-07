@@ -2,27 +2,46 @@ package com.microsoft.azure.documentdb;
 
 import java.util.Map;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
- * The base class for Azure DocumentDB client exceptions.
+ * This class defines a custom exception type for all operations on
+ * DocumentClient. Applications are expected to catch DocumentClientException
+ * and handle errors as appropriate when calling methods on DocumentClient.
+ * 
+ * <p>
+ * Errors coming from the service during normal execution are converted to
+ * DocumentClientException before returning to the application with the following exception:
+ * <p>
+ *  When a BE error is encountered during a QueryIterable<T> iteration, an IllegalStateException 
+ *  is thrown instead of DocumentClientException.
+ * <p>
+ *  When a transport level error happens that request is not able to reach the service,
+ *  an IllegalStateException is thrown instead of DocumentClientException.
  * 
  */
 public class DocumentClientException extends Exception {
     private static final long serialVersionUID = 1L;
 
     private Error error;
+    private String resourceAddress;
     private int statusCode;
     private Map<String, String> responseHeaders;
 
     /**
-     * Constructor.
+     * Creates a new instance of the DocumentClientException class.
      * 
-     * @param statusCode the status code.
-     * @param errorResource the error resource.
-     * @param responseHeaders the response headers.
+     * @param statusCode
+     *            the http status code of the response.
+     * @param errorResource
+     *            the error resource object.
+     * @param responseHeaders
+     *            the response headers.
      */
-    public DocumentClientException(int statusCode, Error errorResource, Map<String, String> responseHeaders) {
+    public DocumentClientException(String resourceAddress, int statusCode, Error errorResource, Map<String, String> responseHeaders) {
         super(errorResource.getMessage());
 
+        this.resourceAddress = resourceAddress;
         this.statusCode = statusCode;
         this.error = errorResource;
         this.responseHeaders = responseHeaders;
@@ -37,16 +56,38 @@ public class DocumentClientException extends Exception {
         if (this.responseHeaders != null) {
             return this.responseHeaders.get(HttpConstants.HttpHeaders.ACTIVITY_ID);
         }
+
         return null;
     }
 
     /**
-     * Gets the request status code.
+     * Gets the http status code.
      * 
      * @return the status code.
      */
     public int getStatusCode() {
         return this.statusCode;
+    }
+
+    /**
+     * Gets the sub status code.
+     * 
+     * @return the status code.
+     */
+    public Integer getSubStatusCode() {
+        Integer code = null;
+        if (this.responseHeaders != null) {
+            String subStatusString = this.responseHeaders.get(HttpConstants.HttpHeaders.SUB_STATUS);
+            if (StringUtils.isNotEmpty(subStatusString)) {
+                try {
+                    code = Integer.valueOf(subStatusString);
+                } catch (NumberFormatException e) {
+                    // If value cannot be parsed as Integer, return null.
+                }
+            }
+        }
+
+        return code;
     }
 
     /**
@@ -59,25 +100,39 @@ public class DocumentClientException extends Exception {
     }
 
     /**
-     * Gets the recommended time interval after which the client can retry failed requests
+     * Gets the recommended time interval after which the client can retry
+     * failed requests
      * 
-     * @return the recommended time interval after which the client can retry failed requests.
+     * @return the recommended time interval after which the client can retry
+     *         failed requests.
      */
     public long getRetryAfterInMilliseconds() {
-        if (this.responseHeaders != null) {
-            String header = this.responseHeaders.get(
-            HttpConstants.HttpHeaders.RETRY_AFTER_IN_MILLISECONDS);
+        long retryIntervalInMilliseconds = 0;
 
-            if (header != null && !header.isEmpty()) {
-                long retryIntervalInMilliseconds = Long.valueOf(header);
-                return retryIntervalInMilliseconds;
+        if (this.responseHeaders != null) {
+            String header = this.responseHeaders.get(HttpConstants.HttpHeaders.RETRY_AFTER_IN_MILLISECONDS);
+
+            if (StringUtils.isNotEmpty(header)) {
+                try {
+                    retryIntervalInMilliseconds = Long.valueOf(header);
+                } catch (NumberFormatException e) {
+                    // If the value cannot be parsed as long, return 0.
+                }
             }
         }
 
         //
         // In the absence of explicit guidance from the backend, don't introduce
         // any unilateral retry delays here.
-        //
-        return 0;
+        return retryIntervalInMilliseconds;
+    }
+    
+    /**
+     * Gets the resource address associated with this exception.
+     * 
+     * @return the resource address associated with this exception.
+     */
+    String getResourceAddress() {
+        return this.resourceAddress;
     }
 }

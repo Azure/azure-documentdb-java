@@ -163,24 +163,24 @@ class ResourceId {
 
     public byte[] getValue() {
         int len = 0;
-        if (this.database > 0)
+        if (this.database != 0)
             len += 4;
-        if (this.documentCollection > 0 || this.user > 0)
+        if (this.documentCollection != 0 || this.user != 0)
             len += 4;
-        if (this.document > 0 || this.permission > 0
-                || this.storedProcedure > 0 || this.trigger > 0
-                || this.userDefinedFunction > 0 || this.conflict > 0)
+        if (this.document != 0 || this.permission != 0
+                || this.storedProcedure != 0 || this.trigger != 0
+                || this.userDefinedFunction != 0 || this.conflict != 0)
             len += 8;
-        if (this.attachment > 0)
+        if (this.attachment != 0)
             len += 4;
 
         byte[] val = new byte[len];
 
-        if (this.database > 0)
+        if (this.database != 0)
             ResourceId.blockCopy(convertToBytesUsingByteBuffer(this.database),
                     0, val, 0, 4);
 
-        if (this.documentCollection > 0)
+        if (this.documentCollection != 0)
             ResourceId.blockCopy(
                     convertToBytesUsingByteBuffer(this.documentCollection), 0,
                     val, 4, 4);
@@ -188,29 +188,29 @@ class ResourceId {
             ResourceId.blockCopy(convertToBytesUsingByteBuffer(this.user), 0,
                     val, 4, 4);
 
-        if (this.storedProcedure > 0)
+        if (this.storedProcedure != 0)
             ResourceId.blockCopy(
                     convertToBytesUsingByteBuffer(this.storedProcedure), 0,
                     val, 8, 8);
-        if (this.trigger > 0)
+        if (this.trigger != 0)
             ResourceId.blockCopy(convertToBytesUsingByteBuffer(this.trigger),
                     0, val, 8, 8);
-        if (this.userDefinedFunction > 0)
+        if (this.userDefinedFunction != 0)
             ResourceId.blockCopy(
                     convertToBytesUsingByteBuffer(this.userDefinedFunction), 0,
                     val, 8, 8);
-        if (this.conflict > 0)
+        if (this.conflict != 0)
             ResourceId.blockCopy(convertToBytesUsingByteBuffer(this.conflict),
                     0, val, 8, 8);
-        else if (this.document > 0)
+        else if (this.document != 0)
             ResourceId.blockCopy(convertToBytesUsingByteBuffer(this.document),
                     0, val, 8, 8);
-        else if (this.permission > 0)
+        else if (this.permission != 0)
             ResourceId.blockCopy(
                     convertToBytesUsingByteBuffer(this.permission), 0, val, 8,
                     8);
 
-        if (this.attachment > 0)
+        if (this.attachment != 0)
             ResourceId.blockCopy(
                     convertToBytesUsingByteBuffer(this.attachment), 0, val, 16,
                     4);

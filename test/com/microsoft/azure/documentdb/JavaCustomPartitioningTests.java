@@ -29,6 +29,7 @@ import com.microsoft.azure.documentdb.SqlParameter;
 import com.microsoft.azure.documentdb.SqlParameterCollection;
 import com.microsoft.azure.documentdb.SqlQuerySpec;
 
+@Deprecated
 public class JavaCustomPartitioningTests extends GatewayTestBase {
 
     @Test
@@ -170,16 +171,17 @@ public class JavaCustomPartitioningTests extends GatewayTestBase {
     
     @Test
     public void testPartitionPaging() throws DocumentClientException {
-
         // Create bunch of collections participating in partitioning
         DocumentCollection collectionDefinition = new DocumentCollection();
         
-        collectionDefinition.setId("coll_0");
+        String collectionId0 = GatewayTests.getUID();
+        collectionDefinition.setId(collectionId0);
         DocumentCollection collection0 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition,
                 null).getResource();
         
-        collectionDefinition.setId("coll_1");
+        String collectionId1 = GatewayTests.getUID();
+        collectionDefinition.setId(collectionId1);
         DocumentCollection collection1 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition,
                 null).getResource();

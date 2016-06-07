@@ -100,10 +100,13 @@ public final class DocumentCollection extends Resource {
      * <p>
      * The default time-to-live value on a collection is an optional property. If set, the documents within the collection
      * expires after the specified number of seconds since their last write time. The value of this property should be one of the following:
+     * <p>
      * 		null - indicates evaluation of time-to-live is disabled and documents within the collection will never expire, regardless whether
      * 			individual documents have their time-to-live set.
+     * <p>
      * 		nonzero positive integer - indicates the default time-to-live value for all documents within the collection. This value can be overridden
      * 			by individual documents' time-to-live value.
+     * <p>
      * 		-1 - indicates by default all documents within the collection never expire. This value can be overridden by individual documents' 
      * 			time-to-live value.
      * 

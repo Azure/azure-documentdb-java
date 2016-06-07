@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.microsoft.azure</groupId>
   <artifactId>azure-documentdb</artifactId>
-  <version>1.7.1</version>
+  <version>1.8.0</version>
   <name>${project.groupId}:${project.artifactId}</name>
   <description>Java SDK for Microsoft Azure DocumentDB</description>
   <url>http://azure.microsoft.com/en-us/services/documentdb/</url>
@@ -152,11 +152,6 @@
       <version>3.3.2</version>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <version>4.11</version>
-    </dependency>
-    <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
       <version>4.2.5</version>
@@ -167,9 +162,16 @@
       <version>4.2.5</version>
     </dependency>
     <dependency>
-    	<groupId>org.mockito</groupId>
-    	<artifactId>mockito-core</artifactId>
-    	<version>1.10.19</version>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.11</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>1.10.19</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <distributionManagement>

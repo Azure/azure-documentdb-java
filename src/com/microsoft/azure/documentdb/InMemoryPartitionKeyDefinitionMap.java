@@ -18,6 +18,12 @@ final class InMemoryPartitionKeyDefinitionMap implements PartitionKeyDefinitionM
 	private final Map<String, PartitionKeyDefinition> partitionKeyDefMap;
 	private final DocumentClient documentClient;
 	
+	/**
+     * Create a new instance of the InMemoryPartitionKeyDefinitionMap object.
+     *
+     * @param documentClient
+     *            the DocumentClient instance associated with this PartitionKeyDefinitionMap.
+     */
 	public InMemoryPartitionKeyDefinitionMap(DocumentClient documentClient) {
 		if (documentClient == null) {
 			throw new IllegalArgumentException("documentClient");
@@ -27,26 +33,49 @@ final class InMemoryPartitionKeyDefinitionMap implements PartitionKeyDefinitionM
 		this.partitionKeyDefMap = new ConcurrentHashMap<String, PartitionKeyDefinition>();
 	}
 	
+	/**
+     * Returns a PartitionKeyDefinition instance representing the partition key definition
+     * for the collection identified by the collection link.
+     *
+     * @param collectionLink
+     *            the selfLink of a collection, or the full path to the collection when using name based routing.
+     */
 	public PartitionKeyDefinition getPartitionKeyDefinition(String collectionLink) {
 		if (StringUtils.isEmpty(collectionLink)) {
 			return null;
 		}
 		
-		PartitionKeyDefinition partitionKeyDef = this.partitionKeyDefMap.get(collectionLink);
+		String collectionName = Utils.getCollectionName(collectionLink);
+		PartitionKeyDefinition partitionKeyDef = this.partitionKeyDefMap.get(collectionName);
 		if (partitionKeyDef == null) {
-			partitionKeyDef = this.retrievePartitionKeyDefinition(collectionLink);
+			partitionKeyDef = this.retrievePartitionKeyDefinition(collectionName);
 			if (partitionKeyDef != null) {
-				this.partitionKeyDefMap.put(collectionLink, partitionKeyDef);
+				this.partitionKeyDefMap.put(collectionName, partitionKeyDef);
 			}
 		}
 		
 		return partitionKeyDef;
 	}
 	
-	private PartitionKeyDefinition retrievePartitionKeyDefinition(String collectionLink) {
+	/**
+     * Refreshes the PartitionKeyDefinition entry for a given collection.
+     *
+     * @param collectionLink
+     *            the selfLink of a collection, or the full path to the collection when using name based routing.
+     */
+    public void RefreshEntry(String collectionLink) {
+        String collectionName = Utils.getCollectionName(collectionLink);
+        this.partitionKeyDefMap.remove(collectionName);
+        PartitionKeyDefinition partitionKeyDef = this.retrievePartitionKeyDefinition(collectionName);
+        if (partitionKeyDef != null) {
+            this.partitionKeyDefMap.put(collectionName, partitionKeyDef);
+        }
+    }
+    
+	private PartitionKeyDefinition retrievePartitionKeyDefinition(String collectionName) {
 		PartitionKeyDefinition keyDef = null;
 		try {
-			DocumentCollection collection = this.documentClient.readCollection(collectionLink, null).getResource();
+			DocumentCollection collection = this.documentClient.readCollection(collectionName, null).getResource();
 			keyDef = collection.getPartitionKey();
 		} catch (DocumentClientException e) {
 			// Ignore document retrieval exception and let the server handle partition key missing error.

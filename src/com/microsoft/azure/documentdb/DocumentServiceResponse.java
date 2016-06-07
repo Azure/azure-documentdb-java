@@ -82,7 +82,9 @@ final class DocumentServiceResponse implements AutoCloseable {
 
     public <T extends Resource> List<T> getQueryResponse(Class<T> c) {
         String responseBody = this.getReponseBodyAsString();
-        if (responseBody == null) return null;
+        if (responseBody == null) {
+            return new ArrayList<T>();
+        }
 
         JSONObject jobject = new JSONObject(responseBody);
         String resourceKey = DocumentServiceResponse.getResourceKey(c);

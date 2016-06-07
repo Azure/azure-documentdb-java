@@ -28,6 +28,7 @@ import org.junit.Assert;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.PartitionKeyExtractor;;
 
+@Deprecated
 public class TestIdPartitionKeyExtractor implements PartitionKeyExtractor {
     @Override
     public Object getPartitionKey(Object document) {

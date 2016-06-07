@@ -1,3 +1,12 @@
+## Changes in 1.8.0 : ##
+
+    - Added support for endpoint management for geo-distributed databases. User can customize
+      how endpoints are selected for each request by setting the ConnectionPolicy.EnableEndpointDiscovery 
+      and ConnectionPolicy.PreferredLocations properties when creating a DocumentClient instance.
+    - Added support for automatic retry on throttled requests with options to customize the max retry attempts
+      and max retry wait time.  See RetryOptions and ConnectionPolicy.getRetryOptions().
+    - Deprecated IPartitionResolver based custom partitioning code. Please use partitioned collections for higher storage and throughput.
+
 ## Changes in 1.7.1 : ##
 
     - Setting Cookie policy on httpclient to ignoring server cookies as we don't use them.

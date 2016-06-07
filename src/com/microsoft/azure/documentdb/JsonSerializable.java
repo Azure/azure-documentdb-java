@@ -19,7 +19,7 @@ import org.json.JSONObject;
 import java.util.HashMap;
 
 class JsonSerializable {
-    protected JSONObject propertyBag = null;
+    JSONObject propertyBag = null;
     private Logger logger = null;
 
     JsonSerializable() {

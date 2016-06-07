@@ -4,6 +4,8 @@
 
 package com.microsoft.azure.documentdb;
 
+import java.util.Collection;
+
 /**
  * Represents the Connection policy associated with a DocumentClient.
  */
@@ -15,7 +17,6 @@ public final class ConnectionPolicy {
     private static final int DEFAULT_MEDIA_REQUEST_TIMEOUT = 300;
     private static final int DEFAULT_MAX_POOL_SIZE = 100;
     private static final int DEFAULT_IDLE_CONNECTION_TIMEOUT = 60;
-    private static final int MAX_RETRY_ATTEMPTS = 3;
 
     private static ConnectionPolicy default_policy = null;
 
@@ -30,7 +31,7 @@ public final class ConnectionPolicy {
         this.maxPoolSize = DEFAULT_MAX_POOL_SIZE;
         this.idleConnectionTimeout = DEFAULT_IDLE_CONNECTION_TIMEOUT;
         this.userAgentSuffix = "";
-        this.maxRetryOnThrottledAttempts = MAX_RETRY_ATTEMPTS;
+        this.retryOptions = new RetryOptions();
     }
 
     private int requestTimeout;
@@ -202,31 +203,138 @@ public final class ConnectionPolicy {
         return ConnectionPolicy.default_policy;
     }
     
-    private Integer maxRetryOnThrottledAttempts;
-
     /**
      * Sets the maximum number of retries in the case where the request fails
      * due to a throttle error.
+     * 
      * <p>
-     * The default value is 3. This means in the case where the request is throttled,
-     * the same request will be issued for a maximum of 4 times to the server before 
+     * When a client is sending request faster than the request rate limit imposed by the service,
+     * the service will return HttpStatusCode 429 (Too Many Request) to throttle the client. The current
+     * implementation in the SDK will then wait for the amount of time the service tells it to wait and
+     * retry after the time has elapsed.
+     * 
+     * <p>
+     * The default value is 9. This means in the case where the request is throttled,
+     * the same request will be issued for a maximum of 10 times to the server before 
      * an error is returned to the application.
+     * 
+     * <p>
+     * This property is deprecated. Please use 
+     * connectionPolicy.getRetryOptions().setMaxRetryAttemptsOnThrottledRequests() for equivalent
+     * functionality.
      * 
      * @param maxRetryOnThrottledAttempts
      *            the max number of retry attempts on failed requests.
      */
+    @Deprecated
     public void setMaxRetryOnThrottledAttempts(Integer maxRetryOnThrottledAttempts) {
-        this.maxRetryOnThrottledAttempts = maxRetryOnThrottledAttempts;
+        int maxAttempts = 0;
+        if (maxRetryOnThrottledAttempts != null) {
+            maxAttempts = maxRetryOnThrottledAttempts;
+        }
+        
+        this.retryOptions.setMaxRetryAttemptsOnThrottledRequests(maxAttempts);
     }
 
     /**
      * Gets the maximum number of retries in the case where the request fails
      * due to a throttle error.
      * 
+     * * <p>
+     * This property is deprecated. Please use 
+     * connectionPolicy.getRetryOptions().getMaxRetryAttemptsOnThrottledRequests() for equivalent
+     * functionality.
+     * 
      * @return maximum number of retry attempts.
      */
+    @Deprecated
     public Integer getMaxRetryOnThrottledAttempts() {
-        return this.maxRetryOnThrottledAttempts;
+        return this.retryOptions.getMaxRetryAttemptsOnThrottledRequests();
     }
     
+    private RetryOptions retryOptions;
+
+    /**
+     * Sets the retry policy options associated with the DocumentClient instance.
+     * 
+     * <p>
+     * Properties in the RetryOptions class allow application to customize the built-in
+     * retry policies. This property is optional. When it's not set, the SDK uses the
+     * default values for configuring the retry policies.  See RetryOptions class for
+     * more details.
+     * 
+     * @param retryOptions
+     *            the RetryOptions instance.
+     */
+    public void setRetryOptions(RetryOptions retryOptions) {
+        if (retryOptions == null) {
+            throw new IllegalArgumentException("retryOptions value must not be null.");
+        }
+        
+        this.retryOptions = retryOptions;
+    }
+
+    /**
+     * Gets the retry policy options associated with the DocumentClient instance.
+     * 
+     * @return the RetryOptions instance.
+     */
+    public RetryOptions getRetryOptions() {
+        return this.retryOptions;
+    }
+
+    private boolean enableEndpointDiscovery = true;
+
+    /**
+     * Sets the flag to enable endpoint discovery for geo-replicated database accounts.
+     * <p>
+     * When EnableEndpointDiscovery is true, the SDK will automatically discover the
+     * current write and read regions to ensure requests are sent to the correct region
+     * based on the capability of the region and the user's preference.
+     * <p>
+     * The default value for this property is true indicating endpoint discovery is enabled.
+     * 
+     * @param enableEndpointDiscovery
+     *            true if EndpointDiscovery is enabled.
+     */
+    public void setEnableEndpointDiscovery(boolean enableEndpointDiscovery) {
+        this.enableEndpointDiscovery = enableEndpointDiscovery;
+    }
+    
+    /**
+     * Gets the flag to enable endpoint discovery for geo-replicated database accounts.
+     * 
+     * @return whether endpoint discovery is enabled.
+     */
+    public boolean getEnableEndpointDiscovery() {
+        return this.enableEndpointDiscovery;
+    }
+    
+    private Collection<String> preferredLocations;
+
+    /**
+     * Sets the preferred locations for geo-replicated database accounts. For example,
+     * "East US" as the preferred location.
+     * <p>
+     * When EnableEndpointDiscovery is true and PreferredRegions is non-empty, 
+     * the SDK will prefer to use the locations in the collection in the order 
+     * they are specified to perform operations.
+     * <p>
+     * If EnableEndpointDiscovery is set to false, this property is ignored.
+     * 
+     * @param preferredLocations
+     *            the list of preferred locations.
+     */
+    public void setPreferredLocations(Collection<String> preferredLocations) {
+        this.preferredLocations = preferredLocations;
+    }
+    
+    /**
+     * Gets the preferred locations for geo-replicated database accounts
+     * 
+     * @return the list of preferred location.
+     */
+    public Collection<String> getPreferredLocations() {
+        return this.preferredLocations;
+    }
 }
