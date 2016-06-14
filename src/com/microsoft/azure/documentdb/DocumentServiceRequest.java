@@ -5,6 +5,7 @@
 package com.microsoft.azure.documentdb;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -353,5 +354,25 @@ final class DocumentServiceRequest {
 
     void setIsNameBased(boolean isNameBased) {
         this.isNameBased = isNameBased;
+    }
+    
+    private URI endpointOverride = null;
+
+    public URI getEndpointOverride() {
+        return this.endpointOverride;
+    }
+
+    void setEndpointOverride(URI endpointOverride) {
+        this.endpointOverride = endpointOverride;
+    }
+    
+    private OperationType operationType = null;
+
+    public OperationType getOperationType() {
+        return this.operationType;
+    }
+
+    void setOperationType(OperationType operationType) {
+        this.operationType = operationType;
     }
 }

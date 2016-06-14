@@ -42,7 +42,6 @@ import org.apache.http.util.EntityUtils;
 
 class GatewayProxy {
 
-    private URI serviceEndpoint;
     private Map<String, String> defaultHeaders;
     private String masterKey;
     private Map<String, String> resourceTokens;
@@ -51,15 +50,15 @@ class GatewayProxy {
     private HttpClient mediaHttpClient;
     private PoolingClientConnectionManager connectionManager;
     private DocumentClient.QueryCompatibilityMode queryCompatibilityMode;
+    private GlobalEndpointManager globalEndpointManager;
 
-    public GatewayProxy(URI serviceEndpoint,
-                        ConnectionPolicy connectionPolicy,
+    public GatewayProxy(ConnectionPolicy connectionPolicy,
                         ConsistencyLevel consistencyLevel,
                         DocumentClient.QueryCompatibilityMode queryCompatibilityMode,
                         String masterKey,
                         Map<String, String> resourceTokens,
-                        UserAgentContainer userAgentContainer) {
-        this.serviceEndpoint = serviceEndpoint;
+                        UserAgentContainer userAgentContainer,
+                        GlobalEndpointManager globalEndpointManager) {
         this.defaultHeaders = new HashMap<String, String>();
         this.defaultHeaders.put(HttpConstants.HttpHeaders.CACHE_CONTROL,
                                 "no-cache");
@@ -77,7 +76,8 @@ class GatewayProxy {
                                     consistencyLevel.toString());
         }
 
-        this.connectionPolicy = connectionPolicy;
+        this.connectionPolicy = connectionPolicy;        
+        this.globalEndpointManager = globalEndpointManager;
         this.queryCompatibilityMode = queryCompatibilityMode;
         this.masterKey = masterKey;
         this.resourceTokens = resourceTokens;
@@ -272,7 +272,7 @@ class GatewayProxy {
         }
     }
 
-    private void maybeThrowException(HttpResponse response) throws DocumentClientException {
+    private void maybeThrowException(DocumentServiceRequest request, HttpResponse response) throws DocumentClientException {
         int statusCode = response.getStatusLine().getStatusCode();
 
         if (statusCode >= HttpConstants.StatusCodes.MINIMUM_STATUSCODE_AS_ERROR_GATEWAY) {
@@ -294,29 +294,34 @@ class GatewayProxy {
                 responseHeaders.put(header.getName(), header.getValue());
             }
 
-            throw new DocumentClientException(statusCode, new Error(body), responseHeaders);
+            throw new DocumentClientException(request.getPath(), statusCode, new Error(body), responseHeaders);
         }
     }
 
-    private DocumentServiceResponse performDeleteRequest(
-            DocumentServiceRequest request) throws DocumentClientException {
+    private DocumentServiceResponse performDeleteRequest(DocumentServiceRequest request) 
+            throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(
             request,
             HttpConstants.HttpMethods.DELETE);
+        
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            rootUri = this.globalEndpointManager.resolveServiceEndpoint(request.getOperationType());
+        }
+        
         URI uri;
         try {
             uri = new URI("https",
                           null,
-                          this.serviceEndpoint.getHost(),
-                          this.serviceEndpoint.getPort(),
+                          rootUri.getHost(),
+                          rootUri.getPort(),
                           request.getPath(),
                           null,  // Query string not used.
                           null);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Incorrect uri from request.",
-                                               e);
+            throw new IllegalArgumentException("Incorrect uri from request.", e);
         }
-
+        
         HttpDelete httpDelete = new HttpDelete(uri);
         this.fillHttpRequestBaseWithHeaders(request.getHeaders(), httpDelete);
         HttpResponse response = null;
@@ -327,30 +332,42 @@ class GatewayProxy {
             throw new IllegalStateException("Http client execution failed.", e);
         }
 
-        this.maybeThrowException(response);
+        this.maybeThrowException(request, response);
 
         // No content in delete request, we can release the connection directly;
         httpDelete.releaseConnection();
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performGetRequest(DocumentServiceRequest request) throws DocumentClientException {
+    DocumentServiceResponse performGetRequest(DocumentServiceRequest request)
+            throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(request,
                                                  HttpConstants.HttpMethods.GET);
+        
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            if (request.getIsMedia()) {
+                // For media read request, always use the write endpoint.
+                rootUri = this.globalEndpointManager.getWriteEndpoint();
+            }
+            else {
+                rootUri = this.globalEndpointManager.resolveServiceEndpoint(request.getOperationType());
+            }
+        }
+        
         URI uri;
         try {
             uri = new URI("https",
                           null,
-                          this.serviceEndpoint.getHost(),
-                          this.serviceEndpoint.getPort(),
+                          rootUri.getHost(),
+                          rootUri.getPort(),
                           request.getPath(),
                           null,  // Query string not used.
                           null);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Incorrect uri from request.",
-                                               e);
+            throw new IllegalArgumentException("Incorrect uri from request.", e);
         }
-
+        
         HttpGet httpGet = new HttpGet(uri);
         this.fillHttpRequestBaseWithHeaders(request.getHeaders(), httpGet);
         HttpResponse response = null;
@@ -361,26 +378,32 @@ class GatewayProxy {
             throw new IllegalStateException("Http client execution failed.", e);
         }
 
-        this.maybeThrowException(response);
+        this.maybeThrowException(request, response);
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performPostRequest(DocumentServiceRequest request) throws DocumentClientException {
+    DocumentServiceResponse performPostRequest(DocumentServiceRequest request)
+            throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(
             request,
             HttpConstants.HttpMethods.POST);
+        
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            rootUri = this.globalEndpointManager.resolveServiceEndpoint(request.getOperationType());
+        }
+        
         URI uri;
         try {
             uri = new URI("https",
                           null,
-                          this.serviceEndpoint.getHost(),
-                          this.serviceEndpoint.getPort(),
+                          rootUri.getHost(),
+                          rootUri.getPort(),
                           request.getPath(),
                           null,  // Query string not used.
                           null);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Incorrect uri from request.",
-                                               e);
+            throw new IllegalArgumentException("Incorrect uri from request.", e);
         }
 
         HttpPost httpPost = new HttpPost(uri);
@@ -394,27 +417,33 @@ class GatewayProxy {
             throw new IllegalStateException("Http client execution failed.", e);
         }
 
-        this.maybeThrowException(response);
+        this.maybeThrowException(request, response);
         return new DocumentServiceResponse(response);
     }
 
-    private DocumentServiceResponse performPutRequest(DocumentServiceRequest request) throws DocumentClientException {
+    DocumentServiceResponse performPutRequest(DocumentServiceRequest request) 
+            throws DocumentClientException {
         putMoreContentIntoDocumentServiceRequest(request,
                                                  HttpConstants.HttpMethods.PUT);
+        
+        URI rootUri = request.getEndpointOverride();
+        if (rootUri == null) {
+            rootUri = this.globalEndpointManager.resolveServiceEndpoint(request.getOperationType());
+        }
+        
         URI uri;
         try {
             uri = new URI("https",
                           null,
-                          this.serviceEndpoint.getHost(),
-                          this.serviceEndpoint.getPort(),
+                          rootUri.getHost(),
+                          rootUri.getPort(),
                           request.getPath(),
                           null,  // Query string not used.
                           null);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Incorrect uri from request.",
-                                               e);
+            throw new IllegalArgumentException("Incorrect uri from request.", e);
         }
-
+        
         HttpPut httpPut = new HttpPut(uri);
         this.fillHttpRequestBaseWithHeaders(request.getHeaders(), httpPut);
         httpPut.setEntity(request.getBody());
@@ -426,7 +455,7 @@ class GatewayProxy {
             throw new IllegalStateException("Http client execution failed.", e);
         }
 
-        this.maybeThrowException(response);
+        this.maybeThrowException(request, response);
         return new DocumentServiceResponse(response);
     }
 
@@ -445,7 +474,7 @@ class GatewayProxy {
                 headers,
                 masterKey);
         } else if (resourceTokens != null) {
-            return AuthorizationHelper.GetAuthorizationTokenUsingResourceTokens(
+            return AuthorizationHelper.getAuthorizationTokenUsingResourceTokens(
                 resourceTokens, path, resourceOrOwnerId);
         }
 

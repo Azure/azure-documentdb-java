@@ -21,10 +21,11 @@ public class JavaRetryThrottleTests {
         when(proxy.doDelete((DocumentServiceRequest) anyObject())).thenThrow(exception);
         when(proxy.doReplace((DocumentServiceRequest) anyObject())).thenThrow(exception);
         when(proxy.doUpsert((DocumentServiceRequest) anyObject())).thenThrow(exception);
-        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         client.setGatewayProxyOverride(proxy);
 
+        int expectRetryTimes = 10;
         // Test create
         Database databaseDefinition = new Database();
         databaseDefinition.setId(GatewayTestBase.databaseForTestId);
@@ -38,7 +39,7 @@ public class JavaRetryThrottleTests {
         }
 
         // Default retry count is 3, we should call the doCreate method 4 times.
-        verify(proxy, times(4)).doCreate((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectRetryTimes)).doCreate((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
         
         // Test read
@@ -50,7 +51,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
         
-        verify(proxy, times(4)).doRead((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectRetryTimes)).doRead((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
         
         // Test delete
@@ -62,7 +63,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
 
-        verify(proxy, times(4)).doDelete((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectRetryTimes)).doDelete((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
         
         // Test replace
@@ -76,7 +77,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
 
-        verify(proxy, times(4)).doReplace((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectRetryTimes)).doReplace((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
         
         // Test upsert.
@@ -88,7 +89,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
 
-        verify(proxy, times(4)).doUpsert((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectRetryTimes)).doUpsert((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
     }
 
@@ -98,10 +99,11 @@ public class JavaRetryThrottleTests {
         GatewayProxy proxy = mock(GatewayProxy.class);
         when(proxy.doReadFeed((DocumentServiceRequest) anyObject())).thenThrow(exception);
         when(proxy.doSQLQuery((DocumentServiceRequest) anyObject())).thenThrow(exception);
-        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         client.setGatewayProxyOverride(proxy);
 
+        int expectedRetryTimes = 10;
         boolean throttled = false;
         try {
             client.readDatabases(new FeedOptions()).getQueryIterable().toList();
@@ -111,7 +113,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
         
-        verify(proxy, times(4)).doReadFeed((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectedRetryTimes)).doReadFeed((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
 
         throttled = false;
@@ -123,7 +125,7 @@ public class JavaRetryThrottleTests {
             throttled = true;
         }
         
-        verify(proxy, times(4)).doSQLQuery((DocumentServiceRequest) anyObject());
+        verify(proxy, times(expectedRetryTimes)).doSQLQuery((DocumentServiceRequest) anyObject());
         Assert.assertTrue(throttled);
     }
 
@@ -133,7 +135,7 @@ public class JavaRetryThrottleTests {
         GatewayProxy proxy = mock(GatewayProxy.class);
         when(proxy.doCreate((DocumentServiceRequest) anyObject())).thenThrow(exception);
         when(proxy.doSQLQuery((DocumentServiceRequest) anyObject())).thenThrow(exception);
-        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(),
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         client.setGatewayProxyOverride(proxy);
 
@@ -152,7 +154,7 @@ public class JavaRetryThrottleTests {
 
         failed = false;
         try {
-            client.queryCollections("database_link", "SELECT * fromc", null).getQueryIterable().toList();
+            client.queryCollections("database_link", "SELECT * from c", null).getQueryIterable().toList();
         } catch (IllegalStateException e) {
             DocumentClientException innerExp = (DocumentClientException) e.getCause();
             Assert.assertEquals(404, innerExp.getStatusCode());
@@ -172,7 +174,7 @@ public class JavaRetryThrottleTests {
         when(proxy.doSQLQuery((DocumentServiceRequest) anyObject())).thenThrow(exception);
 
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setMaxRetryOnThrottledAttempts(0);
+        connectionPolicy.getRetryOptions().setMaxRetryAttemptsOnThrottledRequests(0);
         DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session);
         client.setGatewayProxyOverride(proxy);
 
@@ -222,7 +224,7 @@ public class JavaRetryThrottleTests {
         when(proxy.doSQLQuery((DocumentServiceRequest) anyObject())).thenThrow(exception);
 
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setMaxRetryOnThrottledAttempts(1);
+        connectionPolicy.getRetryOptions().setMaxRetryAttemptsOnThrottledRequests(1);
         DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session);
         client.setGatewayProxyOverride(proxy);
 
@@ -251,6 +253,45 @@ public class JavaRetryThrottleTests {
         verify(proxy, times(2)).doSQLQuery((DocumentServiceRequest) anyObject());
         Assert.assertTrue(failed);
     }
+    
+    @Test
+    public void testRetryMaxTimeLimit() throws DocumentClientException {
+        DocumentClientException exception = createThrottledException();
+        GatewayProxy proxy = mock(GatewayProxy.class);
+        when(proxy.doCreate((DocumentServiceRequest) anyObject())).thenThrow(exception);
+        when(proxy.doSQLQuery((DocumentServiceRequest) anyObject())).thenThrow(exception);
+
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
+        connectionPolicy.getRetryOptions().setMaxRetryAttemptsOnThrottledRequests(100);
+        connectionPolicy.getRetryOptions().setMaxRetryWaitTimeInSeconds(1);
+        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session);
+        client.setGatewayProxyOverride(proxy);
+
+        boolean failed = false;
+        Database database = new Database();
+        database.setId("database1");
+        try {
+            client.createDatabase(database, null).getResource();
+        } catch (DocumentClientException e) {
+            Assert.assertEquals(429, e.getStatusCode());
+            failed = true;
+        }
+
+        verify(proxy, times(10)).doCreate((DocumentServiceRequest) anyObject());
+        Assert.assertTrue(failed);
+
+        failed = false;
+        try {
+            client.queryCollections("database_link", "SELECT * fromc", null).getQueryIterable().toList();
+        } catch (IllegalStateException e) {
+            DocumentClientException innerExp = (DocumentClientException) e.getCause();
+            Assert.assertEquals(429, innerExp.getStatusCode());
+            failed = true;
+        }
+        
+        verify(proxy, times(10)).doSQLQuery((DocumentServiceRequest) anyObject());
+        Assert.assertTrue(failed);
+    }
 
     private static DocumentClientException createThrottledException() {
         String errorBody = "{'code':'429'," + " 'message':'Message: {\"Errors\":[\"Request rate is large\"]}'}";
@@ -259,7 +300,7 @@ public class JavaRetryThrottleTests {
         Map<String, String> responseHeaders = new HashMap<String, String>();
         responseHeaders.put("x-ms-retry-after-ms", "100");
 
-        return new DocumentClientException(429, errorResource, responseHeaders);
+        return new DocumentClientException("resource_link", 429, errorResource, responseHeaders);
     }
 
     private static DocumentClientException createNotFoundException() {
@@ -269,6 +310,6 @@ public class JavaRetryThrottleTests {
         Map<String, String> responseHeaders = new HashMap<String, String>();
         responseHeaders.put("x-ms-retry-after-ms", "100");
 
-        return new DocumentClientException(404, errorResource, responseHeaders);
+        return new DocumentClientException("resource_link", 404, errorResource, responseHeaders);
     }
 }

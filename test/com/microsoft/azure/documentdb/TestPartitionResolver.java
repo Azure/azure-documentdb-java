@@ -34,6 +34,7 @@ import com.microsoft.azure.documentdb.PartitionResolver;
  * This is a test PartitionResolver used for resolving the collection(s) based on the partitionKey.
  * This class implements PartitionResolver interface.
  */
+@Deprecated
 public class TestPartitionResolver implements PartitionResolver {
     // Self Links or ID based Links for the collections participating in partitioning
     private ArrayList<String> collectionLinks = new ArrayList<String>();

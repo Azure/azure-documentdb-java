@@ -26,6 +26,7 @@ package com.microsoft.azure.documentdb;
 /**
  * PartitionKeyExtractor interface is used for getting the partition key from a document 
  */
+@Deprecated
 public interface PartitionKeyExtractor {
     Object getPartitionKey(Object document);
 }

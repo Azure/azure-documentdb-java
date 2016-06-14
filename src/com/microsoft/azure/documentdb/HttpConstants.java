@@ -162,14 +162,27 @@ class HttpConstants {
         
         // Partition headers
         public static final String PARTITION_KEY = "x-ms-documentdb-partitionkey";
-    }
+
+        // Error response sub status code
+        public static final String SUB_STATUS = "x-ms-substatus";
+}
 
     public static class Versions {
-        public static String CURRENT_VERSION = "2015-12-16";
-        public static String USER_AGENT = "documentdb-java-sdk-1.7.1";
+        public static String CURRENT_VERSION = "2016-05-30";
+        public static String USER_AGENT = "documentdb-java-sdk-1.8.0";
     }
     
     public static class StatusCodes {
-        public static int MINIMUM_STATUSCODE_AS_ERROR_GATEWAY = 400; 
+        public static int MINIMUM_STATUSCODE_AS_ERROR_GATEWAY = 400;
+        public static int BADREQUEST = 400;
+        public static int FORBIDDEN = 403;
+        public static int TOO_MANY_REQUESTS = 429;
+        public static int NOTFOUND = 404;
+    }
+    
+    public static class SubStatusCodes {
+        public static int FORBIDDEN_WRITEFORBIDDEN = 3;
+        public static int READ_SESSION_NOT_AVAILABLE = 1002;
+        public static int PARTITION_KEY_MISMATCH = 1001;
     }
 }

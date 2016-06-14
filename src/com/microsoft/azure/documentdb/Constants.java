@@ -121,6 +121,12 @@ class Constants {
         //Time-to-Live
         static final String TTL = "ttl";
         static final String DEFAULT_TTL = "defaultTtl";
+        
+        // Global DB account properties
+        static final String Name = "name";
+        static final String WRITABLE_LOCATIONS = "writableLocations";
+        static final String READABLE_LOCATIONS = "readableLocations";
+        static final String DATABASE_ACCOUNT_ENDPOINT = "databaseAccountEndpoint";
 }
 
     static class ResourceKeys {

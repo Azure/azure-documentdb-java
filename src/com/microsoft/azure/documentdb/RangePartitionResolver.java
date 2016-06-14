@@ -32,6 +32,7 @@ import java.util.Set;
  * RangePartitionResolver implements partitioning based on the ranges, allowing you to 
  * distribute requests and data across a number of partitions by implementing PartitionResolver interface. 
  */
+@Deprecated
 public class RangePartitionResolver<T extends Comparable<T>> implements PartitionResolver {
     private PartitionKeyExtractor partitionKeyExtractor;
     private Map<Range<T>, String> partitionMap;

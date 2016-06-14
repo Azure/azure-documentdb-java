@@ -38,7 +38,7 @@ import java.nio.ByteOrder;
  *  The 32 bit x86 version of this hash should be the fastest variant for relatively short keys like ids.
  *  See http://github.com/yonik/java_util for future updates to this file.
  */
-
+@Deprecated
 final class MurmurHash implements HashGenerator {
     @Override
     public byte[] computeHash(byte[] data) {

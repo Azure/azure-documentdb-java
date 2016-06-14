@@ -115,16 +115,37 @@ public class GatewayTestBase {
         }
     }
 
+    public class ReadableStream extends InputStream {
+
+        byte[] bytes;
+        int index;
+
+        ReadableStream(String content) {
+            this.bytes = content.getBytes();
+            this.index = 0;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (this.index < this.bytes.length) {
+                return this.bytes[this.index++];
+            }
+            return -1;
+        }
+    }
+    
     @Rule
     public Retry retry = new Retry(3);
 
     @Before
     public void setUp() throws DocumentClientException {
-        this.client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(), ConsistencyLevel.Session);
+        this.client = new DocumentClient(HOST, MASTER_KEY, new ConnectionPolicy(), ConsistencyLevel.Session);
 
         // Clean up before setting up in case a previous running fails to tear
         // down.
-        this.cleanUpGeneratedDatabases();
+        String[] allDatabaseIds = { GatewayTestBase.databaseForTestId, GatewayTestBase.databaseForTestAlternativeId1,
+                GatewayTestBase.databaseForTestAlternativeId2 };
+        this.cleanUpGeneratedDatabases(allDatabaseIds);
 
         // Create the database for test.
         Database databaseDefinition = new Database();
@@ -142,17 +163,14 @@ public class GatewayTestBase {
 
     @After
     public void tearDown() throws DocumentClientException {
-        this.cleanUpGeneratedDatabases();
-    }
-
-    protected void cleanUpGeneratedDatabases() throws DocumentClientException {
-        // If one of databaseForTestId, databaseForTestAlternativeId1, or
-        // databaseForTestAlternativeId2 already exists,
-        // deletes them.
         String[] allDatabaseIds = { GatewayTestBase.databaseForTestId, GatewayTestBase.databaseForTestAlternativeId1,
                 GatewayTestBase.databaseForTestAlternativeId2 };
+        
+        this.cleanUpGeneratedDatabases(allDatabaseIds);
+    }
 
-        for (String id : allDatabaseIds) {
+    protected void cleanUpGeneratedDatabases(String[] databaseIds) throws DocumentClientException {
+        for (String id : databaseIds) {
             try {
                 Database database = client
                         .queryDatabases(new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
@@ -175,6 +193,7 @@ public class GatewayTestBase {
                 if (causeException instanceof IOException) {
                     System.err.println("Detailed message for the exception thrown : " + causeException.toString());
                 }
+                
                 throw illegalStateException;
             }
         }

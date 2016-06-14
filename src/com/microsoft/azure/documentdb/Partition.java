@@ -23,6 +23,7 @@ SOFTWARE.
 
 package com.microsoft.azure.documentdb;
 
+@Deprecated
 final class Partition implements Comparable<Partition> {
     private byte[] hashValue;
     private String node;

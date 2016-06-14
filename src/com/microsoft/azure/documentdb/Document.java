@@ -58,9 +58,12 @@ public class Document extends Resource {
      * <p>
      * A document's time-to-live value is an optional property. If set, the document expires after the specified number
      * of seconds since its last write time. The value of this property should be one of the following:
+     * <p>
      * 		null - indicates the time-to-live value for this document inherits from the parent collection's default time-to-live value.
+     * <p>
      * 		nonzero positive integer - indicates the number of seconds before the document expires. It overrides the default time-to-live
      * 			value specified on the parent collection, unless the parent collection's default time-to-live is null.
+     * <p>
      * 		-1 - indicates the document never expires. It overrides the default time-to-live
      * 			value specified on the parent collection, unless the parent collection's default time-to-live is null.
      * 

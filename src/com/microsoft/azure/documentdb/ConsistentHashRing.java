@@ -35,6 +35,7 @@ import java.util.Map;
 /**
  * The ConsistentHashRing class implements a consistent hash ring using the hash function specified
  */
+@Deprecated
 final class ConsistentHashRing {
     private HashGenerator hashGenerator;
     private Partition[] partitions;

@@ -26,6 +26,7 @@ package com.microsoft.azure.documentdb;
 /**
  * This is an interface to be implemented for partitioning scenarios and register it at the document client level
  */
+@Deprecated
 public interface PartitionResolver {
     /**
      * Gets the collection Self Link or ID based link on which create operation should be directed

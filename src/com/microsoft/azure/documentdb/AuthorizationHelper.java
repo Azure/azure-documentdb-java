@@ -15,6 +15,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * This class is used by both client (for generating the auth header with master/system key) and by the G/W when
@@ -110,24 +111,22 @@ final class AuthorizationHelper {
      * @param resourceId the resource id.
      * @return the authorization token.
      */
-    public static String GetAuthorizationTokenUsingResourceTokens(Map<String, String> resourceTokens,
+    public static String getAuthorizationTokenUsingResourceTokens(Map<String, String> resourceTokens,
                                                                   String path,
                                                                   String resourceId) {
         if (resourceTokens == null) {
             throw new IllegalArgumentException("resourceTokens");
         }
 
-        if (path == null || path.isEmpty()) {
-            throw new IllegalArgumentException("path");
-        }
-
-        if (resourceId == null || resourceId.isEmpty()) {
-            throw new IllegalArgumentException("resourceId");
-        }
-
+        String resourceToken = null;
         if (resourceTokens.containsKey(resourceId) && resourceTokens.get(resourceId) != null) {
-            return resourceTokens.get(resourceId);
+            resourceToken = resourceTokens.get(resourceId);
+        } else if (StringUtils.isEmpty(path) || StringUtils.isEmpty(resourceId)) {
+            if (resourceTokens.size() > 0) {
+                resourceToken = resourceTokens.values().iterator().next();
+            }
         } else {
+            // Get the last resource id from the path and use that to find the corresponding token.
             String[] pathParts = path.split("/");
             String[] resourceTypes = { "dbs", "colls", "docs", "sprocs", "udfs", "triggers", "users", "permissions",
                     "attachments", "media", "conflicts" };
@@ -135,16 +134,16 @@ final class AuthorizationHelper {
             for (String resourceType : resourceTypes) {
                 resourceTypesSet.add(resourceType);
             }
-
+        
             for (int i = pathParts.length - 1; i >= 0; --i) {
-
+        
                 if (!resourceTypesSet.contains(pathParts[i]) && resourceTokens.containsKey(pathParts[i])) {
-                    return resourceTokens.get(pathParts[i]);
+                    resourceToken = resourceTokens.get(pathParts[i]);
                 }
             }
-
-            return null;
         }
+        
+        return resourceToken;
     }
     
     private static String getResourceSegement(ResourceType resourceType) {

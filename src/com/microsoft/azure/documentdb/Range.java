@@ -25,6 +25,7 @@ package com.microsoft.azure.documentdb;
 
 import org.apache.commons.lang3.StringUtils;
 
+@Deprecated
 public class Range<T extends Comparable<T>> implements Comparable<Range<T>> {
     private T low;
     private T high;

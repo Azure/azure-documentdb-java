@@ -12,4 +12,12 @@ interface PartitionKeyDefinitionMap {
      *            the selfLink of a collection, or the full path to the collection when using name based routing.
      */
     public PartitionKeyDefinition getPartitionKeyDefinition(String collectionLink);
+    
+    /**
+     * Refreshes the PartitionKeyDefinition entry for a given collection.
+     *
+     * @param collectionLink
+     *            the selfLink of a collection, or the full path to the collection when using name based routing.
+     */
+    public void RefreshEntry(String collectionLink);
 }

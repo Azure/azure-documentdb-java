@@ -2,15 +2,22 @@ package com.microsoft.azure.documentdb;
 
 import java.util.logging.Logger;
 
-final class ResourceThrottleRetryPolicy {
+final class ResourceThrottleRetryPolicy implements RetryPolicy {
     private final long defaultRetryInSeconds = 5;
     private final int maxAttemptCount;
     private final Logger logger;
+    private int maxWaitTimeInMilliseconds = 60 * 1000;
     private int currentAttemptCount = 0;
     private long retryAfterInMilliseconds = 0;
+    private int cumulativeWaitTime = 0;
 
-    public ResourceThrottleRetryPolicy(int maxRetryCount) {
-        this.maxAttemptCount = maxRetryCount;
+    public ResourceThrottleRetryPolicy(int maxAttemptCount, int maxWaitTimeInSeconds) {
+        if (maxWaitTimeInSeconds > Integer.MAX_VALUE / 1000) {
+            throw new IllegalArgumentException("maxWaitTimeInSeconds must be less than " + Integer.MAX_VALUE / 1000);
+        }
+
+        this.maxAttemptCount = maxAttemptCount;
+        this.maxWaitTimeInMilliseconds = 1000 * maxWaitTimeInSeconds;
         this.logger = Logger.getLogger(this.getClass().getPackage().getName());
     }
 
@@ -21,46 +28,36 @@ final class ResourceThrottleRetryPolicy {
     /**
      * Should the caller retry the operation.
      * 
+     * <p>
+     * This retry policy should only be invoked if HttpStatusCode is 429 (Too Many Requests).
+     * 
      * @param exception the exception to check.
      * @return true if should retry.
      */
     public boolean shouldRetry(DocumentClientException exception) {
         this.retryAfterInMilliseconds = 0;
 
-        if (this.currentAttemptCount < this.maxAttemptCount &&
-                this.CheckIfRetryNeeded(exception)) {
-            this.currentAttemptCount++;
-            this.logger.info(String.format("Operation will be retried after %d milliseconds. Exception: %s",
-                                           this.retryAfterInMilliseconds,
-                                           exception.getMessage()));
-            return true;
+        if (this.currentAttemptCount >= this.maxAttemptCount) {
+            return false;
         }
-
-        return false;
-    }
-
-    /**
-     * Returns True if the given exception is retriable.
-     * 
-     * @param exception the exception to check.
-     * @return true if return is needed.
-     */
-    private boolean CheckIfRetryNeeded(DocumentClientException exception) {
-        this.retryAfterInMilliseconds = 0;
-
-        if (exception.getStatusCode() == 429) {
-            this.retryAfterInMilliseconds =
-                    exception.getRetryAfterInMilliseconds();
-
-            if (this.retryAfterInMilliseconds == 0) {
-                // we should never reach here as BE should turn non-zero of
-                // retry delay.
-                this.retryAfterInMilliseconds = this.defaultRetryInSeconds;
-            }
-
-            return true;
+        
+        this.retryAfterInMilliseconds =
+                exception.getRetryAfterInMilliseconds();
+        if (this.retryAfterInMilliseconds == 0) {
+            // we should never reach here as BE should turn non-zero of
+            // retry delay.
+            this.retryAfterInMilliseconds = this.defaultRetryInSeconds * 1000;
         }
-
-        return false;
+        
+        this.cumulativeWaitTime += this.retryAfterInMilliseconds;
+        if (this.cumulativeWaitTime >= this.maxWaitTimeInMilliseconds) {
+            return false;
+        }
+        
+        this.logger.info(String.format("Operation will be retried after %d milliseconds. Exception: %s",
+                                       this.retryAfterInMilliseconds,
+                                       exception.getMessage()));
+        this.currentAttemptCount++;
+        return true;
     }
 }
