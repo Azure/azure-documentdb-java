@@ -156,8 +156,11 @@ public class DocumentClient {
     }
 
     /**
-     * Registers the partition resolver associated with the database link
-     * @throws DocumentClientException 
+     * Registers the partition resolver associated with the database link.
+     *
+     * @param databaseLink the database link
+     * @param partitionResolver the partition resolver
+     * @throws DocumentClientException the DocumentClientException
      */
     @Deprecated
     public void registerPartitionResolver(String databaseLink, PartitionResolver partitionResolver) 
@@ -173,7 +176,10 @@ public class DocumentClient {
     }
     
     /**
-     * Gets the partition resolver associated with the database link on the client
+     * Gets the partition resolver associated with the database link on the client.
+     *
+     * @param databaseLink the database link
+     * @return the partition resolver
      */
     @Deprecated
     protected PartitionResolver getPartitionResolver(String databaseLink) {
@@ -184,8 +190,9 @@ public class DocumentClient {
     }
     
     /**
-     * Gets the default service endpoint as passed in by the 
-     * user during construction.
+     * Gets the default service endpoint as passed in by the user during construction.
+     *
+     * @return the default service endpoint
      */
     public URI getServiceEndpoint() {
         return this.serviceEndpoint;
@@ -193,6 +200,8 @@ public class DocumentClient {
     
     /**
      * Gets the current write endpoint chosen based on availability and preference.
+     *
+     * @return the  current write endpoint
      */
     public URI getWriteEndpoint() {
         return this.globalEndpointManager.getWriteEndpoint();
@@ -200,6 +209,8 @@ public class DocumentClient {
 
     /**
      * Gets the current read endpoint chosen based on availability and preference.
+     *
+     * @return the current read endpoint
      */
     public URI getReadEndpoint() {
         return this.globalEndpointManager.getReadEndpoint();

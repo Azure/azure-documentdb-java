@@ -8,20 +8,20 @@ public class Undefined {
 	private final static Undefined value = new Undefined();
 	
 	/**
-     * Constructor. Create a new instance of the Undefined object.
+     * Creates a new instance of the Undefined class.
     */
     private Undefined() {
     }
     
     /**
-     * Returns the singleton value of Undfined.
+     * @return the singleton value of Undfined.
     */
     public static Undefined Value() {
     	return value;
     }
 
     /**
-     * Returns the string representation of Undfined.
+     * @return the string representation of Undfined.
     */
     public String toString() {
     	return "{}";

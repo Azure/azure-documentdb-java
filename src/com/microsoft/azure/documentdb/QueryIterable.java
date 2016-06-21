@@ -32,7 +32,14 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     private int currentCollectionIndex = 0;
 
     /**
+     * Creates a new instance of the QueryIterable class.
+     * <p>
      * QueryIterable constructor taking in the DocumentServiceRequest(for non-partitioning scenarios)
+     *
+     * @param client the document client
+     * @param request the document service request
+     * @param readType the read type
+     * @param classT the class type
      */
     protected QueryIterable(DocumentClient client,
                   DocumentServiceRequest request,
@@ -45,8 +52,18 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
     }
     
     /**
+     * Creates a new instance of the QueryIterable class.
+     * <p>
      * QueryIterable constructor taking in the individual parameters for creating a DocumentServiceRequest
      * This constructor is used for partitioning scenarios when multiple DocumentServiceRequests need to be created
+     *
+     * @param client the document client
+     * @param databaseOrDocumentCollectionLink the database or document collection link
+     * @param querySpec the query spec
+     * @param options the feed options
+     * @param partitionKey the partition key
+     * @param readType the read type
+     * @param classT the class type
      */
     @SuppressWarnings("deprecation")
     protected QueryIterable(DocumentClient client,
@@ -94,9 +111,13 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
         
         this.reset();
     }
-    
+
     /**
-     * Initialize the common fields to both QueryIterable constructors
+     * Initialize the common fields to both QueryIterable constructors.
+     *
+     * @param client the document client
+     * @param readType the read type
+     * @param classT the class type
      */
     private void initialize(DocumentClient client,
             ReadType readType,

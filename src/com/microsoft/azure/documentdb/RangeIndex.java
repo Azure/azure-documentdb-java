@@ -27,15 +27,16 @@ public final class RangeIndex extends Index {
 
     /**
      * Initializes a new instance of the RangeIndex class with specified DataType and precision.
-     * 
+     *
      * <pre>
      * {@code
-     * 
+     *
      * RangeIndex rangeIndex = new RangeIndex(DataType.Number, -1);
-     * 
-     * } 
-     * </pre>
-     * 
+     *
+     * }
+     *
+     * @param dataType the data type
+     * @param precision the precision
      */
     public RangeIndex(DataType dataType, int precision) {
         super(IndexKind.Range);
