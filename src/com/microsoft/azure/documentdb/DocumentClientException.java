@@ -13,7 +13,7 @@ import org.apache.commons.lang3.StringUtils;
  * Errors coming from the service during normal execution are converted to
  * DocumentClientException before returning to the application with the following exception:
  * <p>
- *  When a BE error is encountered during a QueryIterable<T> iteration, an IllegalStateException 
+ *  When a BE error is encountered during a QueryIterable iteration, an IllegalStateException
  *  is thrown instead of DocumentClientException.
  * <p>
  *  When a transport level error happens that request is not able to reach the service,

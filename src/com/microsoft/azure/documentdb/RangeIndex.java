@@ -34,6 +34,7 @@ public final class RangeIndex extends Index {
      * RangeIndex rangeIndex = new RangeIndex(DataType.Number, -1);
      *
      * }
+     * </pre>
      *
      * @param dataType the data type
      * @param precision the precision
