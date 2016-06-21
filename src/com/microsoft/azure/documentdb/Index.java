@@ -4,9 +4,10 @@ import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
 public abstract class Index extends JsonSerializable {
-
     /**
-     * Constructor.
+     * Creates a new instance of the Index class.
+     *
+     * @param indexKind the index kind {@link IndexKind}
      */
     protected Index(IndexKind indexKind) {
         super();
@@ -14,9 +15,10 @@ public abstract class Index extends JsonSerializable {
     }
 
     /**
-     * Constructor.
-     * 
+     * Creates a new instance of the Index class.
+     *
      * @param jsonString the json string that represents the index.
+     * @param indexKind the index kind {@link IndexKind}
      */
     protected Index(String jsonString, IndexKind indexKind) {
         super(jsonString);
@@ -24,9 +26,10 @@ public abstract class Index extends JsonSerializable {
     }
 
     /**
-     * Constructor.
-     * 
+     * Creates a new instance of the Index class.
+     *
      * @param jsonObject the json object that represents the index.
+     * @param indexKind the index kind {@link IndexKind}
      */
     protected Index(JSONObject jsonObject, IndexKind indexKind) {
         super(jsonObject);

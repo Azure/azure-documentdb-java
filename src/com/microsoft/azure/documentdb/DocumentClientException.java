@@ -30,13 +30,11 @@ public class DocumentClientException extends Exception {
 
     /**
      * Creates a new instance of the DocumentClientException class.
-     * 
-     * @param statusCode
-     *            the http status code of the response.
-     * @param errorResource
-     *            the error resource object.
-     * @param responseHeaders
-     *            the response headers.
+     *
+     * @param resourceAddress the resource address
+     * @param statusCode the http status code of the response
+     * @param errorResource the error resource object
+     * @param responseHeaders the response headers
      */
     public DocumentClientException(String resourceAddress, int statusCode, Error errorResource, Map<String, String> responseHeaders) {
         super(errorResource.getMessage());
