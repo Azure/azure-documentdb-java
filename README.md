@@ -50,7 +50,7 @@ To use this SDK to call Azure DocumentDB, you need to first [create an account](
 You can follow this [tutorial](http://azure.microsoft.com/en-us/documentation/articles/documentdb-java-application/) to help you get started.
 
 ```java
-import java.util.Collection;
+import java.util.ArrayList;
 
 import com.google.gson.Gson;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
@@ -60,6 +60,9 @@ import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.PartitionKey;
+import com.microsoft.azure.documentdb.PartitionKeyDefinition;
+import com.microsoft.azure.documentdb.RequestOptions;
 
 public class SampleApp {
     // Replace with your DocumentDB end point and master key.
