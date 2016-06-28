@@ -11,6 +11,11 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.theories.DataPoints;
+import org.junit.experimental.theories.FromDataPoints;
+import org.junit.experimental.theories.Theories;
+import org.junit.experimental.theories.Theory;
+import org.junit.runner.RunWith;
 
 import com.microsoft.azure.documentdb.AccessCondition;
 import com.microsoft.azure.documentdb.AccessConditionType;
@@ -55,6 +60,7 @@ final class AnotherPOJO {
     public String pojoProp = "789";
 }
 
+@RunWith(Theories.class)
 public final class GatewayTests extends GatewayTestBase {
 
     static class StaticPOJOForTest {
@@ -62,6 +68,12 @@ public final class GatewayTests extends GatewayTestBase {
         public String pojoProp = "456";
     }
 
+    @DataPoints("Empty/null PartitionKey")
+    public static Object[] emptyNullPartitionKeyValues = { "partitionKey", null, Undefined.Value() };
+
+    @DataPoints("isNameBased")
+    public static boolean[] isNameBasedValues = { true, false };
+    
     @Test
     public void testJsonSerialization() {
         Document document = new Document();
@@ -2506,4 +2518,77 @@ public final class GatewayTests extends GatewayTestBase {
         }       
     }
 
+    @Theory
+    public void testDocumentCrudWithPartitionKey(
+            @FromDataPoints("Empty/null PartitionKey") Object partitionKey, 
+            @FromDataPoints("isNameBased") boolean isNameBased) throws DocumentClientException {
+
+        String testCollection = GatewayTests.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased);
+
+        String sampleDocumentTemplate =
+                "{" +
+                        "  'id': '%s'," +
+                        "  'name': 'sample document %s'," +
+                "}";
+
+        // Create document with PartitionKey should fail
+        String documentId = GatewayTests.getUID();
+        Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
+        RequestOptions requestOptions = new RequestOptions();
+        requestOptions.setPartitionKey(new PartitionKey(partitionKey));
+        Document document;
+        try {
+	        document = client.createDocument(
+	                testCollection,
+	                sampleDocument,
+	                requestOptions,
+	                false).getResource();
+	        Assert.fail("Creating document in single partition collection with a partition key did not fail.");
+        }
+        catch (DocumentClientException e) {
+            Assert.assertEquals(400, e.getStatusCode());
+	        Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+
+        // Create document without PartitionKey
+        document = client.createDocument(
+                testCollection,
+                sampleDocument,
+                null,
+                false).getResource();
+        Assert.assertEquals(documentId, document.getString("id"));
+        Assert.assertEquals(sampleDocument.getString("name"), document.getString("name"));
+        Assert.assertNotNull(document.getId());
+
+        // Read document with PartitionKey should fail
+        try {
+        	document = this.client.readDocument(document.getSelfLink(), requestOptions).getResource();
+        	Assert.fail("Reading document in single partition collection with a partition key did not fail.");
+        }
+        catch (DocumentClientException e) {
+            Assert.assertEquals(400, e.getStatusCode());
+            Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+
+        // Update document with PartitionKey should fail
+        document.set("name", "updated name 2");
+        try {
+            document = this.client.replaceDocument(document, requestOptions).getResource();
+            Assert.fail("Updating document in single partition collection with a partition key did not fail.");
+        }
+        catch (DocumentClientException e) {
+            Assert.assertEquals(400, e.getStatusCode());
+            Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+
+        // Delete document with PartitionKey should fail
+        try {
+            this.client.deleteDocument(document.getSelfLink(), requestOptions);
+            Assert.fail("Deleting document in single partition collection with a partition key did not fail.");
+        }
+        catch (DocumentClientException e) {
+            Assert.assertEquals(400, e.getStatusCode());
+            Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+    }
 }

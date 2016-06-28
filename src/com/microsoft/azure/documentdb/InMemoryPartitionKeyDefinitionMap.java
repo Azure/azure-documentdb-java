@@ -77,6 +77,10 @@ final class InMemoryPartitionKeyDefinitionMap implements PartitionKeyDefinitionM
 		try {
 			DocumentCollection collection = this.documentClient.readCollection(collectionName, null).getResource();
 			keyDef = collection.getPartitionKey();
+            if (keyDef == null) {
+                // Use an empty PartitionKeyDefinition to indicate single partition collection
+                keyDef = new PartitionKeyDefinition();
+            }
 		} catch (DocumentClientException e) {
 			// Ignore document retrieval exception and let the server handle partition key missing error.
 		}

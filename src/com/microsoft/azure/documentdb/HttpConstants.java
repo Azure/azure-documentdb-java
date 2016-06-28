@@ -169,7 +169,7 @@ class HttpConstants {
 
     public static class Versions {
         public static String CURRENT_VERSION = "2016-05-30";
-        public static String USER_AGENT = "documentdb-java-sdk-1.8.0";
+        public static String USER_AGENT = "documentdb-java-sdk-1.8.1";
     }
     
     public static class StatusCodes {
