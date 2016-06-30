@@ -745,6 +745,30 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         Assert.assertNotNull(this.client.getPartitionKeyDefinitionMap().getPartitionKeyDefinition(collectionLink));
     }
     
+    @Test
+	public void testIncorrectPartitionkeyValue() throws DocumentClientException {
+		
+        String collectionId = GatewayTests.getUID();
+        DocumentCollection createdCollection = this.createMultiPartitionCollection(collectionId, "/id");
+        
+        String documentDef1 = "{ 'id': 'document1', 'description': 'this is a test document.' }";
+        Document newDocument1 = new Document(documentDef1);
+        
+        // Creating a document with mismatched partition key should fail without retry
+        try {
+        	RequestOptions requestOptions = new RequestOptions();
+            requestOptions.setPartitionKey(new PartitionKey("document2"));
+            newDocument1 = this.client.createDocument(
+            		GatewayTests.getDocumentCollectionLink(this.databaseForTest, createdCollection, true),
+                    newDocument1, requestOptions, false).getResource();
+            Assert.fail("Creating a document with mismatched partition key not fail");
+        }
+        catch (DocumentClientException e) {
+	    	Assert.assertEquals(400, e.getStatusCode());
+	        Assert.assertEquals("BadRequest", e.getError().getCode());
+        }
+	}
+    
     private DocumentCollection createMultiPartitionCollection(String collectionId, String partitionKeyPath) 
             throws DocumentClientException {
         return this.createMultiPartitionCollection(collectionId, partitionKeyPath, true);
@@ -756,7 +780,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
         ArrayList<String> paths = new ArrayList<String>();
         paths.add(partitionKeyPath );
         partitionKeyDef.setPaths(paths);
-        
+
         RequestOptions options = new RequestOptions();
         options.setOfferThroughput(10100);
         DocumentCollection collectionDefinition = new DocumentCollection();
@@ -766,7 +790,7 @@ public class JavaMultiPartitionCollectionTests extends GatewayTestBase {
                 getDatabaseLink(this.databaseForTest, isNameBased),
                 collectionDefinition,
                 options).getResource();
-        
+
         return createdCollection;
     }
 }

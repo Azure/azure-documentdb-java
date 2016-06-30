@@ -575,6 +575,7 @@ public class DocumentClient {
         final Object documentLocal = document;
         final RequestOptions optionsLocal = options;
         final boolean disableAutomaticIdGenerationLocal = disableAutomaticIdGeneration;
+        final boolean shouldRetry = options == null || options.getPartitionKey() == null;
         
         RetryCreateDocumentDelegate createDelegate = new RetryCreateDocumentDelegate() {
 
@@ -586,7 +587,9 @@ public class DocumentClient {
             }
         };
         
-        return  RetryUtility.execute(createDelegate, this, documentCollectionLink);
+        return shouldRetry 
+            ? RetryUtility.execute(createDelegate, this, documentCollectionLink)
+            : createDelegate.apply();
     }
 
      /**
@@ -608,6 +611,7 @@ public class DocumentClient {
         final Object documentLocal = document;
         final RequestOptions optionsLocal = options;
         final boolean disableAutomaticIdGenerationLocal = disableAutomaticIdGeneration;
+        final boolean shouldRetry = options == null || options.getPartitionKey() == null; 
         
         RetryCreateDocumentDelegate upsertDelegate = new RetryCreateDocumentDelegate() {
 
@@ -619,7 +623,9 @@ public class DocumentClient {
             }
         };
         
-        return  RetryUtility.execute(upsertDelegate, this, documentCollectionLink);
+        return shouldRetry
+            ? RetryUtility.execute(upsertDelegate, this, documentCollectionLink)
+            : upsertDelegate.apply();
     }
     
     @Deprecated
@@ -730,16 +736,29 @@ public class DocumentClient {
             throw new IllegalArgumentException("document");          
         }
 
+        final String documentCollectionLink = this.getTargetDocumentCollectionLink(Utils.getCollectionName(documentLink), document);
+        options = insertPartitionKeyIfNeeded(Utils.getCollectionName(documentLink), document, options);;
+        final String path = Utils.joinPath(documentLink, null);
+        final Map<String, String> requestHeaders = getRequestHeaders(options);
+        final DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
+                path,
+                document,
+                requestHeaders);
+        final boolean shouldRetry = options == null || options.getPartitionKey() == null;
+
         DocumentClient.validateResource(document);
+
+      	RetryCreateDocumentDelegate replaceDelegate = new RetryCreateDocumentDelegate() {
+
+            @Override
+            public ResourceResponse<Document> apply() throws DocumentClientException {
+                return new ResourceResponse<Document>(doReplace(request), Document.class);
+            }
+        };
         
-        options = insertPartitionKeyIfNeeded(Utils.getCollectionName(documentLink), document, options);
-        String path = Utils.joinPath(documentLink, null);
-        Map<String, String> requestHeaders = getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
-                                                                       path,
-                                                                       document,
-                                                                       requestHeaders);
-        return new ResourceResponse<Document>(this.doReplace(request), Document.class);                
+        return shouldRetry
+            ? RetryUtility.execute(replaceDelegate, this, documentCollectionLink)
+            : replaceDelegate.apply();
     }
 
     /**
