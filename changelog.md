@@ -1,3 +1,8 @@
+## Changes in 1.8.1 : ##
+
+    - Fixed a bug in PartitionKeyDefinitionMap to cache single partition collection and not making extra fetch partition key requests.
+    - Fixed a bug in incorrect partition key value scenario to not retry.
+
 ## Changes in 1.8.0 : ##
 
     - Added support for endpoint management for geo-distributed databases. User can customize
