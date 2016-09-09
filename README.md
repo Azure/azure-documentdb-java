@@ -50,8 +50,6 @@ To use this SDK to call Azure DocumentDB, you need to first [create an account](
 You can follow this [tutorial](http://azure.microsoft.com/en-us/documentation/articles/documentdb-java-application/) to help you get started.
 
 ```java
-package com.microsoft.azure.documentdb.sample;
-
 import java.io.IOException;
 import java.util.List;
 
@@ -189,6 +187,47 @@ public class HelloWorld {
     }
 }
 
+```
+
+The sample code defines a sample Plain Old Java Object (POJO) as follows:
+
+```java
+class SomePojo {
+    private String id;
+    private String name;
+    private String email;
+
+    public SomePojo(String id, String name, String email) {
+          super();
+          this.id = id;
+          this.name = name;
+          this.email = email;
+    }
+
+    public String getEmail() {
+          return email;
+    }
+
+    public String getId() {
+          return id;
+    }
+
+    public String getName() {
+          return name;
+    }
+
+    public void setEmail(String email) {
+          this.email = email;
+    }
+
+    public void setId(String id) {
+          this.id = id;
+    }
+
+    public void setName(String name) {
+          this.name = name;
+    }
+}
 ```
 
 The following code Illustrates how to create a partitioned collection and use the partition key to access documents:
