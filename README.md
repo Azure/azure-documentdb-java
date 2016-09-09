@@ -189,7 +189,7 @@ public class HelloWorld {
 
 ```
 
-The sample code defines a sample Plain Old Java Object (POJO) as follows:
+The sample code above depends on a sample Plain Old Java Object (POJO) class, which is defined as follows:
 
 ```java
 class SomePojo {
