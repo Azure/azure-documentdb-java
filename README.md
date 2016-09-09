@@ -50,75 +50,154 @@ To use this SDK to call Azure DocumentDB, you need to first [create an account](
 You can follow this [tutorial](http://azure.microsoft.com/en-us/documentation/articles/documentdb-java-application/) to help you get started.
 
 ```java
-import java.util.ArrayList;
+    package com.microsoft.azure.documentdb.sample;
 
-import com.google.gson.Gson;
-import com.microsoft.azure.documentdb.ConnectionPolicy;
-import com.microsoft.azure.documentdb.ConsistencyLevel;
-import com.microsoft.azure.documentdb.Database;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
-import com.microsoft.azure.documentdb.PartitionKey;
-import com.microsoft.azure.documentdb.PartitionKeyDefinition;
-import com.microsoft.azure.documentdb.RequestOptions;
+    import java.io.IOException;
+    import java.util.List;
 
-public class SampleApp {
-    // Replace with your DocumentDB end point and master key.
-    private static final String END_POINT = "[YOUR_ENDPOINT_HERE]";
-    private static final String MASTER_KEY = "[YOUR_KEY_HERE]";
+    import com.google.gson.Gson;
+    import com.microsoft.azure.documentdb.ConnectionPolicy;
+    import com.microsoft.azure.documentdb.ConsistencyLevel;
+    import com.microsoft.azure.documentdb.Database;
+    import com.microsoft.azure.documentdb.Document;
+    import com.microsoft.azure.documentdb.DocumentClient;
+    import com.microsoft.azure.documentdb.DocumentClientException;
+    import com.microsoft.azure.documentdb.DocumentCollection;
+    import com.microsoft.azure.documentdb.RequestOptions;
 
-    // Define an id for your database and collection
-    private static final String DATABASE_ID = "TestDB";
-    private static final String COLLECTION_ID = "TestCollection";
-    private static final String COLLECTION_ID_PARTITIONED = "TestCollection_Partitioned";
+    public class HelloWorld {
+        // Replace with your DocumentDB end point and master key.
+        private static final String END_POINT = "[YOUR_ENDPOINT_HERE]";
+        private static final String MASTER_KEY = "[YOUR_KEY_HERE]";
+        
+        // Define an id for your database and collection
+        private static final String DATABASE_ID = "TestDB";
+        private static final String COLLECTION_ID = "TestCollection";
 
-    // We'll use Gson for POJO <=> JSON serialization for this sample.
-    // Codehaus' Jackson is another great POJO <=> JSON serializer.
-    private static Gson gson = new Gson();
+        // We'll use Gson for POJO <=> JSON serialization for this sample.
+        // Codehaus' Jackson is another great POJO <=> JSON serializer.
+        private static Gson gson = new Gson();
 
-    public static void main(String[] args) throws DocumentClientException {
-        // Instantiate a DocumentClient w/ your DocumetnDB Endpoint and AuthKey.
-        DocumentClient documentClient = new DocumentClient(END_POINT,
-                MASTER_KEY, ConnectionPolicy.GetDefault(),
-                ConsistencyLevel.Session);
+        public static void main(String[] args) throws DocumentClientException,
+                IOException {
+            // Instantiate a DocumentClient w/ your DocumentDB Endpoint and AuthKey.
+            DocumentClient documentClient = new DocumentClient(END_POINT,
+                    MASTER_KEY, ConnectionPolicy.GetDefault(),
+                    ConsistencyLevel.Session);
 
-        // Define a new database using the id above.
-        Database myDatabase = new Database();
-        myDatabase.setId(DATABASE_ID);
+            // Start from a clean state (delete database in case it already exists).
+            documentClient.deleteDatabase("dbs/" + DATABASE_ID, null);
+            
+            // Define a new database using the id above.
+            Database myDatabase = new Database();
+            myDatabase.setId(DATABASE_ID);
 
-        // Create a new database.
-        myDatabase = documentClient.createDatabase(myDatabase, null)
-                .getResource();
+            // Create a new database.
+            myDatabase = documentClient.createDatabase(myDatabase, null)
+                    .getResource();
 
-        // Define a new collection using the id above.
-        DocumentCollection myCollection = new DocumentCollection();
-        myCollection.setId(COLLECTION_ID);
+            System.out.println("Created a new database:");
+            System.out.println(myDatabase.toString());
+            System.in.read();
 
-        // Set the provisioned throughput for this collection to be 1000 RUs.
-        RequestOptions requestOptions = new RequestOptions();
-        requestOptions.setOfferThroughput(1000);
+            // Define a new collection using the id above.
+            DocumentCollection myCollection = new DocumentCollection();
+            myCollection.setId(COLLECTION_ID);
 
-        // Create a new collection.
-        myCollection = documentClient.createCollection(
-                myDatabase.getSelfLink(), myCollection, requestOptions).getResource();
+            // Set the provisioned throughput for this collection to be 1000 RUs.
+            RequestOptions requestOptions = new RequestOptions();
+            requestOptions.setOfferThroughput(1000);
 
-        // Create an object, serialize it in to JSON, and wrap it in to a
-        // document.
-        SomePojo somePojo = new SomePojo();
-        String somePojoJson = gson.toJson(somePojo);
-        Document myDocument = new Document(somePojoJson);
+            // Create a new collection.
+            myCollection = documentClient.createCollection(
+                    myDatabase.getSelfLink(), myCollection, requestOptions)
+                    .getResource();
 
-        // Create a new document.
-        myDocument = documentClient.createDocument(myCollection.getSelfLink(),
-                myDocument, null, false).getResource();
-                
-		 // The following code Illustrates how to create a partitioned collection and
-		 // use the partition key to access documents.
+            System.out.println("Created a new collection:");
+            System.out.println(myCollection.toString());
+            System.in.read();
+
+            // Create an object, serialize it in to JSON, and wrap it in to a
+            // document.
+            SomePojo andrewPojo = new SomePojo("123", "Andrew Liu", "andrl@microsoft.com");
+            String andrewJson = gson.toJson(andrewPojo);
+            Document andrewDocument = new Document(andrewJson);
+
+            // Create the 1st document.
+            andrewDocument = documentClient.createDocument(
+                    myCollection.getSelfLink(), andrewDocument, null, false)
+                    .getResource();
+
+            System.out.println("Created 1st document:");
+            System.out.println(andrewDocument.toString());
+            System.in.read();
+
+            // Create another object, serialize it in to JSON, and wrap it in to a
+            // document.
+            SomePojo mimiPojo = new SomePojo("456", "Mimi Gentz",
+                    "mimig@microsoft.com");
+            String somePojoJson = gson.toJson(mimiPojo);
+            Document mimiDocument = new Document(somePojoJson);
+
+            // Create the 2nd document.
+            mimiDocument = documentClient.createDocument(
+                    myCollection.getSelfLink(), mimiDocument, null, false)
+                    .getResource();
+
+            System.out.println("Created 2nd document:");
+            System.out.println(mimiDocument.toString());
+            System.in.read();
+
+            // Query documents
+            List<Document> results = documentClient
+                    .queryDocuments(
+                            myCollection.getSelfLink(),
+                            "SELECT * FROM myCollection WHERE myCollection.email = 'andrl@microsoft.com'",
+                            null).getQueryIterable().toList();
+
+            System.out.println("Query document where e-mail address = 'andrl@microsoft.com':");
+            System.out.println(results.toString());
+            System.in.read();
+
+            // Replace Document Andrew with Shireesh
+            andrewPojo = gson.fromJson(results.get(0).toString(), SomePojo.class);
+            andrewPojo.setName("Shireesh Thota");
+            andrewPojo.setEmail("Shireesh.Thota@microsoft.com");
+
+            andrewDocument = documentClient.replaceDocument(
+                    andrewDocument.getSelfLink(),
+                    new Document(gson.toJson(andrewPojo)), null)
+                    .getResource();
+
+            System.out.println("Replaced Andrew's document with Shireesh's contact information");
+            System.out.println(andrewDocument.toString());
+            System.in.read();
+
+            // Delete Shireesh's Document
+
+            documentClient.deleteDocument(andrewDocument.getSelfLink(), null);
+
+            System.out.println("Deleted Shireesh's document");
+            System.in.read();
+
+            // Delete Database
+            documentClient.deleteDatabase(myDatabase.getSelfLink(), null);
+
+            System.out.println("Deleted database");
+            System.in.read();
+
+        }
+    }
+
+```
+
+The following code Illustrates how to create a partitioned collection and use the partition key to access documents:
+
+```java 
+
 		    
-		 // Create a partition key definition that specifies the path to the property
-		 // within a document that is used as the partition key.          
+        // Create a partition key definition that specifies the path to the property
+        // within a document that is used as the partition key.          
         PartitionKeyDefinition partitionKeyDef = new PartitionKeyDefinition();
         ArrayList<String> paths = new ArrayList<String>();
         paths.add("/id");
