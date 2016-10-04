@@ -2,6 +2,8 @@ package com.microsoft.azure.documentdb;
 
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * Represents a user defined function.
  * <p>
@@ -19,7 +21,7 @@ public class UserDefinedFunction extends Resource {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the user defined function.
      */
     public UserDefinedFunction(String jsonString) {
@@ -28,7 +30,7 @@ public class UserDefinedFunction extends Resource {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the user defined function.
      */
     public UserDefinedFunction(JSONObject jsonObject) {
@@ -37,7 +39,7 @@ public class UserDefinedFunction extends Resource {
 
     /**
      * Get the body of the user defined function.
-     * 
+     *
      * @return the body.
      */
     public String getBody() {
@@ -46,7 +48,7 @@ public class UserDefinedFunction extends Resource {
 
     /**
      * Set the body of the user defined function.
-     * 
+     *
      * @param body the body.
      */
     public void setBody(String body) {

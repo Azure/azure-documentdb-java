@@ -3,21 +3,22 @@ package com.microsoft.azure.documentdb;
 import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 public final class RangeIndex extends Index {
 
     /**
      * Initializes a new instance of the RangeIndex class with specified DataType.
-     * 
+     * <p>
      * Here is an example to instantiate RangeIndex class passing in the DataType:
-     * 
      * <pre>
      * {@code
-     * 
+     *
      * RangeIndex rangeIndex = new RangeIndex(DataType.Number);
-     * 
-     * } 
+     *
+     * }
      * </pre>
-     * 
+     *
      * @param dataType the data type.
      */
     public RangeIndex(DataType dataType) {
@@ -27,7 +28,6 @@ public final class RangeIndex extends Index {
 
     /**
      * Initializes a new instance of the RangeIndex class with specified DataType and precision.
-     *
      * <pre>
      * {@code
      *
@@ -35,9 +35,8 @@ public final class RangeIndex extends Index {
      *
      * }
      * </pre>
-     *
-     * @param dataType the data type
-     * @param precision the precision
+     * @param dataType   the data type of the RangeIndex
+     * @param precision  the precision of the RangeIndex
      */
     public RangeIndex(DataType dataType, int precision) {
         super(IndexKind.Range);
@@ -47,7 +46,7 @@ public final class RangeIndex extends Index {
 
     /**
      * Initializes a new instance of the RangeIndex class with json string.
-     * 
+     *
      * @param jsonString the json string that represents the index.
      */
     public RangeIndex(String jsonString) {
@@ -59,7 +58,7 @@ public final class RangeIndex extends Index {
 
     /**
      * Initializes a new instance of the RangeIndex class with json object.
-     * 
+     *
      * @param jsonObject the json object that represents the index.
      */
     public RangeIndex(JSONObject jsonObject) {
@@ -72,14 +71,14 @@ public final class RangeIndex extends Index {
 
     /**
      * Gets data type.
-     * 
+     *
      * @return the data type.
      */
     public DataType getDataType() {
         DataType result = null;
         try {
             result = DataType.valueOf(WordUtils.capitalize(super.getString(Constants.Properties.DATA_TYPE)));
-        } catch(IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             this.getLogger().warning(
                     String.format("Invalid index dataType value %s.", super.getString(Constants.Properties.DATA_TYPE)));
         }
@@ -88,16 +87,16 @@ public final class RangeIndex extends Index {
 
     /**
      * Sets data type.
-     * 
+     *
      * @param dataType the data type.
      */
     public void setDataType(DataType dataType) {
         super.set(Constants.Properties.DATA_TYPE, dataType.name());
     }
-    
+
     /**
      * Gets precision.
-     * 
+     *
      * @return the precision.
      */
     public int getPrecision() {
@@ -106,7 +105,7 @@ public final class RangeIndex extends Index {
 
     /**
      * Sets precision.
-     * 
+     *
      * @param precision the precision.
      */
     public void setPrecision(int precision) {

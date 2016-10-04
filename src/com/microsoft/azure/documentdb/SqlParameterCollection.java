@@ -19,7 +19,7 @@ public final class SqlParameterCollection implements Collection<SqlParameter> {
 
     /**
      * Initializes a new instance of the SqlParameterCollection class from an array of parameters.
-     * 
+     *
      * @param parameters the array of parameters.
      */
     public SqlParameterCollection(SqlParameter... parameters) {
@@ -32,7 +32,7 @@ public final class SqlParameterCollection implements Collection<SqlParameter> {
 
     /**
      * Initializes a new instance of the SqlParameterCollection class from a collection of parameters.
-     * 
+     *
      * @param parameters the collection of parameters.
      */
     public SqlParameterCollection(Collection<SqlParameter> parameters) {

@@ -7,6 +7,8 @@ package com.microsoft.azure.documentdb;
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * Represents a Database. A database manages users, permissions and a set of collections
  * <p>
@@ -26,7 +28,7 @@ public final class Database extends Resource {
 
     /**
      * Initialize a database object from json string.
-     * 
+     *
      * @param jsonString the json string.
      */
     public Database(String jsonString) {
@@ -35,7 +37,7 @@ public final class Database extends Resource {
 
     /**
      * Initialize a database object from json string.
-     * 
+     *
      * @param jsonObject the json object.
      */
     public Database(JSONObject jsonObject) {
@@ -44,23 +46,23 @@ public final class Database extends Resource {
 
     /**
      * Gets the self-link for collections in the database
-     * 
+     *
      * @return the collections link.
      */
     public String getCollectionsLink() {
         return String.format("%s/%s",
-                             StringUtils.stripEnd(super.getSelfLink(), "/"),
-                             super.getString(Constants.Properties.COLLECTIONS_LINK));
+                StringUtils.stripEnd(super.getSelfLink(), "/"),
+                super.getString(Constants.Properties.COLLECTIONS_LINK));
     }
 
     /**
      * Gets the self-link for users in the database.
-     * 
+     *
      * @return the users link.
      */
     public String getUsersLink() {
         return String.format("%s/%s",
-                             StringUtils.stripEnd(super.getSelfLink(), "/"),
-                             super.getString(Constants.Properties.USERS_LINK));
+                StringUtils.stripEnd(super.getSelfLink(), "/"),
+                super.getString(Constants.Properties.USERS_LINK));
     }
 }

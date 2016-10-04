@@ -5,156 +5,77 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
+import com.microsoft.azure.documentdb.internal.*;
+import com.microsoft.azure.documentdb.internal.query.*;
 
 /**
- * 
  * The template class for iterable resources.
  *
- * @param <T> the resource type of the query iterable.
+ * @param <T>
+ *            the resource type of the query iterable.
  */
 public class QueryIterable<T extends Resource> implements Iterable<T> {
+    private final DocumentClient client;
+    private final ResourceType resourceType;
+    private final Class<T> classT;
+    private final SqlQuerySpec querySpec;
+    private final FeedOptions options;
+    private final String resourceLink;
+    private final Object partitionKey;
+    private QueryExecutionContext<T> queryExecutionContext;
 
-    private DocumentClient client = null;
-    private DocumentServiceRequest request = null;
-    private ReadType readType;
-    private Class<T> classT;
-    private String initialContinuation = null;
-    private String continuation = null;
-    private boolean hasStarted = false;
-    private List<T> items = new ArrayList<T>();
-    private Map<String, String> requestHeaders;
-    private Map<String, String> responseHeaders;
-    private int currentIndex = 0;
-    private boolean hasNext = true;
-    private SqlQuerySpec querySpec = null;
-    private ArrayList<String> documentCollectionLinks = new ArrayList<String>();
-    private int currentCollectionIndex = 0;
+    protected QueryIterable(DocumentClient client, ResourceType resourceType, Class<T> classT, String resourceLink,
+            FeedOptions options) {
+        this(client, resourceType, classT, resourceLink, null, options, null);
+    }
 
-    /**
-     * Creates a new instance of the QueryIterable class.
-     * <p>
-     * QueryIterable constructor taking in the DocumentServiceRequest(for non-partitioning scenarios)
-     *
-     * @param client the document client
-     * @param request the document service request
-     * @param readType the read type
-     * @param classT the class type
-     */
-    protected QueryIterable(DocumentClient client,
-                  DocumentServiceRequest request,
-                  ReadType readType,
-                  Class<T> classT) {
-        this.initialize(client, readType, classT);
-        this.request = request;
-        this.initializeContinuationToken();
-        this.reset();
+    protected QueryIterable(DocumentClient client, ResourceType resourceType, Class<T> classT, String resourceLink,
+            SqlQuerySpec querySpec, FeedOptions options) {
+        this(client, resourceType, classT, resourceLink, querySpec, options, null);
     }
     
-    /**
-     * Creates a new instance of the QueryIterable class.
-     * <p>
-     * QueryIterable constructor taking in the individual parameters for creating a DocumentServiceRequest
-     * This constructor is used for partitioning scenarios when multiple DocumentServiceRequests need to be created
-     *
-     * @param client the document client
-     * @param databaseOrDocumentCollectionLink the database or document collection link
-     * @param querySpec the query spec
-     * @param options the feed options
-     * @param partitionKey the partition key
-     * @param readType the read type
-     * @param classT the class type
-     */
-    @SuppressWarnings("deprecation")
-    protected QueryIterable(DocumentClient client,
-            String databaseOrDocumentCollectionLink,
-            SqlQuerySpec querySpec,
-            FeedOptions options,
-            Object partitionKey,
-            ReadType readType,
-            Class<T> classT) {
-        this.initialize(client, readType, classT);
-        this.querySpec = querySpec;
-        
-        if(Utils.isDatabaseLink(databaseOrDocumentCollectionLink)) {
-            // Gets the partition resolver(if it exists) for the specified database link
-            PartitionResolver partitionResolver = this.client.getPartitionResolver(databaseOrDocumentCollectionLink);
-            
-            // If the partition resolver exists, get the list of collections(from resolveForRead passing in the partitionKey) which we need to query against
-            if(partitionResolver != null) {
-                for(String collectionLink : partitionResolver.resolveForRead(partitionKey)) {
-                    this.documentCollectionLinks.add(collectionLink);
+    protected QueryIterable(DocumentClient client, ResourceType resourceType, Class<T> classT, String resourceLink,
+            FeedOptions options, Object partitionKey) {
+        this(client, resourceType, classT, resourceLink, null, options, partitionKey);
                 }
-            }
-            else {
-                throw new IllegalArgumentException(DocumentClient.PartitionResolverErrorMessage);
-            }
-        }
-        else {
-            this.documentCollectionLinks.add(databaseOrDocumentCollectionLink);
+        
+    protected QueryIterable(DocumentClient client, ResourceType resourceType, Class<T> classT, String resourceLink,
+            SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
+        this.client = client;
+        this.resourceType = resourceType;
+        this.classT = classT;
+        this.querySpec = querySpec;
+        if (options == null) {
+            options = new FeedOptions();
         }
         
-        // Create the request for the first collection to be queried
-        if(this.documentCollectionLinks != null && this.documentCollectionLinks.size() > 0) {
-            String path = Utils.joinPath(this.documentCollectionLinks.get(this.currentCollectionIndex), Paths.DOCUMENTS_PATH_SEGMENT);
-            this.currentCollectionIndex++;
-            
-            this.requestHeaders = this.client.getFeedHeaders(options);
-            this.request = DocumentServiceRequest.create(ResourceType.Document,
-                                                                           path,
-                                                                           this.querySpec,
-                                                                           this.client.queryCompatibilityMode,
-                                                                           this.requestHeaders);
-            
-            this.initializeContinuationToken();
-        }
-        
+        this.options = options;
+        this.resourceLink = resourceLink;
+        this.partitionKey = partitionKey;
         this.reset();
     }
-
-    /**
-     * Initialize the common fields to both QueryIterable constructors.
-     *
-     * @param client the document client
-     * @param readType the read type
-     * @param classT the class type
-     */
-    private void initialize(DocumentClient client,
-            ReadType readType,
-            Class<T> classT) {
-        this.client = client;        
-        this.readType = readType;
-        this.classT = classT;
+    
+    @SuppressWarnings("deprecation")
+    private QueryExecutionContext<T> createQueryExecutionContext(DocumentClient client, ResourceType resourceType,
+            Class<T> classT, String resourceLink, SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
+        PartitionResolver partitionResolver;
+        if (resourceType == ResourceType.Document && Utils.isDatabaseLink(resourceLink)
+                && ((partitionResolver = client.getPartitionResolver(resourceLink)) != null)) {
+            return QueryExecutionContextFactory.createQueryExecutionContext(new DocumentQueryClient(client),
+                    resourceType, classT, querySpec, options, partitionResolver.resolveForRead(partitionKey));
     }
     
-    /**
-     * Initialize the continuation token from the request header
-     */
-    private void initializeContinuationToken() {
-        if (this.request != null && this.request.getHeaders() != null) {
-            String continuationToken = this.request.getHeaders().get(HttpConstants.HttpHeaders.CONTINUATION);
-            if (!QueryIterable.isNullEmptyOrFalse(continuationToken)) {
-                this.initialContinuation = continuationToken;
+        return QueryExecutionContextFactory.createQueryExecutionContext(new DocumentQueryClient(client), resourceType,
+                classT, querySpec, options, resourceLink);
             }
-        }
-    }
 
     /**
      * Gets the response headers.
      * 
      * @return the response headers.
      */
-    Map<String, String> getResponseHeaders() {
-        return this.responseHeaders;
-    }
-
-    /**
-     * Gets the continuation token.
-     * 
-     * @return the continuation token.
-     */
-    String getContinuation() {
-        return this.continuation;
+    public Map<String, String> getResponseHeaders() {
+        return this.queryExecutionContext.getResponseHeaders();
     }
 
     /**
@@ -164,57 +85,7 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      */
     @Override
     public Iterator<T> iterator() {
-        Iterator<T> it = new Iterator<T>() {
-
-            /**
-             * Returns true if the iterator has a next value.
-             * 
-             * @return true if the iterator has a next value.
-             */
-            @Override
-            public boolean hasNext() {
-                if (currentIndex >= items.size() && hasNext) {
-                    fetchNext();
-                }
-
-                return hasNext;
-            }
-
-            /**
-             * Gets and moves to the next value.
-             * 
-             * @return the current value.
-             */
-            @Override
-            public T next() {
-                if (currentIndex >= items.size() && hasNext) {
-                    fetchNext();
-                }
-                
-                if (!hasNext) return null;
-                return items.get(currentIndex++);
-            }
-
-            /**
-             * Remove not supported.
-             */
-            @Override
-            public void remove() {
-                throw new UnsupportedOperationException("remove");
-            }
-            
-            private void fetchNext() {
-                try {
-                    List<T> results = fetchNextBlock();
-                    if (results == null) {
-                        hasNext = false;
-                    }
-                } catch (DocumentClientException e) {
-                    throw new IllegalStateException(String.format("Exception not retriable. %s", e.toString()), e);
-                }
-            }
-        };
-        return it;
+        return this.queryExecutionContext;
     }
 
     /**
@@ -223,10 +94,15 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      * @return the list of the iterable resources.
      */
     public List<T> toList() {
-        ArrayList<T> list = new ArrayList<T>();
+        List<T> list = new ArrayList<T>();
         for (T t : this) {
+            if (t == null) {
+                continue;
+            }
+
             list.add(t);
         }
+
         return list;
     }
 
@@ -234,106 +110,18 @@ public class QueryIterable<T extends Resource> implements Iterable<T> {
      * Resets the iterable.
      */
     public void reset() {
-        this.hasStarted = false;
-        this.continuation = this.initialContinuation;
-        this.items.clear();
-        this.currentIndex = 0;
-        this.hasNext = true;
+        this.queryExecutionContext = this.createQueryExecutionContext(this.client, this.resourceType, this.classT,
+                this.resourceLink, this.querySpec, this.options, this.partitionKey);
     }
 
     /**
      * Fetch the next block of query results.
      * 
      * @return the list of fetched resources.
-     * @throws DocumentClientException the document client exception.
+     * @throws DocumentClientException
+     *             the document client exception.
      */
-    public List<T> fetchNextBlock()
-        throws DocumentClientException {
-
-        // Fetch next block of results by executing the query against the current document collection
-        List<T> fetchedItems = this.fetchItems();
-        
-        // If there are multiple document collections to query for(in case of partitioning), keep looping through each one of them,
-        // creating separate requests for each collection and execute it
-        while(fetchedItems == null) {
-            if(this.documentCollectionLinks != null && this.currentCollectionIndex < this.documentCollectionLinks.size()) {
-                String path = Utils.joinPath(this.documentCollectionLinks.get(this.currentCollectionIndex), Paths.DOCUMENTS_PATH_SEGMENT);
-                // Clear the session token so we don't re-use the same token for a different collection.
-                if (this.requestHeaders != null) {
-                    this.requestHeaders.remove(HttpConstants.HttpHeaders.SESSION_TOKEN);
-                }
-                
-                this.request = DocumentServiceRequest.create(ResourceType.Document,
-                        path,
-                        this.querySpec,
-                        this.client.queryCompatibilityMode,
-                        this.requestHeaders);
-                this.reset();
-                fetchedItems = this.fetchItems();
-                this.currentCollectionIndex++;
-            }
-            else {
-                break;
-            }
-        }
-
-        return fetchedItems;
-    }
-    
-    /**
-     * Fetch items from query results for the current document collection.
-     * 
-     * @return the list of fetched resources.
-     * @throws DocumentClientException the document client exception.
-     */
-    private List<T> fetchItems() 
-        throws DocumentClientException {
-        DocumentServiceResponse response = null;
-        List<T> fetchedItems = null;
-        
-        while (!QueryIterable.isNullEmptyOrFalse(this.continuation) || !this.hasStarted) {
-            if (!QueryIterable.isNullEmptyOrFalse(this.continuation)) {
-                this.request.getHeaders().put(HttpConstants.HttpHeaders.CONTINUATION, this.continuation);
-            } else {
-                this.request.getHeaders().remove(HttpConstants.HttpHeaders.CONTINUATION);
-            }
-
-            if (this.readType == ReadType.Feed) {
-                response = this.client.doReadFeed(this.request);
-            } else {
-                response = this.client.doQuery(this.request);
-            }
-
-            // A retriable exception may happen. "this.hasStarted" and "this.continuation" must not be set
-            // value before this line.
-
-            if (!this.hasStarted) {
-                this.hasStarted = true;
-            }
-
-            this.responseHeaders = response.getResponseHeaders();
-            this.continuation = this.responseHeaders.get(HttpConstants.HttpHeaders.CONTINUATION);
-
-            fetchedItems = response.getQueryResponse(this.classT);
-            this.items.clear();
-            this.currentIndex = 0;
-            this.items.addAll(fetchedItems);
-            
-            if (fetchedItems != null && fetchedItems.size() > 0) {
-                break;
-            }
-        }
-        
-        // Returning null if there are no items in the fetched collection instead of returning an empty list
-        // This makes fetchNextBlock method usage much better which now, just needs to check for nullability
-        if (fetchedItems != null && fetchedItems.size() <= 0) {
-            return null;
-        }
-        
-        return fetchedItems;
-    }
-
-    private static boolean isNullEmptyOrFalse(String s) {
-        return StringUtils.isEmpty(s) || s.equalsIgnoreCase("false");
+    public List<T> fetchNextBlock() throws DocumentClientException {
+        return this.queryExecutionContext.fetchNextBlock();
     }
 }

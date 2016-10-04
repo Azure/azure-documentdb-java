@@ -1,7 +1,7 @@
 package com.microsoft.azure.documentdb;
 
 /**
- * The trigger type. 
+ * The trigger type.
  */
 public enum TriggerType {
     /**
@@ -22,7 +22,7 @@ public enum TriggerType {
 
     /**
      * Gets the numerical value of the trigger type.
-     * 
+     *
      * @return the numerical value.
      */
     public int getValue() {

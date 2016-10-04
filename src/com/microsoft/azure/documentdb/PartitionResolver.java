@@ -30,16 +30,16 @@ package com.microsoft.azure.documentdb;
 public interface PartitionResolver {
     /**
      * Gets the collection Self Link or ID based link on which create operation should be directed
-     * @param document the document object to be created  
-     * 
+     *
+     * @param document the document object to be created
      * @return collection SelfLink or ID based link
      */
     String resolveForCreate(Object document);
-	
+
     /**
      * Gets an iterator of strings representing SelfLink(s) or ID based link(s) on which read/query operation should be directed
-     * @param partitionKey partition key used to resolve the collection 
-     * 
+     *
+     * @param partitionKey partition key used to resolve the collection
      * @return An iterator of strings representing SelfLink(s) or ID based link(s)
      */
     Iterable<String> resolveForRead(Object partitionKey);

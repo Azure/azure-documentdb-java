@@ -29,39 +29,39 @@ import org.apache.commons.lang3.StringUtils;
 public class Range<T extends Comparable<T>> implements Comparable<Range<T>> {
     private T low;
     private T high;
-    
+
     public Range(T low, T high) {
-        if(low == null || high == null) {
+        if (low == null || high == null) {
             throw new IllegalArgumentException("Range value cannot be null.");
         }
-        if(low.compareTo(high) > 0) {
+        if (low.compareTo(high) > 0) {
             throw new IllegalArgumentException("Range low value must be less than or equal the high value.");
         }
-        
+
         this.low = low;
         this.high = high;
     }
-    
+
     public Range(T point) {
         this(point, point);
     }
-    
+
     public boolean contains(Range<T> other) {
-        if(other == null) {
+        if (other == null) {
             throw new IllegalArgumentException("Range cannot be null.");
         }
-        
+
         if (other.low.compareTo(this.low) >= 0 && other.high.compareTo(this.high) <= 0) {
             return true;
         }
-        
+
         return false;
     }
-    
+
     public boolean contains(T value) {
         return this.contains(new Range<T>(value));
     }
-    
+
     public boolean intersect(Range<T> other) {
         T maxLow = this.low.compareTo(other.low) >= 0 ? this.low : other.low;
         T minHigh = this.high.compareTo(other.high) <= 0 ? this.high : other.high;
@@ -69,24 +69,24 @@ public class Range<T extends Comparable<T>> implements Comparable<Range<T>> {
         if (maxLow.compareTo(minHigh) <= 0) {
             return true;
         }
-        
+
         return false;
     }
-    
+
     @Override
     public int compareTo(Range<T> other) {
-        if(this.low.compareTo(other.low) == 0 && this.high.compareTo(other.high) == 0) {
+        if (this.low.compareTo(other.low) == 0 && this.high.compareTo(other.high) == 0) {
             return 0;
         }
         if (this.low.compareTo(other.low) < 0 || this.high.compareTo(other.high) < 0) {
             return -1;
         }
-        
+
         return 1;
     }
-    
+
     @Override
     public String toString() {
-        return StringUtils.join(new String[] { this.low.toString(), this.high.toString() }, "," );
+        return StringUtils.join(new String[] {this.low.toString(), this.high.toString()}, ",");
     }
 }
