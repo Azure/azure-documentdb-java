@@ -1,6 +1,7 @@
 ## Changes in 1.9.0 : ##
 
-    - Implemented cross partition parallel and/or Top/OrderBy queries.
+    - Added support for cross partition parallel queries.
+    - Added support for TOP/ORDER BY queries for partitioned collections. 
     - Added support for strong consistency.
     - Added support for name based requests when using direct connectivity.
     - Fixed to make ActivityId stay consistent across all request retries.
