@@ -1,7 +1,16 @@
+## Changes in 1.9.0 : ##
+
+    - Implemented cross partition parallel and/or Top/OrderBy queries.
+    - Added support for strong consistency.
+    - Added support for name based requests when using direct connectivity.
+    - Fixed to make ActivityId stay consistent across all request retries.
+    - Fixed a bug related to the session cache when recreating a collection with the same name.
+    - Fixed issues with Java Doc for Java 1.8.
+
 ## Changes in 1.8.1 : ##
 
     - Fixed a bug in PartitionKeyDefinitionMap to cache single partition collection and not making extra fetch partition key requests.
-    - Fixed a bug in incorrect partition key value scenario to not retry.
+	- Fixed a bug in incorrect partition key value scenario to not retry.
 
 ## Changes in 1.8.0 : ##
 

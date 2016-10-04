@@ -1,27 +1,29 @@
 package com.microsoft.azure.documentdb;
 
 /**
- * Represents the 'Undfined' partition key. 
+ * Represents the 'Undefined' partition key.
  */
 public class Undefined {
 	
 	private final static Undefined value = new Undefined();
 	
 	/**
-     * Creates a new instance of the Undefined class.
+     * Constructor. Create a new instance of the Undefined object.
     */
     private Undefined() {
     }
     
     /**
-     * @return the singleton value of Undfined.
+     * Returns the singleton value of Undefined.
+     *
+     * @return the Undefined value
     */
     public static Undefined Value() {
     	return value;
     }
 
     /**
-     * @return the string representation of Undfined.
+     * Returns the string representation of Undfined.
     */
     public String toString() {
     	return "{}";

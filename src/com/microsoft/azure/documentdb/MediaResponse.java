@@ -4,6 +4,7 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.util.Map;
 
+import com.microsoft.azure.documentdb.internal.DocumentServiceResponse;
 
 /**
  * Response associated with retrieving attachment content.
@@ -23,7 +24,7 @@ public final class MediaResponse {
 
     /**
      * Gets the attachment content stream.
-     * 
+     *
      * @return the attachment content stream.
      */
     public InputStream getMedia() {
@@ -32,7 +33,7 @@ public final class MediaResponse {
 
     /**
      * Gets the headers associated with the response.
-     * 
+     *
      * @return the response headers.
      */
     public Map<String, String> getResponseHeaders() {

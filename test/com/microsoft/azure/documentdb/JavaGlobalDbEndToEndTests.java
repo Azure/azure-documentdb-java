@@ -11,40 +11,61 @@ import org.junit.Before;
 import org.junit.Test;
 
 /**
- * 
  * End-to-end test cases for globally distributed databases.
- * 
+ * <p>
  * IMPORTANT NOTES:
- * 
+ * <p>
  * Most test cases in this project create collections in your DocumentDB
  * account. Collections are billing entities. By running these test cases, you
  * may incur monetary costs on your account.
- * 
+ * <p>
  * To Run the test, replace the member fields (MASTER_KEY & HOST & HOST_XXX)
  * with values associated with your DocumentDB account.
  */
 
-public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
+public class JavaGlobalDbEndToEndTests {
     private static final String databaseForTestId = "testdb";
     private static final String collectionForTestId = "testcoll";
+    private static final String MASTER_KEY = "DLNv1EsyecfprKr142wzvlhUfkZmZph32OlwPXlFbULcs0RaRFHZ63uUaMvPcOwAtcbWMxve6Llj74Uhwt3Fhg==";
 
-    private static final String MASTER_KEY = "[REPLACE WITH YOUR APP MASTER KEY]";
-    private static final String HOST = "[REPLACE WITH YOUR APP ENDPOINT, FOR EXAMPLE 'https://myapp.documents.azure.com:443']";
-    private static final String HOST_WRITEREGION = "[REPLACE WITH YOUR APP'S WRITE REGION ENDPOINT, FOR EXAMPLE 'https://myapp-westus.documents.azure.com:443']";
-    private static final String HOST_READREGION = "[REPLACE WITH YOUR APP'S READ REGION ENDPOINT, FOR EXAMPLE 'https://myapp-eastus.documents.azure.com:443']";
-    private static final String HOST_READRGION_NAME = "[REPLACE WITH YOUR APP'S READ REGION Name, FOR EXAMPLE 'East Us']";
+    // private static final String MASTER_KEY = "[REPLACE WITH YOUR APP MASTER
+    // KEY]";
+    // private static final String HOST = "[REPLACE WITH YOUR APP ENDPOINT, FOR
+    // EXAMPLE 'https://myapp.documents.azure.com:443']";
+    // private static final String HOST_WRITEREGION = "[REPLACE WITH YOUR APP'S
+    // WRITE REGION ENDPOINT, FOR EXAMPLE
+    // 'https://myapp-westus.documents.azure.com:443']";
+    // private static final String HOST_READREGION = "[REPLACE WITH YOUR APP'S
+    // READ REGION ENDPOINT, FOR EXAMPLE
+    // 'https://myapp-eastus.documents.azure.com:443']";
+    // private static final String HOST_READRGION_NAME = "[REPLACE WITH YOUR
+    // APP'S READ REGION Name, FOR EXAMPLE 'East Us']";
 
+    // private static final String MASTER_KEY =
+    // "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+    // private static final String HOST = "https://localhost:443/";
+    // private static final String HOST_WRITEREGION = "https://localhost:443/";
+    // private static final String HOST_READREGION = "https://localhost:1045/";
+    // private static final String HOST_READRGION_NAME = "West US";
+    private static final String HOST = "https://rnagpal-globaldb.documents.azure.com:443/";
+    private static final String HOST_WRITEREGION = "https://rnagpal-globaldb-centralindia.documents.azure.com:443/";
+    private static final String HOST_READREGION = "https://rnagpal-globaldb-westindia.documents.azure.com:443/";
+    private static final String HOST_READRGION_NAME = "West India";
+    private DocumentClient client;
     private Database databaseForTest;
+    private DocumentCollection collectionForTest;
+
+    public JavaGlobalDbEndToEndTests() {
+        super();
+    }
 
     @Before
-    @Override
     public void setUp() throws DocumentClientException {
         this.prepareAndCleanupCollection(JavaGlobalDbEndToEndTests.databaseForTestId,
                 JavaGlobalDbEndToEndTests.collectionForTestId);
     }
 
     @After
-    @Override
     public void tearDown() throws DocumentClientException {
         // Do nothing.
     }
@@ -57,7 +78,7 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
     @Test
     public void testWriteReadRegionReplication() throws DocumentClientException {
         // Add a document using default client.
-        String documentId = GatewayTests.getUID();
+        String documentId = TestUtils.getUID();
         Document documentDefinition = new Document(String
                 .format("{" + " 'id': '%s'," + " 'name': 'sample document'," + " 'key': 'value'" + "}", documentId));
 
@@ -76,7 +97,7 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
         DocumentClient readClient = new DocumentClient(HOST_READREGION, MASTER_KEY, connectionPolicy,
                 ConsistencyLevel.Session);
         Assert.assertEquals(HOST_READREGION,
-                readClient.getGlobalEndpointManager().getReadEndpoint().toString().toLowerCase());
+                readClient.getEndpointManager().getReadEndpoint().toString().toLowerCase());
 
         Document readDocument = readClient.readDocument(createdDocument.getSelfLink(), null).getResource();
         Assert.assertEquals(documentId, readDocument.getId());
@@ -96,9 +117,9 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
         DocumentClient readClient = new DocumentClient(HOST_READREGION, MASTER_KEY, new ConnectionPolicy(),
                 ConsistencyLevel.Session);
         Assert.assertEquals(HOST_WRITEREGION,
-                readClient.getGlobalEndpointManager().getWriteEndpoint().toString().toLowerCase());
+                readClient.getEndpointManager().getWriteEndpoint().toString().toLowerCase());
 
-        String documentId = GatewayTests.getUID();
+        String documentId = TestUtils.getUID();
         Document documentDefinition = new Document(String
                 .format("{" + " 'id': '%s'," + "  'name': 'sample document'," + "  'key': 'value'" + "}", documentId));
 
@@ -143,16 +164,16 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
     public void testGlobalEndpointWithPreferredReadRegion() throws DocumentClientException {
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         Collection<String> preferredReadRegion = new ArrayList<String>(
-                Arrays.asList(new String[] { HOST_READRGION_NAME }));
+                Arrays.asList(new String[] {HOST_READRGION_NAME}));
         connectionPolicy.setPreferredLocations(preferredReadRegion);
         DocumentClient documentClient = new DocumentClient(HOST, MASTER_KEY, connectionPolicy,
                 ConsistencyLevel.Session);
         Assert.assertEquals(HOST_WRITEREGION,
-                documentClient.getGlobalEndpointManager().getWriteEndpoint().toString().toLowerCase());
+                documentClient.getEndpointManager().getWriteEndpoint().toString().toLowerCase());
         Assert.assertEquals(HOST_READREGION,
-                documentClient.getGlobalEndpointManager().getReadEndpoint().toString().toLowerCase());
+                documentClient.getEndpointManager().getReadEndpoint().toString().toLowerCase());
 
-        String documentId = GatewayTests.getUID();
+        String documentId = TestUtils.getUID();
         Document documentDefinition = new Document(String
                 .format("{" + " 'id': '%s'," + "  'name': 'sample document'," + "  'key': 'value'" + "}", documentId));
 
@@ -171,7 +192,7 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
      */
     @Test
     public void testReadWithSessionConsistency() throws DocumentClientException {
-        String documentId = GatewayTests.getUID();
+        String documentId = TestUtils.getUID();
         Document documentDefinition = new Document(String
                 .format("{" + " 'id': '%s'," + " 'name': 'sample document'," + " 'key': 'value'" + "}", documentId));
 
@@ -189,16 +210,16 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
     @Test
     public void testReadMediaFromWriteRegion() throws DocumentClientException {
         // Create document.
-        String documentId = GatewayTestBase.getUID();
+        String documentId = TestUtils.getUID();
         Document documentDefinition = new Document(String.format(
                 "{" +
                         "  'id': '%s'," +
                         "  'foo': 'bar'," +
                         "  'key': 'value'" +
-                "}", documentId));
-        
+                        "}", documentId));
+
         Document document = this.client.createDocument(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, true),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, true),
                 documentDefinition,
                 null,
                 false).getResource();
@@ -209,29 +230,29 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
         MediaOptions invalidMediaOptions = new MediaOptions();
         invalidMediaOptions.setSlug("attachment id");
         invalidMediaOptions.setContentType("junt/test");
-        
+
         ReadableStream mediaStream = new ReadableStream("stream content.");
-        Attachment validAttachment = client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, true),
+        Attachment validAttachment = client.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, true),
                 mediaStream,
                 validMediaOptions).getResource();
         Assert.assertEquals("attachment id", validAttachment.getId());
 
         // Read attachment media.
         InputStream mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("stream content.", GatewayTestBase.getStringFromInputStream(mediaResponse));
+        Assert.assertEquals("stream content.", TestUtils.getStringFromInputStream(mediaResponse));
     }
-    
+
     private void prepareAndCleanupCollection(String databaseId, String collectionId) throws DocumentClientException {
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         Collection<String> preferredReadRegion = new ArrayList<String>(
-                Arrays.asList(new String[] { HOST_READRGION_NAME }));
+                Arrays.asList(new String[] {HOST_READRGION_NAME}));
         connectionPolicy.setPreferredLocations(preferredReadRegion);
         this.client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session);
-        
+
         // Verify the write and read endpoints are set up correctly.
         Assert.assertEquals(HOST_WRITEREGION, this.client.getWriteEndpoint().toString().toLowerCase());
         Assert.assertEquals(HOST_READREGION, this.client.getReadEndpoint().toString().toLowerCase());
-        
+
         this.databaseForTest = this.client
                 .queryDatabases(new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter("@id", databaseId))), null)
@@ -262,7 +283,7 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
             DocumentCollection collection = new DocumentCollection();
             collection.setId(collectionId);
             this.collectionForTest = this.client
-                    .createCollection(getDatabaseLink(this.databaseForTest, true), collection, options).getResource();
+                    .createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true), collection, options).getResource();
 
             // Wait for collection to replicate
             try {
@@ -275,6 +296,8 @@ public class JavaGlobalDbEndToEndTests extends GatewayTestBase {
                 new SqlQuerySpec("SELECT * FROM root r", new SqlParameterCollection()), null);
 
         for (Document document : documents.getQueryIterable()) {
+            if (document == null)
+                continue;
             this.client.deleteDocument(document.getSelfLink(), null);
         }
     }

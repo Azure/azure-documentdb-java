@@ -5,6 +5,9 @@ import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+import com.microsoft.azure.documentdb.internal.DocumentServiceResponse;
+import com.microsoft.azure.documentdb.internal.HttpConstants;
 
 /**
  * Represents the service response to a request made from DocumentClient. Contains both the resource and the response
@@ -188,7 +191,7 @@ public final class ResourceResponse<T extends Resource> {
      */
     public long getUserDefinedFunctionsUsage() {
         return this.getCurrentQuotaHeader(
-            Constants.Quota.USER_DEFINED_FUNCTION);
+                Constants.Quota.USER_DEFINED_FUNCTION);
     }
 
     /**
@@ -214,8 +217,7 @@ public final class ResourceResponse<T extends Resource> {
      *
      * @return the status code.
      */
-    public int getStatusCode()
-    {
+    public int getStatusCode() {
         return this.response.getStatusCode();
     }
 
@@ -277,7 +279,7 @@ public final class ResourceResponse<T extends Resource> {
     public long getIndexTransformationProgress() {
         String value = this.getResponseHeaders().get(HttpConstants.HttpHeaders.INDEX_TRANSFORMATION_PROGRESS);
         if (StringUtils.isEmpty(value)) {
-          return -1;
+            return -1;
         }
         return Long.valueOf(value);
     }
@@ -290,7 +292,7 @@ public final class ResourceResponse<T extends Resource> {
     public long getLazyIndexingProgress() {
         String value = this.getResponseHeaders().get(HttpConstants.HttpHeaders.LAZY_INDEXING_PROGRESS);
         if (StringUtils.isEmpty(value)) {
-          return -1;
+            return -1;
         }
         return Long.valueOf(value);
     }
@@ -323,7 +325,7 @@ public final class ResourceResponse<T extends Resource> {
             this.populateQuotaHeader(this.getMaxResourceQuota(), this.getCurrentResourceQuotaUsage());
         }
 
-        if(this.quotaHeaders.containsKey(headerName)) {
+        if (this.quotaHeaders.containsKey(headerName)) {
             return this.quotaHeaders.get(headerName);
         }
 
@@ -334,9 +336,9 @@ public final class ResourceResponse<T extends Resource> {
         String[] headerMaxQuotaWords = headerMaxQuota.split(Constants.Quota.DELIMITER_CHARS, -1);
         String[] headerCurrentUsageWords = headerCurrentUsage.split(Constants.Quota.DELIMITER_CHARS, -1);
 
-        assert(headerMaxQuotaWords.length == headerCurrentUsageWords.length);
+        assert (headerMaxQuotaWords.length == headerCurrentUsageWords.length);
 
-        for(int i = 0; i < headerMaxQuotaWords.length; ++i) {
+        for (int i = 0; i < headerMaxQuotaWords.length; ++i) {
             if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.DATABASE)) {
                 this.quotaHeaders.put(Constants.Quota.DATABASE, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.DATABASE, Long.valueOf(headerCurrentUsageWords[i + 1]));
@@ -355,7 +357,7 @@ public final class ResourceResponse<T extends Resource> {
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.DOCUMENTS_SIZE)) {
                 this.quotaHeaders.put(Constants.Quota.DOCUMENTS_SIZE, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.DOCUMENTS_SIZE, Long.valueOf(headerCurrentUsageWords[i + 1]));
-            }else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.STORED_PROCEDURE)) {
+            } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.STORED_PROCEDURE)) {
                 this.quotaHeaders.put(Constants.Quota.STORED_PROCEDURE, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.STORED_PROCEDURE, Long.valueOf(headerCurrentUsageWords[i + 1]));
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.TRIGGER)) {
@@ -364,7 +366,7 @@ public final class ResourceResponse<T extends Resource> {
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.USER_DEFINED_FUNCTION)) {
                 this.quotaHeaders.put(Constants.Quota.USER_DEFINED_FUNCTION, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.USER_DEFINED_FUNCTION,
-                                      Long.valueOf(headerCurrentUsageWords[i + 1]));
+                        Long.valueOf(headerCurrentUsageWords[i + 1]));
             }
         }
     }

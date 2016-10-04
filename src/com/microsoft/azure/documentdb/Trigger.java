@@ -3,6 +3,8 @@ package com.microsoft.azure.documentdb;
 import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * Represents a trigger.
  * <p>
@@ -20,7 +22,7 @@ public class Trigger extends Resource {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the trigger.
      */
     public Trigger(String jsonString) {
@@ -29,7 +31,7 @@ public class Trigger extends Resource {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the trigger.
      */
     public Trigger(JSONObject jsonObject) {
@@ -38,7 +40,7 @@ public class Trigger extends Resource {
 
     /**
      * Get the body of the trigger.
-     * 
+     *
      * @return the body of the trigger.
      */
     public String getBody() {
@@ -47,7 +49,7 @@ public class Trigger extends Resource {
 
     /**
      * Set the body of the trigger.
-     * 
+     *
      * @param body the body of the trigger.
      */
     public void setBody(String body) {
@@ -56,25 +58,25 @@ public class Trigger extends Resource {
 
     /**
      * Get the type of the trigger.
-     * 
+     *
      * @return the trigger type.
      */
     public TriggerType getTriggerType() {
         TriggerType result = TriggerType.Pre;
         try {
             result = TriggerType.valueOf(
-                WordUtils.capitalize(super.getString(Constants.Properties.TRIGGER_TYPE)));
-        } catch(IllegalArgumentException e) {
+                    WordUtils.capitalize(super.getString(Constants.Properties.TRIGGER_TYPE)));
+        } catch (IllegalArgumentException e) {
             // ignore the exception and return the default
             this.getLogger().warning(
                     String.format("Invalid triggerType value %s.", super.getString(Constants.Properties.TRIGGER_TYPE)));
         }
-        return result;        
+        return result;
     }
 
     /**
      * Set the type of the resource.
-     * 
+     *
      * @param triggerType the trigger type.
      */
     public void setTriggerType(TriggerType triggerType) {
@@ -83,28 +85,28 @@ public class Trigger extends Resource {
 
     /**
      * Get the operation type of the trigger.
-     * 
+     *
      * @return the trigger operation.
      */
     public TriggerOperation getTriggerOperation() {
         TriggerOperation result = TriggerOperation.Create;
-        try  {
+        try {
             result = TriggerOperation.valueOf(
-                WordUtils.capitalize(super.getString(Constants.Properties.TRIGGER_OPERATION)));
-        } catch(IllegalArgumentException e) {
+                    WordUtils.capitalize(super.getString(Constants.Properties.TRIGGER_OPERATION)));
+        } catch (IllegalArgumentException e) {
             // ignore the exception and return the default
             this.getLogger().warning(
                     String.format("Invalid triggerOperation value %s.", super.getString(Constants.Properties.TRIGGER_OPERATION)));
         }
-        return result;          
+        return result;
     }
 
     /**
      * Set the operation type of the trigger.
-     * 
+     *
      * @param triggerOperation the trigger operation.
      */
     public void setTriggerOperation(TriggerOperation triggerOperation) {
         super.set(Constants.Properties.TRIGGER_OPERATION, triggerOperation.name());
-   }
+    }
 }

@@ -2,6 +2,7 @@ package com.microsoft.azure.documentdb;
 
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
 
 /**
  * Represents a database user.
@@ -17,7 +18,7 @@ public class User extends Resource {
 
     /**
      * Initialize a user object from json string.
-     * 
+     *
      * @param jsonString the json string that represents the database user.
      */
     public User(String jsonString) {
@@ -26,7 +27,7 @@ public class User extends Resource {
 
     /**
      * Initialize a user object from json object.
-     * 
+     *
      * @param jsonObject the json object that represents the database user.
      */
     public User(JSONObject jsonObject) {
@@ -35,7 +36,7 @@ public class User extends Resource {
 
     /**
      * Gets the self-link of the permissions associated with the user.
-     * 
+     *
      * @return the permissions link.
      */
     public String getPermissionsLink() {

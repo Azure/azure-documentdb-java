@@ -1,10 +1,10 @@
 package com.microsoft.azure.documentdb;
 
+import java.util.*;
 
 public final class SqlQuerySpec extends JsonSerializable {
 
     private SqlParameterCollection parameters;
-
 
     /**
      * Initializes a new instance of the SqlQuerySpec class.
@@ -14,9 +14,11 @@ public final class SqlQuerySpec extends JsonSerializable {
     }
 
     /**
-     * Initializes a new instance of the SqlQuerySpec class with the text of the query.
+     * Initializes a new instance of the SqlQuerySpec class with the text of the
+     * query.
      * 
-     * @param queryText the query text.
+     * @param queryText
+     *            the query text.
      */
     public SqlQuerySpec(String queryText) {
         super();
@@ -24,10 +26,11 @@ public final class SqlQuerySpec extends JsonSerializable {
     }
 
     /**
-     * Initializes a new instance of the SqlQuerySpec class with the text of the query and parameters.
+     * Initializes a new instance of the SqlQuerySpec class with the text of the
+     * query and parameters.
      * 
-     * @param queryText the query text.
-     * @param parameters the query parameters. 
+     * @param queryText  the query text.
+     * @param parameters the query parameters.
      */
     public SqlQuerySpec(String queryText, SqlParameterCollection parameters) {
         super();
@@ -47,7 +50,8 @@ public final class SqlQuerySpec extends JsonSerializable {
     /**
      * Sets the text of the query.
      * 
-     * @param queryText the query text.
+     * @param queryText
+     *            the query text.
      */
     public void setQueryText(String queryText) {
         super.set("query", queryText);
@@ -60,7 +64,12 @@ public final class SqlQuerySpec extends JsonSerializable {
      */
     public SqlParameterCollection getParameters() {
         if (this.parameters == null) {
-            this.parameters = new SqlParameterCollection(super.getCollection("parameters", SqlParameter.class));
+            Collection<SqlParameter> sqlParameters = super.getCollection("parameters", SqlParameter.class);
+            if (sqlParameters == null) {
+                sqlParameters = new ArrayList<SqlParameter>();
+            }
+
+            this.parameters = new SqlParameterCollection(sqlParameters);
         }
 
         return this.parameters;
@@ -69,7 +78,8 @@ public final class SqlQuerySpec extends JsonSerializable {
     /**
      * Sets the collection of query parameters.
      * 
-     * @param parameters the query parameters.
+     * @param parameters
+     *            the query parameters.
      */
     public void setParameters(SqlParameterCollection parameters) {
         this.parameters = parameters;

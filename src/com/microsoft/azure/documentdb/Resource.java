@@ -8,6 +8,8 @@ import java.util.Date;
 
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * Resource type.
  */
@@ -16,31 +18,31 @@ public class Resource extends JsonSerializable {
     /**
      * Constructor.
      */
-    Resource() {
+    protected Resource() {
         super();
     }
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the resource.
      */
-    Resource(String jsonString) {
+    protected Resource(String jsonString) {
         super(jsonString);
     }
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the resource.
      */
-    Resource(JSONObject jsonObject) {
+    protected Resource(JSONObject jsonObject) {
         super(jsonObject);
     }
 
     /**
      * Gets the name of the resource.
-     * 
+     *
      * @return the name of the resource.
      */
     public String getId() {
@@ -49,7 +51,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Sets the name of the resource.
-     * 
+     *
      * @param id the name of the resource.
      */
     public void setId(String id) {
@@ -58,7 +60,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Gets the ID associated with the resource.
-     * 
+     *
      * @return the ID associated with the resource.
      */
     public String getResourceId() {
@@ -67,7 +69,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Set the ID associated with the resource.
-     * 
+     *
      * @param resourceId the ID associated with the resource.
      */
     public void setResourceId(String resourceId) {
@@ -76,7 +78,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Get the self-link associated with the resource.
-     * 
+     *
      * @return the self link.
      */
     public String getSelfLink() {
@@ -85,7 +87,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Set the self-link associated with the resource.
-     * 
+     *
      * @param selfLink the self link.
      */
     void setSelfLink(String selfLink) {
@@ -94,7 +96,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Get the last modified timestamp associated with the resource.
-     * 
+     *
      * @return the timestamp.
      */
     public Date getTimestamp() {
@@ -105,7 +107,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Set the last modified timestamp associated with the resource.
-     * 
+     *
      * @param timestamp the timestamp.
      */
     void setTimestamp(Date timestamp) {
@@ -115,7 +117,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Get the entity tag associated with the resource.
-     * 
+     *
      * @return the e tag.
      */
     public String getETag() {
@@ -124,7 +126,7 @@ public class Resource extends JsonSerializable {
 
     /**
      * Set the self-link associated with the resource.
-     * 
+     *
      * @param eTag the e tag.
      */
     void setETag(String eTag) {

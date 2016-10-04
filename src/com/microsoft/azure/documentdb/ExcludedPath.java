@@ -2,6 +2,8 @@ package com.microsoft.azure.documentdb;
 
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 public class ExcludedPath extends JsonSerializable {
 
     /**
@@ -13,7 +15,7 @@ public class ExcludedPath extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the excluded path.
      */
     public ExcludedPath(String jsonString) {
@@ -22,7 +24,7 @@ public class ExcludedPath extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the excluded path.
      */
     public ExcludedPath(JSONObject jsonObject) {
@@ -31,7 +33,7 @@ public class ExcludedPath extends JsonSerializable {
 
     /**
      * Gets path.
-     * 
+     *
      * @return the path.
      */
     public String getPath() {
@@ -40,7 +42,7 @@ public class ExcludedPath extends JsonSerializable {
 
     /**
      * Sets path.
-     * 
+     *
      * @param path the path.
      */
     public void setPath(String path) {

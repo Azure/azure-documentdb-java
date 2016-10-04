@@ -6,19 +6,30 @@ package com.microsoft.azure.documentdb;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
+import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 import org.apache.commons.lang3.StringUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONObject;
+
+import com.microsoft.azure.documentdb.directconnectivity.*;
+import com.microsoft.azure.documentdb.internal.*;
+import com.microsoft.azure.documentdb.internal.routing.PartitionKeyRangeCache;
+import com.microsoft.azure.documentdb.internal.routing.RoutingMapProvider;
 
 /**
  * Provides a client-side logical representation of the Azure DocumentDB service. This client is used to configure and
@@ -28,6 +39,14 @@ import org.json.JSONObject;
  */
 public class DocumentClient {
 
+    @Deprecated
+    protected static final String PartitionResolverErrorMessage = "Couldn't find any partition resolvers for the database link provided. Ensure that the link you used when registering the partition resolvers matches the link provided or you need to register both types of database link(self link as well as ID based link).";
+    private static final int DEFAULT_REQUEST_SIZE = 4194304;
+    /**
+     * Compatibility mode:
+     * Allows to specify compatibility mode used by client when making query requests. Should be removed when
+     * application/sql is no longer supported.
+     */
     private URI serviceEndpoint;
     private String masterKey;
     private Map<String, String> resourceTokens;
@@ -36,59 +55,47 @@ public class DocumentClient {
     private SessionContainer sessionContainer;
     private ConsistencyLevel desiredConsistencyLevel;
     private PartitionKeyDefinitionMap partitionKeyDefinitionMap;
-    private GlobalEndpointManager globalEndpointManager;
+    private EndpointManager globalEndpointManager;
     private Logger logger;
     @SuppressWarnings("deprecation")
     private ConcurrentHashMap<String, PartitionResolver> partitionResolvers;
-
-    /**
-     * A client query compatibility mode when making query request. Can be used to force a specific query request
-     * format.
-     */
-    enum QueryCompatibilityMode {
-        Default,
-        Query,
-        SqlQuery
-    }
+    private StoreModel storeModel;
+    private AddressCache addressCache;
+    private TransportClient transportClient;
+    private AuthorizationTokenProvider authorizationTokenProvider;
+    private DatabaseAccountConfigurationProvider databaseAccountConfigurationProvider;
+    private boolean disableCheckForPartitionedCollection;
+    private PartitionKeyRangeCache partitionKeyRangeCache;
 
     /**
      * Compatibility mode:
      * Allows to specify compatibility mode used by client when making query requests. Should be removed when
      * application/sql is no longer supported.
      */
-    QueryCompatibilityMode queryCompatibilityMode = QueryCompatibilityMode.Default;
+    private QueryCompatibilityMode queryCompatibilityMode = QueryCompatibilityMode.Default;
 
     /**
      * Initializes a new instance of the DocumentClient class using the specified DocumentDB service endpoint and keys.
      * 
-     * @param serviceEndpoint the URI of the service end point.
-     * @param masterKey the master key.
-     * @param connectionPolicy the connection policy.
+     * @param serviceEndpoint         the URI of the service end point.
+     * @param masterKey               the master key.
+     * @param connectionPolicy        the connection policy.
      * @param desiredConsistencyLevel the desired consistency level.
      */
     public DocumentClient(String serviceEndpoint,
                           String masterKey,
                           ConnectionPolicy connectionPolicy,
                           ConsistencyLevel desiredConsistencyLevel) {
-        URI uri = null;
-        try {
-            uri = new URI(serviceEndpoint);
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Invalid serviceEndPoint.", e);
+        this(serviceEndpoint, masterKey, connectionPolicy, desiredConsistencyLevel, null, null);
         }
-
-        this.masterKey = masterKey;
-
-        this.initialize(uri, connectionPolicy, desiredConsistencyLevel);
-    }
 
     /**
      * Initializes a new instance of the Microsoft.Azure.Documents.Client.DocumentClient class using the specified
      * DocumentDB service endpoint and permissions.
      * 
-     * @param serviceEndpoint the URI of the service end point.
-     * @param permissionFeed the permission feed.
-     * @param connectionPolicy the connection policy.
+     * @param serviceEndpoint         the URI of the service end point.
+     * @param permissionFeed          the permission feed.
+     * @param connectionPolicy        the connection policy.
      * @param desiredConsistencyLevel the desired consistency level.
      */
     public DocumentClient(String serviceEndpoint,
@@ -118,6 +125,59 @@ public class DocumentClient {
         this.initialize(uri, connectionPolicy, desiredConsistencyLevel);
     }
 
+    DocumentClient(String serviceEndpoint, String masterKey, ConnectionPolicy connectionPolicy,
+            ConsistencyLevel desiredConsistencyLevel, AddressCache addressCache, TransportClient transportClient) {
+        URI uri = null;
+        try {
+            uri = new URI(serviceEndpoint);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Invalid serviceEndPoint.", e);
+        }
+
+        this.masterKey = masterKey;
+        this.addressCache = addressCache;
+        this.transportClient = transportClient;
+        this.initialize(uri, connectionPolicy, desiredConsistencyLevel);
+    }
+    
+    private static String serializeProcedureParams(Object[] objectArray) {
+        ObjectMapper mapper = null;
+        String[] stringArray = new String[objectArray.length];
+
+        for (int i = 0; i < objectArray.length; ++i) {
+            Object object = objectArray[i];
+            if (object instanceof JsonSerializable || object instanceof JSONObject) {
+                stringArray[i] = object.toString();
+            } else {
+                if (mapper == null) {
+                    mapper = new ObjectMapper();
+                }
+
+                // POJO, number, String or Boolean
+                try {
+                    stringArray[i] = mapper.writeValueAsString(object);
+                } catch (IOException e) {
+                    throw new IllegalArgumentException("Can't serialize the object into the json string", e);
+                }
+            }
+        }
+
+        return String.format("[%s]", StringUtils.join(stringArray, ","));
+    }
+
+    private static void validateResource(Resource resource) {
+        if (!StringUtils.isEmpty(resource.getId())) {
+            if (resource.getId().indexOf('/') != -1 || resource.getId().indexOf('\\') != -1 ||
+                    resource.getId().indexOf('?') != -1 || resource.getId().indexOf('#') != -1) {
+                throw new IllegalArgumentException("Id contains illegal chars.");
+            }
+
+            if (resource.getId().endsWith(" ")) {
+                throw new IllegalArgumentException("Id ends with a space.");
+            }
+        }
+    }
+
     @SuppressWarnings("deprecation") // use of PartitionResolver is deprecated.
     private void initialize(URI serviceEndpoint,
                             ConnectionPolicy connectionPolicy,
@@ -137,7 +197,7 @@ public class DocumentClient {
 
         UserAgentContainer userAgentContainer = new UserAgentContainer();
         String userAgentSuffix = this.connectionPolicy.getUserAgentSuffix();
-        if(userAgentSuffix != null && userAgentSuffix.length() > 0) {
+        if (userAgentSuffix != null && userAgentSuffix.length() > 0) {
             userAgentContainer.setSuffix(userAgentSuffix);
         }
         
@@ -153,46 +213,55 @@ public class DocumentClient {
         
         // use of PartitionResolver is deprecated.
         this.partitionResolvers = new ConcurrentHashMap<String, PartitionResolver>();
+        this.authorizationTokenProvider = new BaseAuthorizationTokenProvider(this.masterKey);
+
+        if (this.connectionPolicy.getConnectionMode() == ConnectionMode.DirectHttps) {
+            if (this.addressCache == null) {
+                this.addressCache = new GatewayAddressCache(this.serviceEndpoint.toString(), this.connectionPolicy, userAgentContainer, this.authorizationTokenProvider);
+            }
+
+            if (this.transportClient == null) {
+                this.transportClient = new HttpTransportClient(this.connectionPolicy, userAgentContainer);
+            }
+            
+            this.databaseAccountConfigurationProvider = new BaseDatabaseAccountConfigurationProvider(this.globalEndpointManager.getDatabaseAccountFromAnyEndpoint(), this.desiredConsistencyLevel);
+            this.storeModel = new ServerStoreModel(this.transportClient, this.addressCache, this.sessionContainer, DEFAULT_REQUEST_SIZE, this.databaseAccountConfigurationProvider, this.authorizationTokenProvider);
+        } else {
+            this.storeModel = this.gatewayProxy;
+        }
+
+        this.partitionKeyRangeCache = new PartitionKeyRangeCache(new DocumentQueryClient(this));
     }
 
-    /**
-     * Registers the partition resolver associated with the database link.
-     *
-     * @param databaseLink the database link
-     * @param partitionResolver the partition resolver
-     * @throws DocumentClientException the DocumentClientException
-     */
     @Deprecated
     public void registerPartitionResolver(String databaseLink, PartitionResolver partitionResolver) 
             throws DocumentClientException {
-        if(StringUtils.isEmpty(databaseLink)) {
+        if (StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
         }
-        if(partitionResolver == null) {
+        if (partitionResolver == null) {
             throw new IllegalArgumentException("partitionResolver");
         }
         
         this.partitionResolvers.put(Utils.trimBeginingAndEndingSlashes(databaseLink), partitionResolver);
     }
     
-    /**
-     * Gets the partition resolver associated with the database link on the client.
-     *
-     * @param databaseLink the database link
-     * @return the partition resolver
-     */
     @Deprecated
     protected PartitionResolver getPartitionResolver(String databaseLink) {
-        if(StringUtils.isEmpty(databaseLink)) {
+        if (StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
         }
         return this.partitionResolvers.get(Utils.trimBeginingAndEndingSlashes(databaseLink));
     }
     
+    QueryCompatibilityMode getQueryCompatiblityMode() {
+        return this.queryCompatibilityMode;
+    }
+
     /**
      * Gets the default service endpoint as passed in by the user during construction.
      *
-     * @return the default service endpoint
+     * @return the service endpoint URI
      */
     public URI getServiceEndpoint() {
         return this.serviceEndpoint;
@@ -201,7 +270,7 @@ public class DocumentClient {
     /**
      * Gets the current write endpoint chosen based on availability and preference.
      *
-     * @return the  current write endpoint
+     * @return the write endpoint URI
      */
     public URI getWriteEndpoint() {
         return this.globalEndpointManager.getWriteEndpoint();
@@ -210,42 +279,54 @@ public class DocumentClient {
     /**
      * Gets the current read endpoint chosen based on availability and preference.
      *
-     * @return the current read endpoint
+     * @return the read endpoint URI
      */
     public URI getReadEndpoint() {
         return this.globalEndpointManager.getReadEndpoint();
     }
 
-    // used by unit test to mock gateway proxy.
-    void setGatewayProxyOverride(GatewayProxy proxyOverride) {
-        this.gatewayProxy = proxyOverride;
-    }
-    
-    ConnectionPolicy getConnectionPolicy() {
+    public ConnectionPolicy getConnectionPolicy() {
         return this.connectionPolicy;
     }
     
-    GlobalEndpointManager getGlobalEndpointManager() {
+    EndpointManager getEndpointManager() {
         return this.globalEndpointManager;
     }
     
-    void setGlobalEndpointManager(GlobalEndpointManager endpointManager) {
+    void setEndpointManager(EndpointManager endpointManager) {
         this.globalEndpointManager = endpointManager;
-    }
-    
-    void setPartitionKeyDefinitionMap(PartitionKeyDefinitionMap partitionKeyDefinitionMap) {
-        this.partitionKeyDefinitionMap = partitionKeyDefinitionMap;
     }
     
     PartitionKeyDefinitionMap getPartitionKeyDefinitionMap() {
         return this.partitionKeyDefinitionMap;
     }
     
+    void setPartitionKeyDefinitionMap(PartitionKeyDefinitionMap partitionKeyDefinitionMap) {
+        this.partitionKeyDefinitionMap = partitionKeyDefinitionMap;
+    }
+    
+    RoutingMapProvider getPartitionKeyRangeCache() {
+        return this.partitionKeyRangeCache;
+    }
+
+    // used by unit test to mock gateway proxy.
+    void setGatewayProxyOverride(GatewayProxy proxyOverride) {
+        this.gatewayProxy = proxyOverride;
+        if (this.connectionPolicy.getConnectionMode() != ConnectionMode.DirectHttps) {
+            this.storeModel = proxyOverride;
+    }
+    }
+    
+    // used by unit test
+    void disableCheckForPartitionedCollection(boolean disableCheckForPartitionedCollection) {
+        this.disableCheckForPartitionedCollection = disableCheckForPartitionedCollection;
+    }
+
     /**
      * Creates a database.
      * 
      * @param database the database.
-     * @param options the request options.
+     * @param options  the request options.
      * @return the resource response with the created database.
      * @throws DocumentClientException the document client exception.
      */
@@ -258,7 +339,8 @@ public class DocumentClient {
         DocumentClient.validateResource(database);
 
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Create,
+                                                                       ResourceType.Database,
                                                                        Paths.DATABASES_ROOT,
                                                                        database,
                                                                        requestHeaders);
@@ -269,7 +351,7 @@ public class DocumentClient {
      * Deletes a database.
      * 
      * @param databaseLink the database link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -281,7 +363,8 @@ public class DocumentClient {
         
         String path = Utils.joinPath(databaseLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete,
+                                                                       ResourceType.Database,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<Database>(this.doDelete(request), Database.class);
@@ -291,7 +374,7 @@ public class DocumentClient {
      * Reads a database.
      * 
      * @param databaseLink the database link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response with the read database.
      * @throws DocumentClientException the document client exception.
      */
@@ -303,7 +386,8 @@ public class DocumentClient {
         
         String path = Utils.joinPath(databaseLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read,
+                                                                       ResourceType.Database,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<Database>(this.doRead(request), Database.class);
@@ -316,17 +400,17 @@ public class DocumentClient {
      * @return the feed response with the read databases.
      */
     public FeedResponse<Database> readDatabases(FeedOptions options) {
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
+        return new FeedResponse<Database>(new QueryIterable<Database>(this, 
+                                                                       ResourceType.Database,
+                                                                      Database.class, 
                                                                        Paths.DATABASES_ROOT,
-                                                                       requestHeaders);
-        return new FeedResponse<Database>(new QueryIterable<Database>(this, request, ReadType.Feed, Database.class));
+                                                                      options));
     }
 
     /**
      * Query for databases.
      * 
-     * @param query the query.
+     * @param query   the query.
      * @param options the feed options.
      * @return the feed response with the obtained databases.
      */
@@ -342,7 +426,7 @@ public class DocumentClient {
      * Query for databases.
      * 
      * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param options   the feed options.
      * @return the feed response with the obtained databases.
      */
     public FeedResponse<Database> queryDatabases(SqlQuerySpec querySpec, FeedOptions options) {
@@ -350,21 +434,19 @@ public class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }
 
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Database,
+        return new FeedResponse<Database>(new QueryIterable<Database>(this, 
+                                                                       ResourceType.Database,
+                                                                      Database.class, 
                                                                        Paths.DATABASES_ROOT,
-                                                                       querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Database>(new QueryIterable<Database>(this, request, ReadType.Query, Database.class));
+                                                                      options));
     }
 
     /**
      * Creates a document collection.
      * 
      * @param databaseLink the database link.
-     * @param collection the collection.
-     * @param options the request options.
+     * @param collection   the collection.
+     * @param options      the request options.
      * @return the resource response with the created collection.
      * @throws DocumentClientException the document client exception.
      */
@@ -384,7 +466,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Create,
+                                                                       ResourceType.DocumentCollection,
                                                                        path,
                                                                        collection,
                                                                        requestHeaders);
@@ -396,7 +479,7 @@ public class DocumentClient {
      * Replaces a document collection.
      * 
      * @param collection the document collection to use.
-     * @param options the request options.
+     * @param options    the request options.
      * @return the resource response with the replaced document collection.
      * @throws DocumentClientException the document client exception.
      */
@@ -413,7 +496,8 @@ public class DocumentClient {
         String path = Utils.joinPath(collection.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
 
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, 
+                                                                       ResourceType.DocumentCollection,
                                                                        path,
                                                                        collection,
                                                                        requestHeaders);
@@ -424,7 +508,7 @@ public class DocumentClient {
      * Deletes a document collection by the collection link.
      * 
      * @param collectionLink the collection link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -437,7 +521,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(collectionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, 
+                                                                       ResourceType.DocumentCollection,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<DocumentCollection>(this.doDelete(request), DocumentCollection.class);
@@ -447,7 +532,7 @@ public class DocumentClient {
      * Reads a document collection by the collection link.
      * 
      * @param collectionLink the collection link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response with the read collection.
      * @throws DocumentClientException the document client exception.
      */
@@ -466,11 +551,12 @@ public class DocumentClient {
         
         String path = Utils.joinPath(collectionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, 
+                                                                       ResourceType.DocumentCollection,
                                                                        path,
                                                                        requestHeaders);
         if (useWriteEndpoint) {
-            request.setEndpointOverride(this.getGlobalEndpointManager().getWriteEndpoint());
+            request.setEndpointOverride(this.globalEndpointManager.getWriteEndpoint());
         }
         
         return new ResourceResponse<DocumentCollection>(this.doRead(request), DocumentCollection.class);
@@ -480,7 +566,7 @@ public class DocumentClient {
      * Reads all document collections in a database.
      * 
      * @param databaseLink the database link.
-     * @param options the fee options.
+     * @param options      the fee options.
      * @return the feed response with the read collections.
      */
     public FeedResponse<DocumentCollection> readCollections(String databaseLink, FeedOptions options) {
@@ -489,24 +575,20 @@ public class DocumentClient {
             throw new IllegalArgumentException("databaseLink");
         }
 
-        String path = Utils.joinPath(databaseLink,
-                                              Paths.COLLECTIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        String path = Utils.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
+        return new FeedResponse<DocumentCollection>(new QueryIterable<DocumentCollection>(this, 
+                                                                       ResourceType.DocumentCollection,
+                                                                                          DocumentCollection.class, 
                                                                        path,
-                                                                       requestHeaders);
-        return new FeedResponse<DocumentCollection>(new QueryIterable<DocumentCollection>(this,
-                                                                                          request,
-                                                                                          ReadType.Feed,
-                                                                                          DocumentCollection.class));
+                                                                                          options));
     }
 
     /**
      * Query for document collections in a database.
      * 
      * @param databaseLink the database link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query        the query.
+     * @param options      the feed options.
      * @return the feed response with the obtained collections.
      */
     public FeedResponse<DocumentCollection> queryCollections(String databaseLink, String query, FeedOptions options) {
@@ -526,12 +608,11 @@ public class DocumentClient {
      * Query for document collections in a database.
      * 
      * @param databaseLink the database link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec    the SQL query specification.
+     * @param options      the feed options.
      * @return the feed response with the obtained collections.
      */
-    public FeedResponse<DocumentCollection> queryCollections(String databaseLink,
-                                                             SqlQuerySpec querySpec,
+    public FeedResponse<DocumentCollection> queryCollections(String databaseLink, SqlQuerySpec querySpec,
                                                              FeedOptions options) {
 
         if (StringUtils.isEmpty(databaseLink)) {
@@ -543,24 +624,20 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(databaseLink, Paths.COLLECTIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DocumentCollection,
+        return new FeedResponse<DocumentCollection>(new QueryIterable<DocumentCollection>(this, 
+                                                                       ResourceType.DocumentCollection,
+                                                                                          DocumentCollection.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<DocumentCollection>(new QueryIterable<DocumentCollection>(this,
-                                                                                          request,
-                                                                                          ReadType.Query,
-                                                                                          DocumentCollection.class));
+                                                                                          options));
     }
 
     /**
      * Creates a document.
      * 
-     * @param collectionLink the link to the parent document collection.
-     * @param document the document represented as a POJO or Document object.
-     * @param options the request options.
+     * @param collectionLink               the link to the parent document collection.
+     * @param document                     the document represented as a POJO or Document object.
+     * @param options                      the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the created document.
      * @throws DocumentClientException the document client exception.
@@ -582,22 +659,22 @@ public class DocumentClient {
             @Override
             public ResourceResponse<Document> apply() throws DocumentClientException {
                 DocumentServiceRequest request = getCreateDocumentRequest(documentCollectionLink, documentLocal, optionsLocal,
-                        disableAutomaticIdGenerationLocal);
+                        disableAutomaticIdGenerationLocal, OperationType.Create);
                 return new ResourceResponse<Document>(doCreate(request), Document.class);   
-            }
+    }
         };
-        
+
         return shouldRetry 
-            ? RetryUtility.execute(createDelegate, this, documentCollectionLink)
-            : createDelegate.apply();
+			? RetryUtility.executeCreateDocument(createDelegate, this.getPartitionKeyDefinitionMap(), documentCollectionLink)
+			: createDelegate.apply();
     }
 
      /**
      * Upserts a document.
      * 
-     * @param collectionLink the link to the parent document collection.
-     * @param document the document represented as a POJO or Document object to upsert.
-     * @param options the request options.
+     * @param collectionLink               the link to the parent document collection.
+     * @param document                     the document represented as a POJO or Document object to upsert.
+     * @param options                      the request options.
      * @param disableAutomaticIdGeneration the flag for disabling automatic id generation.
      * @return the resource response with the upserted document.
      * @throws DocumentClientException the document client exception.
@@ -618,18 +695,15 @@ public class DocumentClient {
             @Override
             public ResourceResponse<Document> apply() throws DocumentClientException {
                 DocumentServiceRequest request = getCreateDocumentRequest(documentCollectionLink, documentLocal, optionsLocal,
-                        disableAutomaticIdGenerationLocal);
+                        disableAutomaticIdGenerationLocal, OperationType.Upsert);
                 return new ResourceResponse<Document>(doUpsert(request), Document.class);
-            }
-        };
-        
-        return shouldRetry
-            ? RetryUtility.execute(upsertDelegate, this, documentCollectionLink)
-            : upsertDelegate.apply();
     }
+        };
     
-    @Deprecated
-    protected static final String PartitionResolverErrorMessage = "Couldn't find any partition resolvers for the database link provided. Ensure that the link you used when registering the partition resolvers matches the link provided or you need to register both types of database link(self link as well as ID based link)."; 
+        return shouldRetry
+			? RetryUtility.executeCreateDocument(upsertDelegate, this.getPartitionKeyDefinitionMap(), documentCollectionLink)
+			: upsertDelegate.apply();
+    }
     
     @SuppressWarnings("deprecation")
     private String getTargetDocumentCollectionLink(String collectionLink, Object document) {
@@ -641,15 +715,14 @@ public class DocumentClient {
         }
         
         String documentCollectionLink = collectionLink;
-        if(Utils.isDatabaseLink(collectionLink)) {
+        if (Utils.isDatabaseLink(collectionLink)) {
             // Gets the partition resolver(if it exists) for the specified database link
             PartitionResolver partitionResolver = this.getPartitionResolver(collectionLink);
             
             // If the partition resolver exists, get the collection to which the Create/Upsert should be directed using the partition key
-            if(partitionResolver != null) {
+            if (partitionResolver != null) {
                 documentCollectionLink = partitionResolver.resolveForCreate(document);
-            }
-            else {
+            } else {
                 throw new IllegalArgumentException(PartitionResolverErrorMessage);
             }
         }
@@ -658,7 +731,7 @@ public class DocumentClient {
     }
     
     private DocumentServiceRequest getCreateDocumentRequest(String documentCollectionLink, Object document, RequestOptions options,
-            boolean disableAutomaticIdGeneration) {
+            boolean disableAutomaticIdGeneration, OperationType operationType) {
         if (StringUtils.isEmpty(documentCollectionLink)) {
             throw new IllegalArgumentException("documentCollectionLink");
         }
@@ -675,12 +748,12 @@ public class DocumentClient {
             // when represented as a string.
             typedDocument.setId(UUID.randomUUID().toString());
         }
-
         options = this.insertPartitionKeyIfNeeded(documentCollectionLink, typedDocument, options);
-        
         String path = Utils.joinPath(documentCollectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
+        
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, 
+                                                                       ResourceType.Document,
                                                                        path,
                                                                        typedDocument,
                                                                        requestHeaders);
@@ -691,8 +764,8 @@ public class DocumentClient {
      * Replaces a document using a POJO object.
      * 
      * @param documentLink the document link.
-     * @param document the document represented as a POJO or Document object.
-     * @param options the request options.
+     * @param document     the document represented as a POJO or Document object.
+     * @param options      the request options.
      * @return the resource response with the replaced document.
      * @throws DocumentClientException the document client exception.
      */
@@ -715,7 +788,7 @@ public class DocumentClient {
      * Replaces a document with the passed in document.
      * 
      * @param document the document to replace (containing the document id).
-     * @param options the request options.
+     * @param options  the request options.
      * @return the resource response with the replaced document.
      * @throws DocumentClientException the document client exception.
      */
@@ -736,16 +809,18 @@ public class DocumentClient {
             throw new IllegalArgumentException("document");          
         }
 
-        final String documentCollectionLink = this.getTargetDocumentCollectionLink(Utils.getCollectionName(documentLink), document);
-        options = insertPartitionKeyIfNeeded(Utils.getCollectionName(documentLink), document, options);;
+        final String documentCollectionName = Utils.getCollectionName(documentLink);
+        final String documentCollectionLink = this.getTargetDocumentCollectionLink(documentCollectionName, document);
+        options = insertPartitionKeyIfNeeded(documentCollectionName, document, options);
         final String path = Utils.joinPath(documentLink, null);
         final Map<String, String> requestHeaders = getRequestHeaders(options);
-        final DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
-                path,
-                document,
-                requestHeaders);
+        final DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace,
+                                                                       ResourceType.Document,
+                                                                       path,
+                                                                       document,
+                                                                       requestHeaders);
         final boolean shouldRetry = options == null || options.getPartitionKey() == null;
-
+        
         DocumentClient.validateResource(document);
 
       	RetryCreateDocumentDelegate replaceDelegate = new RetryCreateDocumentDelegate() {
@@ -756,16 +831,16 @@ public class DocumentClient {
             }
         };
         
-        return shouldRetry
-            ? RetryUtility.execute(replaceDelegate, this, documentCollectionLink)
-            : replaceDelegate.apply();
+        return shouldRetry 
+			? RetryUtility.executeCreateDocument(replaceDelegate, this.getPartitionKeyDefinitionMap(), documentCollectionLink)
+			: replaceDelegate.apply();
     }
 
     /**
      * Deletes a document by the document link. 
      * 
      * @param documentLink the document link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -778,7 +853,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.Document, path, requestHeaders);
         return new ResourceResponse<Document>(this.doDelete(request), Document.class);
     }
 
@@ -786,7 +861,7 @@ public class DocumentClient {
      * Reads a document by the document link.
      * 
      * @param documentLink the document link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response with the read document.
      * @throws DocumentClientException the document client exception.
      */
@@ -799,7 +874,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(documentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Document, path, requestHeaders);
         return new ResourceResponse<Document>(this.doRead(request), Document.class);
     }
 
@@ -807,7 +882,7 @@ public class DocumentClient {
      * Reads all documents in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with read documents.
      */
     public FeedResponse<Document> readDocuments(String collectionLink, FeedOptions options) {
@@ -817,17 +892,19 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document, path, requestHeaders);
-        return new FeedResponse<Document>(new QueryIterable<Document>(this, request, ReadType.Feed, Document.class));
+        return new FeedResponse<Document>(new QueryIterable<Document>(this, 
+                                                                      ResourceType.Document, 
+                                                                      Document.class, 
+                                                                      path, 
+                                                                      options));
     }
 
     /**
      * Query for documents in a document collection.
      * 
      * @param collectionLink the link to the parent document collection.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response with the obtained documents.
      */
     public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options) {
@@ -838,12 +915,13 @@ public class DocumentClient {
      * Query for documents in a document collection with a partitionKey
      * 
      * @param collectionLink the link to the parent document collection.
-     * @param query the query.
-     * @param options the feed options.
-     * @param partitionKey the partitionKey. 
+     * @param query          the query.
+     * @param options        the feed options.
+     * @param partitionKey   the partitionKey.
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options, Object partitionKey) {
+    public FeedResponse<Document> queryDocuments(String collectionLink, String query, FeedOptions options,
+            Object partitionKey) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -858,8 +936,8 @@ public class DocumentClient {
      * Query for documents in a document collection.
      * 
      * @param collectionLink the link to the parent document collection.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response with the obtained documents.
      */
     public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
@@ -870,12 +948,13 @@ public class DocumentClient {
      * Query for documents in a document collection.
      * 
      * @param collectionLink the link to the parent document collection.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
-     * @param partitionKey the partitionKey. 
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
+     * @param partitionKey   the partitionKey.
      * @return the feed response with the obtained documents.
      */
-    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options, Object partitionKey) {
+    public FeedResponse<Document> queryDocuments(String collectionLink, SqlQuerySpec querySpec, FeedOptions options,
+            Object partitionKey) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -883,37 +962,28 @@ public class DocumentClient {
             throw new IllegalArgumentException("querySpec");
         }  
         
-        if(Utils.isDatabaseLink(collectionLink)) {
-                return new FeedResponse<Document>(new QueryIterable<Document>(this,
-                        collectionLink,
-                        querySpec,
-                        options,
-                        partitionKey,
-                        ReadType.Query,
-                        Document.class));
+        String path;
+        if (Utils.isDatabaseLink(collectionLink)) {
+            path = collectionLink;
+        } else {
+            path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
         }
-        else {
-            String path = Utils.joinPath(collectionLink, Paths.DOCUMENTS_PATH_SEGMENT);
-            Map<String, String> requestHeaders = this.getFeedHeaders(options);
-            DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Document,
+
+        return new FeedResponse<Document>(new QueryIterable<Document>(this, 
+                                                                           ResourceType.Document,
+                                                                      Document.class, 
                                                                            path,
                                                                            querySpec,
-                                                                           this.queryCompatibilityMode,
-                                                                           requestHeaders);
-            
-            return new FeedResponse<Document>(new QueryIterable<Document>(this,
-                    request,
-                    ReadType.Query,
-                    Document.class));
+                                                                      options, 
+                                                                      partitionKey));
         }
-    }
 
     /**
      * Creates a stored procedure.
      * 
-     * @param collectionLink the collection link.
+     * @param collectionLink  the collection link.
      * @param storedProcedure the stored procedure to create.
-     * @param options the request options.
+     * @param options         the request options.
      * @return the resource response with the created stored procedure.
      * @throws DocumentClientException the document client exception.
      */
@@ -922,16 +992,16 @@ public class DocumentClient {
                                                                    RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options);
+        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options, OperationType.Create);
         return new ResourceResponse<StoredProcedure>(this.doCreate(request), StoredProcedure.class);
     }    
     
     /**
      * Upserts a stored procedure.
      * 
-     * @param collectionLink the collection link.
+     * @param collectionLink  the collection link.
      * @param storedProcedure the stored procedure to upsert.
-     * @param options the request options.
+     * @param options         the request options.
      * @return the resource response with the upserted stored procedure.
      * @throws DocumentClientException the document client exception.
      */
@@ -940,12 +1010,12 @@ public class DocumentClient {
                                                                    RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options);
+        DocumentServiceRequest request = getStoredProcedureRequest(collectionLink, storedProcedure, options, OperationType.Upsert);
         return new ResourceResponse<StoredProcedure>(this.doUpsert(request), StoredProcedure.class);
     }
     
     private DocumentServiceRequest getStoredProcedureRequest(String collectionLink, StoredProcedure storedProcedure,
-            RequestOptions options) {
+            RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -957,7 +1027,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, 
+                                                                       ResourceType.StoredProcedure,
                                                                        path,
                                                                        storedProcedure,
                                                                        requestHeaders);
@@ -968,7 +1039,7 @@ public class DocumentClient {
      * Replaces a stored procedure.
      * 
      * @param storedProcedure the stored procedure to use.
-     * @param options the request options.
+     * @param options         the request options.
      * @return the resource response with the replaced stored procedure.
      * @throws DocumentClientException the document client exception.
      */
@@ -984,7 +1055,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(storedProcedure.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, 
+                                                                       ResourceType.StoredProcedure,
                                                                        path,
                                                                        storedProcedure,
                                                                        requestHeaders);
@@ -995,7 +1067,7 @@ public class DocumentClient {
      * Deletes a stored procedure by the stored procedure link.
      * 
      * @param storedProcedureLink the stored procedure link.
-     * @param options the request options.
+     * @param options             the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1008,7 +1080,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(storedProcedureLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, 
+                                                                       ResourceType.StoredProcedure,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<StoredProcedure>(this.doDelete(request), StoredProcedure.class);
@@ -1018,7 +1091,7 @@ public class DocumentClient {
      * Read a stored procedure by the stored procedure link.
      * 
      * @param storedProcedureLink the stored procedure link.
-     * @param options the request options.
+     * @param options             the request options.
      * @return the resource response with the read stored procedure.
      * @throws DocumentClientException the document client exception.
      */
@@ -1031,7 +1104,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(storedProcedureLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, 
+                                                                       ResourceType.StoredProcedure,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<StoredProcedure>(this.doRead(request), StoredProcedure.class);
@@ -1041,7 +1115,7 @@ public class DocumentClient {
      * Reads all stored procedures in a document collection link.
      * 
      * @param collectionLink the collection link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with the read stored procedure.
      */
     public FeedResponse<StoredProcedure> readStoredProcedures(String collectionLink, FeedOptions options) {
@@ -1051,26 +1125,22 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        return new FeedResponse<StoredProcedure>(new QueryIterable<StoredProcedure>(this, 
+                                                                       ResourceType.StoredProcedure,
+                                                                                    StoredProcedure.class, 
                                                                        path,
-                                                                       requestHeaders);
-        return new FeedResponse<StoredProcedure>(new QueryIterable<StoredProcedure>(this,
-                                                                                    request,
-                                                                                    ReadType.Feed,
-                                                                                    StoredProcedure.class));
+                                                                                    options));
     }
 
     /**
      * Query for stored procedures in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response with the obtained stored procedures.
      */
-    public FeedResponse<StoredProcedure> queryStoredProcedures(String collectionLink,
-                                                               String query,
+    public FeedResponse<StoredProcedure> queryStoredProcedures(String collectionLink, String query,
                                                                FeedOptions options) {
 
         if (StringUtils.isEmpty(collectionLink)) {
@@ -1087,12 +1157,11 @@ public class DocumentClient {
      * Query for stored procedures in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response with the obtained stored procedures.
      */
-    public FeedResponse<StoredProcedure> queryStoredProcedures(String collectionLink,
-                                                               SqlQuerySpec querySpec,
+    public FeedResponse<StoredProcedure> queryStoredProcedures(String collectionLink, SqlQuerySpec querySpec,
                                                                FeedOptions options) {
 
         if (StringUtils.isEmpty(collectionLink)) {
@@ -1103,23 +1172,19 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.StoredProcedure,
+        return new FeedResponse<StoredProcedure>(new QueryIterable<StoredProcedure>(this, 
+                                                                       ResourceType.StoredProcedure,
+                                                                                    StoredProcedure.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<StoredProcedure>(new QueryIterable<StoredProcedure>(this,
-                                                                                    request,
-                                                                                    ReadType.Query,
-                                                                                    StoredProcedure.class));
+                                                                                    options));
     }
 
     /**
      * Executes a stored procedure by the stored procedure link.
      * 
      * @param storedProcedureLink the stored procedure link.
-     * @param procedureParams the array of procedure parameter values.
+     * @param procedureParams     the array of procedure parameter values.
      * @return the stored procedure response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1132,8 +1197,8 @@ public class DocumentClient {
      * Executes a stored procedure by the stored procedure link.
      * 
      * @param storedProcedureLink the stored procedure link.
-     * @param options the request options.
-     * @param procedureParams the array of procedure parameter values.
+     * @param options             the request options.
+     * @param procedureParams     the array of procedure parameter values.
      * @return the stored procedure response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1149,7 +1214,7 @@ public class DocumentClient {
             }
         }
         
-        DocumentServiceRequest request = DocumentServiceRequest.create(
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.ExecuteJavaScript,
                 ResourceType.StoredProcedure,
                 path,
                 procedureParams != null ? DocumentClient.serializeProcedureParams(procedureParams) : "",
@@ -1162,15 +1227,15 @@ public class DocumentClient {
      * Creates a trigger.
      * 
      * @param collectionLink the collection link.
-     * @param trigger the trigger.
-     * @param options the request options.
+     * @param trigger        the trigger.
+     * @param options        the request options.
      * @return the resource response with the created trigger.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<Trigger> createTrigger(String collectionLink, Trigger trigger, RequestOptions options)
              throws DocumentClientException {
 
-        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options);
+        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options, OperationType.Create);
         return new ResourceResponse<Trigger>(this.doCreate(request), Trigger.class);
     }    
     
@@ -1178,19 +1243,19 @@ public class DocumentClient {
      * Upserts a trigger.
      * 
      * @param collectionLink the collection link.
-     * @param trigger the trigger to upsert.
-     * @param options the request options.
+     * @param trigger        the trigger to upsert.
+     * @param options        the request options.
      * @return the resource response with the upserted trigger.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<Trigger> upsertTrigger(String collectionLink, Trigger trigger, RequestOptions options)
              throws DocumentClientException {
 
-        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options);
+        DocumentServiceRequest request = getTriggerRequest(collectionLink, trigger, options, OperationType.Upsert);
         return new ResourceResponse<Trigger>(this.doUpsert(request), Trigger.class);
     }
     
-    private DocumentServiceRequest getTriggerRequest(String collectionLink, Trigger trigger, RequestOptions options) {
+    private DocumentServiceRequest getTriggerRequest(String collectionLink, Trigger trigger, RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -1202,7 +1267,8 @@ public class DocumentClient {
 
         String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, 
+                                                                       ResourceType.Trigger,
                                                                        path,
                                                                        trigger,
                                                                        requestHeaders);
@@ -1228,7 +1294,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(trigger.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.Trigger,
                                                                        path,
                                                                        trigger,
                                                                        requestHeaders);
@@ -1239,7 +1305,7 @@ public class DocumentClient {
      * Deletes a trigger.
      * 
      * @param triggerLink the trigger link.
-     * @param options the request options.
+     * @param options     the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1252,7 +1318,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(triggerLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.Trigger, path, requestHeaders);
         return new ResourceResponse<Trigger>(this.doDelete(request), Trigger.class);
     }
 
@@ -1260,7 +1326,7 @@ public class DocumentClient {
      * Reads a trigger by the trigger link.
      * 
      * @param triggerLink the trigger link.
-     * @param options the request options.
+     * @param options     the request options.
      * @return the resource response with the read trigger.
      * @throws DocumentClientException the document client exception.
      */
@@ -1273,7 +1339,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(triggerLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Trigger, path, requestHeaders);
         return new ResourceResponse<Trigger>(this.doRead(request), Trigger.class);
     }
 
@@ -1281,7 +1347,7 @@ public class DocumentClient {
      * Reads all triggers in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with the read triggers.
      */
     public FeedResponse<Trigger> readTriggers(String collectionLink, FeedOptions options) {
@@ -1291,17 +1357,20 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger, path, requestHeaders);
-        return new FeedResponse<Trigger>(new QueryIterable<Trigger>(this, request, ReadType.Feed, Trigger.class));
+        return new FeedResponse<Trigger>(
+                new QueryIterable<Trigger>(this, 
+                                           ResourceType.Trigger, 
+                                           Trigger.class, 
+                                           path, 
+                                           options));
     }
 
     /**
      * Query for triggers.
      * 
      * @param collectionLink the collection link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response with the obtained triggers.
      */
     public FeedResponse<Trigger> queryTriggers(String collectionLink,
@@ -1323,8 +1392,8 @@ public class DocumentClient {
      * Query for triggers.
      * 
      * @param collectionLink the collection link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response with the obtained triggers.
      */
     public FeedResponse<Trigger> queryTriggers(String collectionLink,
@@ -1340,21 +1409,40 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.TRIGGERS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Trigger,
+        return new FeedResponse<Trigger>(new QueryIterable<Trigger>(this, 
+                                                                    ResourceType.Trigger, 
+                                                                    Trigger.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Trigger>(new QueryIterable<Trigger>(this, request, ReadType.Query, Trigger.class));
+                                                                    options));
+    }
+
+    /**
+     * Reads all partition key ranges in a document collection.
+     * 
+     * @param collectionLink the collection link.
+     * @param options the feed options.
+     * @return the feed response with the read partition key ranges.
+     */
+    FeedResponse<PartitionKeyRange> readPartitionKeyRanges(String collectionLink, FeedOptions options) {
+        if (StringUtils.isEmpty(collectionLink)) {
+            throw new IllegalArgumentException("collectionLink");
+        }
+
+        String path = Utils.joinPath(collectionLink, Paths.PARTITION_KEY_RANGE_PATH_SEGMENT);
+        return new FeedResponse<PartitionKeyRange>(new QueryIterable<PartitionKeyRange>(this,
+                                                                                        ResourceType.PartitionKeyRange, 
+                                                                                        PartitionKeyRange.class, 
+                                                                                        path, 
+                                                                                        options));
     }
 
     /**
      * Creates a user defined function.
      * 
      * @param collectionLink the collection link.
-     * @param udf the user defined function.
-     * @param options the request options.
+     * @param udf            the user defined function.
+     * @param options        the request options.
      * @return the resource response with the created user defined function.
      * @throws DocumentClientException the document client exception.
      */
@@ -1364,7 +1452,7 @@ public class DocumentClient {
              RequestOptions options)
              throws DocumentClientException {
         
-        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options);
+        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options, OperationType.Create);
         return new ResourceResponse<UserDefinedFunction>(this.doCreate(request), UserDefinedFunction.class);
     }    
     
@@ -1372,8 +1460,8 @@ public class DocumentClient {
      * Upserts a user defined function.
      * 
      * @param collectionLink the collection link.
-     * @param udf the user defined function to upsert.
-     * @param options the request options.
+     * @param udf            the user defined function to upsert.
+     * @param options        the request options.
      * @return the resource response with the upserted user defined function.
      * @throws DocumentClientException the document client exception.
      */
@@ -1383,12 +1471,12 @@ public class DocumentClient {
              RequestOptions options)
              throws DocumentClientException {
         
-        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options);
+        DocumentServiceRequest request = getUserDefinedFunctionRequest(collectionLink, udf, options, OperationType.Upsert);
         return new ResourceResponse<UserDefinedFunction>(this.doUpsert(request), UserDefinedFunction.class);
     }
     
     private DocumentServiceRequest getUserDefinedFunctionRequest(String collectionLink, UserDefinedFunction udf,
-            RequestOptions options) {
+            RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
@@ -1400,7 +1488,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, ResourceType.UserDefinedFunction,
                                                                        path,
                                                                        udf,
                                                                        requestHeaders);
@@ -1410,14 +1498,14 @@ public class DocumentClient {
     /**
      * Replaces a user defined function.
      * 
-     * @param udf the user defined function.
+     * @param udf     the user defined function.
      * @param options the request options.
      * @return the resource response with the replaced user defined function.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<UserDefinedFunction> replaceUserDefinedFunction(UserDefinedFunction udf,
                                                                             RequestOptions options)
-            throws DocumentClientException   {
+            throws DocumentClientException {
         if (udf == null) {
             throw new IllegalArgumentException("udf");          
         }
@@ -1426,7 +1514,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(udf.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.UserDefinedFunction,
                                                                        path,
                                                                        udf,
                                                                        requestHeaders);
@@ -1449,7 +1537,7 @@ public class DocumentClient {
         
         String path = Utils.joinPath(udfLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.UserDefinedFunction,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<UserDefinedFunction>(this.doDelete(request), UserDefinedFunction.class);
@@ -1471,7 +1559,7 @@ public class DocumentClient {
         
         String path = Utils.joinPath(udfLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.UserDefinedFunction,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<UserDefinedFunction>(this.doRead(request), UserDefinedFunction.class);
@@ -1481,7 +1569,7 @@ public class DocumentClient {
      * Reads all user defined functions in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with the read user defined functions.
      */
     public FeedResponse<UserDefinedFunction> readUserDefinedFunctions(String collectionLink, FeedOptions options) {
@@ -1491,22 +1579,19 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
-                                                                       path,
-                                                                       requestHeaders);
         return new FeedResponse<UserDefinedFunction>(new QueryIterable<UserDefinedFunction>(this,
-                                                                                            request,
-                                                                                            ReadType.Feed,
-                                                                                            UserDefinedFunction.class));
+                                                                                            ResourceType.UserDefinedFunction, 
+                                                                                            UserDefinedFunction.class, 
+                                                                       path,
+                                                                                            options));
     }
 
     /**
      * Query for user defined functions.
      * 
      * @param collectionLink the collection link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response with the obtained user defined functions.
      */
     public FeedResponse<UserDefinedFunction> queryUserDefinedFunctions(String collectionLink,
@@ -1528,8 +1613,8 @@ public class DocumentClient {
      * Query for user defined functions.
      * 
      * @param collectionLink the collection link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response with the obtained user defined functions.
      */
     public FeedResponse<UserDefinedFunction> queryUserDefinedFunctions(String collectionLink,
@@ -1545,24 +1630,20 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.UserDefinedFunction,
+        return new FeedResponse<UserDefinedFunction>(new QueryIterable<UserDefinedFunction>(this,
+                                                                                            ResourceType.UserDefinedFunction, 
+                                                                                            UserDefinedFunction.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<UserDefinedFunction>(new QueryIterable<UserDefinedFunction>(this,
-                                                                                            request,
-                                                                                            ReadType.Query,
-                                                                                            UserDefinedFunction.class));
+                                                                                            options));
     }
 
     /**
      * Creates an attachment.
      * 
      * @param documentLink the document link.
-     * @param attachment the attachment to create.
-     * @param options the request options.
+     * @param attachment   the attachment to create.
+     * @param options      the request options.
      * @return the resource response with the created attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1570,7 +1651,7 @@ public class DocumentClient {
                                                          Attachment attachment,
                                                          RequestOptions options)
             throws DocumentClientException {
-        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options);
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options, OperationType.Create);
         return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
     }
     
@@ -1578,8 +1659,8 @@ public class DocumentClient {
      * Upserts an attachment.
      * 
      * @param documentLink the document link.
-     * @param attachment the attachment to upsert.
-     * @param options the request options.
+     * @param attachment   the attachment to upsert.
+     * @param options      the request options.
      * @return the resource response with the upserted attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1587,12 +1668,12 @@ public class DocumentClient {
                                                          Attachment attachment,
                                                          RequestOptions options)
             throws DocumentClientException {
-        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options);
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, attachment, options, OperationType.Upsert);
         return new ResourceResponse<Attachment>(this.doUpsert(request), Attachment.class);
     }
     
     private DocumentServiceRequest getAttachmentRequest(String documentLink, Attachment attachment,
-            RequestOptions options) {
+            RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
@@ -1604,7 +1685,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, ResourceType.Attachment,
                                                                        path,
                                                                        attachment,
                                                                        requestHeaders);
@@ -1615,7 +1696,7 @@ public class DocumentClient {
      * Replaces an attachment.
      * 
      * @param attachment the attachment to use.
-     * @param options the request options.
+     * @param options    the request options.
      * @return the resource response with the replaced attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1629,7 +1710,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(attachment.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.Attachment,
                                                                        path,
                                                                        attachment,
                                                                        requestHeaders);
@@ -1640,7 +1721,7 @@ public class DocumentClient {
      * Deletes an attachment.
      * 
      * @param attachmentLink the attachment link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1652,7 +1733,7 @@ public class DocumentClient {
         
         String path = Utils.joinPath(attachmentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.Attachment,
                                                                        path,
                                                                        requestHeaders);
         return new ResourceResponse<Attachment>(this.doDelete(request), Attachment.class);
@@ -1662,7 +1743,7 @@ public class DocumentClient {
      * Reads an attachment.
      * 
      * @param attachmentLink the attachment link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response with the read attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1674,15 +1755,15 @@ public class DocumentClient {
         
         String path = Utils.joinPath(attachmentLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Attachment, path, requestHeaders);
         return new ResourceResponse<Attachment>(this.doRead(request), Attachment.class);
     }
 
     /**
-     * Reads an attachment.
+     * Reads all attachments in a document.
      * 
      * @param documentLink the document link.
-     * @param options the feed options.
+     * @param options      the feed options.
      * @return the feed response with the read attachments.
      */
     public FeedResponse<Attachment> readAttachments(String documentLink, FeedOptions options) {
@@ -1691,22 +1772,19 @@ public class DocumentClient {
         }
         
         String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        return new FeedResponse<Attachment>(new QueryIterable<Attachment>(this, 
+                                                                          ResourceType.Attachment, 
+                                                                          Attachment.class, 
                                                                        path,
-                                                                       requestHeaders);
-        return new FeedResponse<Attachment>(new QueryIterable<Attachment>(this,
-                                                                          request,
-                                                                          ReadType.Feed,
-                                                                          Attachment.class));
+                                                                          options));
     }
 
     /**
      * Query for attachments.
      * 
      * @param documentLink the document link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query        the query.
+     * @param options      the feed options.
      * @return the feed response with the obtained attachments.
      */
     public FeedResponse<Attachment> queryAttachments(String documentLink, String query, FeedOptions options) {
@@ -1725,8 +1803,8 @@ public class DocumentClient {
      * Query for attachments.
      * 
      * @param documentLink the document link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec    the SQL query specification.
+     * @param options      the feed options.
      * @return the feed response with the obtained attachments.
      */
     public FeedResponse<Attachment> queryAttachments(String documentLink, SqlQuerySpec querySpec, FeedOptions options) {
@@ -1739,24 +1817,20 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        return new FeedResponse<Attachment>(new QueryIterable<Attachment>(this, 
+                                                                          ResourceType.Attachment, 
+                                                                          Attachment.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Attachment>(new QueryIterable<Attachment>(this,
-                                                                          request,
-                                                                          ReadType.Query,
-                                                                          Attachment.class));
+                                                                          options));
     }
 
     /**
      * Creates an attachment.
      * 
      * @param documentLink the document link.
-     * @param mediaStream the media stream for creating the attachment.
-     * @param options the media options.
+     * @param mediaStream  the media stream for creating the attachment.
+     * @param options      the media options.
      * @return the resource response with the created attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1765,7 +1839,7 @@ public class DocumentClient {
                                                          MediaOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options);
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options, OperationType.Create);
         return new ResourceResponse<Attachment>(this.doCreate(request), Attachment.class);
     }
         
@@ -1773,8 +1847,8 @@ public class DocumentClient {
      * Upserts an attachment to the media stream
      * 
      * @param documentLink the document link.
-     * @param mediaStream the media stream for upserting the attachment.
-     * @param options the media options.
+     * @param mediaStream  the media stream for upserting the attachment.
+     * @param options      the media options.
      * @return the resource response with the upserted attachment.
      * @throws DocumentClientException the document client exception.
      */
@@ -1783,12 +1857,12 @@ public class DocumentClient {
                                                          MediaOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options);
+        DocumentServiceRequest request = getAttachmentRequest(documentLink, mediaStream, options, OperationType.Upsert);
         return new ResourceResponse<Attachment>(this.doUpsert(request), Attachment.class);
     }
     
     private DocumentServiceRequest getAttachmentRequest(String documentLink, InputStream mediaStream,
-            MediaOptions options) {
+            MediaOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(documentLink)) {
             throw new IllegalArgumentException("documentLink");
         }
@@ -1798,7 +1872,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(documentLink, Paths.ATTACHMENTS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getMediaHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Attachment,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, ResourceType.Attachment,
                                                                        path,
                                                                        mediaStream,
                                                                        requestHeaders);
@@ -1820,7 +1894,7 @@ public class DocumentClient {
         }
         
         String path = Utils.joinPath(mediaLink, null);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Media, path, null);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Media, path, null);
         request.setIsMedia(true);
         return new MediaResponse(this.doRead(request),
                                  this.connectionPolicy.getMediaReadMode() == MediaReadMode.Buffered);
@@ -1829,9 +1903,9 @@ public class DocumentClient {
     /**
      * Updates a media by the media link.
      * 
-     * @param mediaLink the media link.
+     * @param mediaLink   the media link.
      * @param mediaStream the media stream to upload.
-     * @param options the media options.
+     * @param options     the media options.
      * @return the media response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1847,7 +1921,7 @@ public class DocumentClient {
         
         String path = Utils.joinPath(mediaLink, null);
         Map<String, String> requestHeaders = this.getMediaHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Media,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.Media,
                                                                        path,
                                                                        mediaStream,
                                                                        requestHeaders);
@@ -1860,7 +1934,7 @@ public class DocumentClient {
      * Reads a conflict.
      * 
      * @param conflictLink the conflict link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response with the read conflict.
      * @throws DocumentClientException the document client exception.
      */
@@ -1872,7 +1946,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(conflictLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Conflict, path, requestHeaders);
         return new ResourceResponse<Conflict>(this.doRead(request), Conflict.class);
     }
 
@@ -1880,32 +1954,29 @@ public class DocumentClient {
      * Reads all conflicts in a document collection.
      * 
      * @param collectionLink the collection link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with the read conflicts.
      */
-    public FeedResponse<Conflict> readConflicts(
-        String collectionLink, FeedOptions options) {
+    public FeedResponse<Conflict> readConflicts(String collectionLink, FeedOptions options) {
         
         if (StringUtils.isEmpty(collectionLink)) {
             throw new IllegalArgumentException("collectionLink");
         }
         
-        String path = Utils.joinPath(collectionLink,
-                                              Paths.CONFLICTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(
+        String path = Utils.joinPath(collectionLink, Paths.CONFLICTS_PATH_SEGMENT);
+        return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, 
             ResourceType.Conflict,
+                                                                      Conflict.class, 
             path,
-            requestHeaders);
-        return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, request, ReadType.Feed, Conflict.class));
+                                                                      options));
     }
 
     /**
      * Query for conflicts.
      * 
      * @param collectionLink the collection link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response of the obtained conflicts.
      */
     public FeedResponse<Conflict> queryConflicts(String collectionLink, String query, FeedOptions options) {
@@ -1925,8 +1996,8 @@ public class DocumentClient {
      * Query for conflicts.
      * 
      * @param collectionLink the collection link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response of the obtained conflicts.
      */
     public FeedResponse<Conflict> queryConflicts(String collectionLink, SqlQuerySpec querySpec, FeedOptions options) {
@@ -1940,20 +2011,19 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(collectionLink, Paths.CONFLICTS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict,
+        return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, 
+                                                                      ResourceType.Conflict, 
+                                                                      Conflict.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Conflict>(new QueryIterable<Conflict>(this, request, ReadType.Query, Conflict.class));
+                                                                      options));
     }
 
     /**
      * Deletes a conflict.
      * 
      * @param conflictLink the conflict link.
-     * @param options the request options.
+     * @param options      the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -1966,7 +2036,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(conflictLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Conflict, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.Conflict, path, requestHeaders);
         return new ResourceResponse<Conflict>(this.doDelete(request), Conflict.class);
     }
 
@@ -1974,15 +2044,15 @@ public class DocumentClient {
      * Creates a user.
      * 
      * @param databaseLink the database link.
-     * @param user the user to create.
-     * @param options the request options.
+     * @param user         the user to create.
+     * @param options      the request options.
      * @return the resource response with the created user.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<User> createUser(String databaseLink, User user, RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getUserRequest(databaseLink, user, options);
+        DocumentServiceRequest request = getUserRequest(databaseLink, user, options, OperationType.Create);
         return new ResourceResponse<User>(this.doCreate(request), User.class);
     }
         
@@ -1990,19 +2060,19 @@ public class DocumentClient {
      * Upserts a user.
      * 
      * @param databaseLink the database link.
-     * @param user the user to upsert.
-     * @param options the request options.
+     * @param user         the user to upsert.
+     * @param options      the request options.
      * @return the resource response with the upserted user.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<User> upsertUser(String databaseLink, User user, RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getUserRequest(databaseLink, user, options);
+        DocumentServiceRequest request = getUserRequest(databaseLink, user, options, OperationType.Upsert);
         return new ResourceResponse<User>(this.doUpsert(request), User.class);
     }
     
-    private DocumentServiceRequest getUserRequest(String databaseLink, User user, RequestOptions options) {
+    private DocumentServiceRequest getUserRequest(String databaseLink, User user, RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(databaseLink)) {
             throw new IllegalArgumentException("databaseLink");
         }
@@ -2014,14 +2084,14 @@ public class DocumentClient {
 
         String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, user, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, ResourceType.User, path, user, requestHeaders);
         return request;
     }
 
     /**
      * Replaces a user.
      * 
-     * @param user the user to use.
+     * @param user    the user to use.
      * @param options the request options.
      * @return the resource response with the replaced user.
      * @throws DocumentClientException the document client exception.
@@ -2036,7 +2106,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(user.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, user, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.User, path, user, requestHeaders);
         return new ResourceResponse<User>(this.doReplace(request), User.class);
     }
 
@@ -2044,7 +2114,7 @@ public class DocumentClient {
      * Deletes a user.
      * 
      * @param userLink the user link.
-     * @param options the request options.
+     * @param options  the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -2056,7 +2126,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(userLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.User, path, requestHeaders);
         return new ResourceResponse<User>(this.doDelete(request), User.class);
     }
 
@@ -2064,7 +2134,7 @@ public class DocumentClient {
      * Reads a user.
      * 
      * @param userLink the user link.
-     * @param options the request options.
+     * @param options  the request options.
      * @return the resource response with the read user.
      * @throws DocumentClientException the document client exception.
      */
@@ -2076,7 +2146,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(userLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.User, path, requestHeaders);
         return new ResourceResponse<User>(this.doRead(request), User.class);
     }
 
@@ -2084,7 +2154,7 @@ public class DocumentClient {
      * Reads all users in a database.
      * 
      * @param databaseLink the database link.
-     * @param options the feed options.
+     * @param options      the feed options.
      * @return the feed response with the read users.
      */
     public FeedResponse<User> readUsers(String databaseLink, FeedOptions options) {
@@ -2094,17 +2164,15 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User, path, requestHeaders);
-        return new FeedResponse<User>(new QueryIterable<User>(this, request, ReadType.Feed, User.class));
+        return new FeedResponse<User>(new QueryIterable<User>(this, ResourceType.User, User.class, path, options));
     }
 
     /**
      * Query for users.
      * 
      * @param databaseLink the database link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query        the query.
+     * @param options      the feed options.
      * @return the feed response of the obtained users.
      */
     public FeedResponse<User> queryUsers(String databaseLink, String query, FeedOptions options) {
@@ -2124,8 +2192,8 @@ public class DocumentClient {
      * Query for users.
      * 
      * @param databaseLink the database link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec    the SQL query specification.
+     * @param options      the feed options.
      * @return the feed response of the obtained users.
      */
     public FeedResponse<User> queryUsers(String databaseLink, SqlQuerySpec querySpec, FeedOptions options) {
@@ -2139,49 +2207,48 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(databaseLink, Paths.USERS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.User,
+        return new FeedResponse<User>(new QueryIterable<User>(this, 
+                                                              ResourceType.User, 
+                                                              User.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<User>(new QueryIterable<User>(this, request, ReadType.Query, User.class));
+                                                              options));
     }
 
     /**
      * Creates a permission.
      * 
-     * @param userLink the user link.
+     * @param userLink   the user link.
      * @param permission the permission to create.
-     * @param options the request options.
+     * @param options    the request options.
      * @return the resource response with the created permission.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<Permission> createPermission(String userLink, Permission permission, RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options);
+        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options, OperationType.Create);
         return new ResourceResponse<Permission>(this.doCreate(request), Permission.class);
     }
         
     /**
      * Upserts a permission.
      * 
-     * @param userLink the user link.
+     * @param userLink   the user link.
      * @param permission the permission to upsert.
-     * @param options the request options.
+     * @param options    the request options.
      * @return the resource response with the upserted permission.
      * @throws DocumentClientException the document client exception.
      */
     public ResourceResponse<Permission> upsertPermission(String userLink, Permission permission, RequestOptions options)
             throws DocumentClientException {
 
-        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options);
+        DocumentServiceRequest request = getPermissionRequest(userLink, permission, options, OperationType.Upsert);
         return new ResourceResponse<Permission>(this.doUpsert(request), Permission.class);
     }
     
     private DocumentServiceRequest getPermissionRequest(String userLink, Permission permission,
-            RequestOptions options) {
+            RequestOptions options, OperationType operationType) {
         if (StringUtils.isEmpty(userLink)) {
             throw new IllegalArgumentException("userLink");
         }
@@ -2193,7 +2260,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(userLink, Paths.PERMISSIONS_PATH_SEGMENT);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
+        DocumentServiceRequest request = DocumentServiceRequest.create(operationType, ResourceType.Permission,
                                                                        path,
                                                                        permission,
                                                                        requestHeaders);
@@ -2204,7 +2271,7 @@ public class DocumentClient {
      * Replaces a permission.
      * 
      * @param permission the permission to use.
-     * @param options the request options.
+     * @param options    the request options.
      * @return the resource response with the replaced permission.
      * @throws DocumentClientException the document client exception.
      */
@@ -2219,7 +2286,7 @@ public class DocumentClient {
 
         String path = Utils.joinPath(permission.getSelfLink(), null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.Permission,
                                                                        path,
                                                                        permission,
                                                                        requestHeaders);
@@ -2230,7 +2297,7 @@ public class DocumentClient {
      * Deletes a permission.
      * 
      * @param permissionLink the permission link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response.
      * @throws DocumentClientException the document client exception.
      */
@@ -2243,7 +2310,7 @@ public class DocumentClient {
         
         String path = Utils.joinPath(permissionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Delete, ResourceType.Permission, path, requestHeaders);
         return new ResourceResponse<Permission>(this.doDelete(request), Permission.class);
     }
 
@@ -2251,7 +2318,7 @@ public class DocumentClient {
      * Reads a permission.
      * 
      * @param permissionLink the permission link.
-     * @param options the request options.
+     * @param options        the request options.
      * @return the resource response with the read permission.
      * @throws DocumentClientException the document client exception.
      */
@@ -2264,15 +2331,15 @@ public class DocumentClient {
         
         String path = Utils.joinPath(permissionLink, null);
         Map<String, String> requestHeaders = this.getRequestHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Permission, path, requestHeaders);
         return new ResourceResponse<Permission>(this.doRead(request), Permission.class);
     }
 
     /**
-     * Reads a permission.
+     * Reads all permissions.
      * 
      * @param permissionLink the permission link.
-     * @param options the feed options.
+     * @param options        the feed options.
      * @return the feed response with the read permissions.
      */
     public FeedResponse<Permission> readPermissions(String permissionLink, FeedOptions options) {
@@ -2281,20 +2348,19 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission, path, requestHeaders);
         return new FeedResponse<Permission>(new QueryIterable<Permission>(this,
-                                                                          request,
-                                                                          ReadType.Feed,
-                                                                          Permission.class));
+                                                                          ResourceType.Permission, 
+                                                                          Permission.class, 
+                                                                          path, 
+                                                                          options));
     }
 
     /**
      * Query for permissions.
      * 
      * @param permissionLink the permission link.
-     * @param query the query.
-     * @param options the feed options.
+     * @param query          the query.
+     * @param options        the feed options.
      * @return the feed response with the obtained permissions.
      */
     public FeedResponse<Permission> queryPermissions(String permissionLink, String query, FeedOptions options) {
@@ -2314,12 +2380,11 @@ public class DocumentClient {
      * Query for permissions.
      * 
      * @param permissionLink the permission link.
-     * @param querySpec the SQL query specification.
-     * @param options the feed options.
+     * @param querySpec      the SQL query specification.
+     * @param options        the feed options.
      * @return the feed response with the obtained permissions.
      */
-    public FeedResponse<Permission> queryPermissions(String permissionLink,
-                                                     SqlQuerySpec querySpec,
+    public FeedResponse<Permission> queryPermissions(String permissionLink, SqlQuerySpec querySpec,
                                                      FeedOptions options) {
 
         if (StringUtils.isEmpty(permissionLink)) {
@@ -2331,16 +2396,12 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(permissionLink, Paths.PERMISSIONS_PATH_SEGMENT);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Permission,
+        return new FeedResponse<Permission>(new QueryIterable<Permission>(this, 
+                                                                          ResourceType.Permission, 
+                                                                          Permission.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Permission>(new QueryIterable<Permission>(this,
-                                                                          request,
-                                                                          ReadType.Query,
-                                                                          Permission.class));
+                                                                          options));
     }
 
     /**
@@ -2359,7 +2420,7 @@ public class DocumentClient {
         DocumentClient.validateResource(offer);
 
         String path = Utils.joinPath(offer.getSelfLink(), null);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Replace, ResourceType.Offer,
                                                                        path,
                                                                        offer,
                                                                        null);
@@ -2380,7 +2441,7 @@ public class DocumentClient {
         }
         
         String path = Utils.joinPath(offerLink, null);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, null);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.Offer, path, null);
         return new ResourceResponse<Offer>(this.doRead(request), Offer.class);
     }
 
@@ -2392,15 +2453,17 @@ public class DocumentClient {
      */
     public FeedResponse<Offer> readOffers(FeedOptions options) {
         String path = Utils.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer, path, requestHeaders);
-        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, request, ReadType.Feed, Offer.class));
+        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, 
+                                                                ResourceType.Offer, 
+                                                                Offer.class, 
+                                                                path, 
+                                                                options));
     }
 
     /**
      * Query for offers in a database.
      * 
-     * @param query the query.
+     * @param query   the query.
      * @param options the feed options.
      * @return the feed response with the obtained offers.
      */
@@ -2416,7 +2479,7 @@ public class DocumentClient {
      * Query for offers in a database.
      * 
      * @param querySpec the query specification.
-     * @param options the feed options.
+     * @param options   the feed options.
      * @return the feed response with the obtained offers.
      */
     public FeedResponse<Offer> queryOffers(SqlQuerySpec querySpec, FeedOptions options) {
@@ -2425,13 +2488,12 @@ public class DocumentClient {
         }
 
         String path = Utils.joinPath(Paths.OFFERS_PATH_SEGMENT, null);
-        Map<String, String> requestHeaders = this.getFeedHeaders(options);
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.Offer,
+        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, 
+                                                                ResourceType.Offer, 
+                                                                Offer.class, 
                                                                        path,
                                                                        querySpec,
-                                                                       this.queryCompatibilityMode,
-                                                                       requestHeaders);
-        return new FeedResponse<Offer>(new QueryIterable<Offer>(this, request, ReadType.Query, Offer.class));
+                                                                options));
     }
 
     /**
@@ -2441,7 +2503,7 @@ public class DocumentClient {
      * @throws DocumentClientException the document client exception.
      */
     public DatabaseAccount getDatabaseAccount() throws DocumentClientException {
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DatabaseAccount,
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.DatabaseAccount,
                                                                        "",  // path
                                                                        null);
         DocumentServiceResponse response = this.doRead(request);
@@ -2459,58 +2521,61 @@ public class DocumentClient {
     }
     
     private DocumentServiceResponse doCreate(DocumentServiceRequest request) throws DocumentClientException {
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.POST);
         RetryRequestDelegate createDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doCreate(requestInner);
+                
+                StoreModel proxy = getStoreProxy(requestInner);
+                return proxy.processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);
-        DocumentServiceResponse response = RetryUtility.execute(createDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(createDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doUpsert(DocumentServiceRequest request) throws DocumentClientException {
+        
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.POST);
         RetryRequestDelegate upsertDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doUpsert(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);        
         Map<String, String> headers = request.getHeaders();
         // headers can never be null, since it will be initialized even when no request options are specified,
         // hence using assertion here instead of exception, being in the private method
-        assert(headers != null);
+        assert (headers != null);
         
         if (headers != null) {
             headers.put(HttpConstants.HttpHeaders.IS_UPSERT, "true");
         }
 
-        DocumentServiceResponse response = RetryUtility.execute(upsertDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(upsertDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     private DocumentServiceResponse doReplace(DocumentServiceRequest request) throws DocumentClientException {
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.PUT);
         RetryRequestDelegate replaceDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doReplace(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Write);
         this.applySessionToken(request);
-        DocumentServiceResponse response = RetryUtility.execute(replaceDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(replaceDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
@@ -2520,13 +2585,13 @@ public class DocumentClient {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doDelete(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Write);
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.DELETE);
         this.applySessionToken(request);
-        DocumentServiceResponse response = RetryUtility.execute(deleteDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(deleteDelegate, this, this.globalEndpointManager, request);
 
         if (request.getResourceType() != ResourceType.DocumentCollection) {
             this.captureSessionToken(request, response);
@@ -2537,18 +2602,19 @@ public class DocumentClient {
     }
     
     private DocumentServiceResponse doRead(DocumentServiceRequest request) throws DocumentClientException {
-        RetryRequestDelegate readDelegate = new RetryRequestDelegate() {
+        
+       this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.GET);
+       RetryRequestDelegate readDelegate = new RetryRequestDelegate() {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doRead(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Read);
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(readDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
@@ -2558,14 +2624,14 @@ public class DocumentClient {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doReadFeed(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Read);
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.GET);
         this.applySessionToken(request);
 
-        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(readDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
@@ -2575,20 +2641,21 @@ public class DocumentClient {
 
             @Override
             public DocumentServiceResponse apply(DocumentServiceRequest requestInner) throws DocumentClientException {
-                return gatewayProxy.doSQLQuery(requestInner);
+                return getStoreProxy(requestInner).processMessage(requestInner);
             }
         };
         
-        request.setOperationType(OperationType.Read);
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.POST);
         this.applySessionToken(request);
-
-        DocumentServiceResponse response = RetryUtility.execute(readDelegate, this, request);
+        DocumentServiceResponse response = RetryUtility.executeDocumentClientRequest(readDelegate, this, this.globalEndpointManager, request);
         this.captureSessionToken(request, response);
         return response;
     }
     
     DatabaseAccount getDatabaseAccountFromEndpoint(URI endpoint) throws DocumentClientException {
-        DocumentServiceRequest request = DocumentServiceRequest.create(ResourceType.DatabaseAccount, "", null);
+        DocumentServiceRequest request = DocumentServiceRequest.create(OperationType.Read, ResourceType.DatabaseAccount, "", null);
+        this.putMoreContentIntoDocumentServiceRequest(request, HttpConstants.HttpMethods.GET);
+       
         DocumentServiceResponse response = null;
         try {
             request.setEndpointOverride(endpoint);
@@ -2599,8 +2666,7 @@ public class DocumentClient {
             Throwable cause = e.getCause();
             if (cause != null) {
                 message = String.format(message, cause.toString());
-            }
-            else {
+            } else {
                 message = String.format(message, e.toString());
             }
             
@@ -2609,13 +2675,12 @@ public class DocumentClient {
         
         if (response != null) {
             return response.getResource(DatabaseAccount.class);
-        }
-        else {
+        } else {
             return null;
         }
     }
     
-    private void applySessionToken(DocumentServiceRequest request) throws DocumentClientException{
+    private void applySessionToken(DocumentServiceRequest request) throws DocumentClientException {
         Map<String, String> headers = request.getHeaders();
         if (headers != null && !StringUtils.isEmpty(headers.get(HttpConstants.HttpHeaders.SESSION_TOKEN))) {
             return;  // User is explicitly controlling the session.
@@ -2636,7 +2701,7 @@ public class DocumentClient {
     }
 
     private void captureSessionToken(DocumentServiceRequest request, DocumentServiceResponse response)
-            throws DocumentClientException  {
+            throws DocumentClientException {
             this.sessionContainer.setSessionToken(request, response);
         }
 
@@ -2659,7 +2724,6 @@ public class DocumentClient {
         }
 
         if (options.getConsistencyLevel() != null) {
-
             headers.put(HttpConstants.HttpHeaders.CONSISTENCY_LEVEL, options.getConsistencyLevel().name());
         }
 
@@ -2694,44 +2758,6 @@ public class DocumentClient {
 
         if (options.getPartitionKey() != null) {
             headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
-        }
-        
-        return headers;
-    }
-
-    Map<String, String> getFeedHeaders(FeedOptions options) {
-        if (options == null)
-            return null;
-
-        Map<String, String> headers = new HashMap<String, String>();
-
-        if (options.getPageSize() != null) {
-            headers.put(HttpConstants.HttpHeaders.PAGE_SIZE, options.getPageSize().toString());
-        }
-
-        if (options.getRequestContinuation() != null) {
-            headers.put(HttpConstants.HttpHeaders.CONTINUATION, options.getRequestContinuation());
-        }
-
-        if (options.getSessionToken() != null) {
-            headers.put(HttpConstants.HttpHeaders.SESSION_TOKEN, options.getSessionToken());
-        }
-
-        if (options.getEnableScanInQuery() != null) {
-            headers.put(HttpConstants.HttpHeaders.ENABLE_SCAN_IN_QUERY, options.getEnableScanInQuery().toString());
-        }
-
-        if (options.getEmitVerboseTracesInQuery() != null) {
-            headers.put(HttpConstants.HttpHeaders.EMIT_VERBOSE_TRACES_IN_QUERY,
-                    options.getEmitVerboseTracesInQuery().toString());
-        }
-
-        if (options.getPartitionKey() != null) {
-            headers.put(HttpConstants.HttpHeaders.PARTITION_KEY, options.getPartitionKey().toString());
-        }
-
-        if (options.getEnableCrossPartitionQuery() != null) {
-            headers.put(HttpConstants.HttpHeaders.ENABLE_CROSS_PARTITION_QUERY, options.getEnableCrossPartitionQuery().toString());
         }
 
         return headers;
@@ -2810,41 +2836,85 @@ public class DocumentClient {
         return this.partitionKeyDefinitionMap.getPartitionKeyDefinition(documentCollectionLink);
     }
     
-    private static String serializeProcedureParams(Object[] objectArray) {
-        ObjectMapper mapper = null;
-        String[] stringArray = new String[objectArray.length];
-
-        for (int i = 0; i < objectArray.length; ++i) {
-            Object object = objectArray[i];
-            if (object instanceof JsonSerializable || object instanceof JSONObject) {
-                stringArray[i] = object.toString();
+    private StoreModel getStoreProxy(DocumentServiceRequest request) {
+        if (Utils.isCollectionChild(request.getResourceType())) {
+        if (request.getIsNameBased()) {
+                if (!disableCheckForPartitionedCollection && this.isCollectionPartitioned(request.getPath())) {
+            return this.gatewayProxy;
+        }
             } else {
-                if (mapper == null) {
-                    mapper = new ObjectMapper();
-                }
-
-                // POJO, number, String or Boolean
-                try {
-                    stringArray[i] = mapper.writeValueAsString(object);
-                } catch (IOException e) {
-                    throw new IllegalArgumentException("Can't serialize the object into the json string", e);
-                }
+            ResourceId resourceId = ResourceId.parse(request.getResourceAddress()); 
+            String collectionResourceAddress = resourceId.getDocumentCollectionId().toString();
+            String collectionPath = PathsHelper.generatePath(ResourceType.DocumentCollection, collectionResourceAddress, false);
+                if (this.isCollectionPartitioned(collectionPath)) {
+                return this.gatewayProxy;
             }
         }
-
-        return String.format("[%s]", StringUtils.join(stringArray, ","));
+        }
+        
+        if ((request.getResourceType() == ResourceType.Document ||
+            request.getResourceType() == ResourceType.Trigger ||
+            request.getResourceType() == ResourceType.StoredProcedure ||
+            request.getResourceType() == ResourceType.UserDefinedFunction) &&
+           (request.getOperationType() == OperationType.Create ||
+            request.getOperationType() == OperationType.Upsert ||
+            request.getOperationType() == OperationType.Update ||
+            request.getOperationType() == OperationType.Replace ||
+            request.getOperationType() == OperationType.Delete ||
+            request.getOperationType() == OperationType.Read ||
+            request.getOperationType() == OperationType.ReadFeed ||
+            request.getOperationType() == OperationType.Query ||
+            request.getOperationType() == OperationType.SqlQuery)) {
+            return this.storeModel;
+        } else {
+            return this.gatewayProxy;
+        }
     }
+    
+    private void putMoreContentIntoDocumentServiceRequest(DocumentServiceRequest request, String httpMethod) {
+        if (this.masterKey != null) {
+            final Date currentTime = new Date();
+            final SimpleDateFormat sdf = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
+            sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
+            String xDate = sdf.format(currentTime);
 
-    private static void validateResource(Resource resource) {
-        if (!StringUtils.isEmpty(resource.getId())) {
-            if (resource.getId().indexOf('/') != -1 || resource.getId().indexOf('\\') != -1 ||
-                    resource.getId().indexOf('?') != -1 || resource.getId().indexOf('#') != -1) {
-                throw new IllegalArgumentException("Id contains illegal chars.");
-            }
-
-            if (resource.getId().endsWith(" ")) {
-                throw new IllegalArgumentException("Id ends with a space.");
-            }
+            request.getHeaders().put(HttpConstants.HttpHeaders.X_DATE, xDate);
         }
+
+        if (this.masterKey != null || this.resourceTokens != null) {
+            String path = request.getPath();
+            path = Utils.trimBeginingAndEndingSlashes(path);
+            String resourceName = request.getResourceFullName();
+            String authorization = this.getAuthorizationToken(resourceName, request.getPath(),
+                    request.getResourceType(), httpMethod, request.getHeaders(), this.masterKey, this.resourceTokens);
+            try {
+                authorization = URLEncoder.encode(authorization, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalStateException("Failed to encode authtoken.", e);
+            }
+            request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
+        }
+
+        if ((httpMethod == HttpConstants.HttpMethods.POST || httpMethod == HttpConstants.HttpMethods.PUT)
+                && !request.getHeaders().containsKey(HttpConstants.HttpHeaders.CONTENT_TYPE)) {
+            request.getHeaders().put(HttpConstants.HttpHeaders.CONTENT_TYPE, RuntimeConstants.MediaTypes.JSON);
+        }
+
+        if (!request.getHeaders().containsKey(HttpConstants.HttpHeaders.ACCEPT)) {
+            request.getHeaders().put(HttpConstants.HttpHeaders.ACCEPT, RuntimeConstants.MediaTypes.JSON);
+        }
+    }
+    
+    private String getAuthorizationToken(String resourceOrOwnerId, String path, ResourceType resourceType,
+            String requestVerb, Map<String, String> headers, String masterKey, Map<String, String> resourceTokens) {
+        if (masterKey != null) {
+            return this.authorizationTokenProvider.generateKeyAuthorizationSignature(requestVerb, resourceOrOwnerId, resourceType,
+                    headers);
+        } else if (resourceTokens != null) {
+            return this.authorizationTokenProvider.getAuthorizationTokenUsingResourceTokens(resourceTokens, path,
+                    resourceOrOwnerId);
+        }
+
+        return null;
     }
 }

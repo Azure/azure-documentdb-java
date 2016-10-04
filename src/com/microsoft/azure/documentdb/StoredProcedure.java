@@ -2,6 +2,8 @@ package com.microsoft.azure.documentdb;
 
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * Represents a stored procedure.
  * <p>
@@ -11,16 +13,16 @@ import org.json.JSONObject;
  */
 public class StoredProcedure extends Resource {
 
-	/**
-	 * Constructor.
-	 */
+    /**
+     * Constructor.
+     */
     public StoredProcedure() {
         super();
     }
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the stored procedure.
      */
     public StoredProcedure(String jsonString) {
@@ -29,7 +31,7 @@ public class StoredProcedure extends Resource {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the stored procedure.
      */
     public StoredProcedure(JSONObject jsonObject) {
@@ -38,7 +40,7 @@ public class StoredProcedure extends Resource {
 
     /**
      * Get the body of the stored procedure.
-     * 
+     *
      * @return the body of the stored procedure.
      */
     public String getBody() {
@@ -47,7 +49,7 @@ public class StoredProcedure extends Resource {
 
     /**
      * Set the body of the stored procedure.
-     * 
+     *
      * @param body the body of the stored procedure.
      */
     public void setBody(String body) {

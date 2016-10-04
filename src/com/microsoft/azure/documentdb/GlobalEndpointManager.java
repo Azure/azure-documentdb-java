@@ -11,18 +11,21 @@ import java.util.logging.Logger;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.microsoft.azure.documentdb.internal.EndpointManager;
+import com.microsoft.azure.documentdb.internal.OperationType;
+import com.microsoft.azure.documentdb.internal.Utils;
+
 /**
  * This class implements the logic for endpoint management for geo-replicated
- * database accounts. 
+ * database accounts.
  * <p>
  * When ConnectionPolicy.getEnableEndpointDiscovery is true,
  * the GlobalEndpointManager will choose the correct endpoint to use for write
- * and read operations based on database account information retrieved from the 
+ * and read operations based on database account information retrieved from the
  * service in conjunction with user's preference as specified in
  * ConnectionPolicy().getPreferredLocations.
- * 
  */
-class GlobalEndpointManager {
+class GlobalEndpointManager implements EndpointManager {
     private final DocumentClient client;
     private final Collection<String> preferredLocations;
     private final boolean enableEndpointDiscovery;
@@ -64,12 +67,9 @@ class GlobalEndpointManager {
     public URI resolveServiceEndpoint(OperationType operationType) {
         URI endpoint = null;
 
-        switch (operationType) {
-        case Write:
+        if (Utils.isWriteOperation(operationType)) {
             endpoint = this.getWriteEndpoint();
-            break;
-
-        default:
+        } else {
             endpoint = this.getReadEndpoint();
         }
 
@@ -78,7 +78,7 @@ class GlobalEndpointManager {
             // use the value passed in by the user.
             endpoint = this.defaultEndpoint;
         }
-        
+
         return endpoint;
     }
 
@@ -86,7 +86,7 @@ class GlobalEndpointManager {
         if (this.refreshing) {
             return;
         }
-        
+
         this.refreshing = true;
         try {
             this.refreshEndpointListInternal();
@@ -94,7 +94,31 @@ class GlobalEndpointManager {
             this.refreshing = false;
         }
     }
-    
+
+    public DatabaseAccount getDatabaseAccountFromAnyEndpoint() {
+        DatabaseAccount databaseAccount = null;
+        try {
+            databaseAccount = this.client.getDatabaseAccountFromEndpoint(this.defaultEndpoint);
+
+            // The global endpoint was not working. Try other endpoints in the preferred read region list.
+            if (databaseAccount == null && this.preferredLocations != null && this.preferredLocations.size() > 0) {
+                for (String regionName : this.preferredLocations) {
+                    URI regionalUri = this.getRegionalEndpoint(regionName);
+                    if (regionalUri != null) {
+                        databaseAccount = this.client.getDatabaseAccountFromEndpoint(regionalUri);
+                        if (databaseAccount != null) {
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (DocumentClientException e) {
+            this.logger.warning(String.format("Failed to retrieve database account information. %s", e.toString()));
+        }
+
+        return databaseAccount;
+    }
+
     private synchronized void initialize() {
         if (initialized) {
             return;
@@ -103,7 +127,7 @@ class GlobalEndpointManager {
         this.initialized = true;
         this.refreshEndpointListInternal();
     }
-    
+
     private void refreshEndpointListInternal() {
         Map<String, URI> writableLocations = new HashMap<String, URI>();
         Map<String, URI> readableLocations = new HashMap<String, URI>();
@@ -118,14 +142,14 @@ class GlobalEndpointManager {
                                 regionUri = new URI(location.getEndpoint());
                             } catch (URISyntaxException e) {
                             }
-                            
+
                             if (regionUri != null) {
                                 writableLocations.put(location.getName(), regionUri);
                             }
                         }
                     }
                 }
-                
+
                 if (databaseAccount.getReadableLocations() != null) {
                     for (DatabaseAccountLocation location : databaseAccount.getReadableLocations()) {
                         if (StringUtils.isNotEmpty(location.getName())) {
@@ -134,7 +158,7 @@ class GlobalEndpointManager {
                                 regionUri = new URI(location.getEndpoint());
                             } catch (URISyntaxException e) {
                             }
-                            
+
                             if (regionUri != null) {
                                 readableLocations.put(location.getName(), regionUri);
                             }
@@ -148,7 +172,7 @@ class GlobalEndpointManager {
     }
 
     private synchronized void updateEndpointsCache(Map<String, URI> writableLocations,
-            Map<String, URI> readableLocations) {
+                                                   Map<String, URI> readableLocations) {
         this.writableLocations = writableLocations;
         this.readableLocations = readableLocations;
 
@@ -190,7 +214,7 @@ class GlobalEndpointManager {
                         if (newReadRegion != null) {
                             break;
                         }
-                        
+
                         newReadRegion = this.writableLocations.get(regionName);
                         if (newReadRegion != null) {
                             break;
@@ -205,52 +229,27 @@ class GlobalEndpointManager {
         } else {
             this.currentReadLocation = this.currentWriteLocation;
         }
-    } 
-
-    private DatabaseAccount getDatabaseAccountFromAnyEndpoint() {
-        DatabaseAccount databaseAccount = null;
-        try {
-            databaseAccount = this.client.getDatabaseAccountFromEndpoint(this.defaultEndpoint);
-            
-            // The global endpoint was not working. Try other endpoints in the preferred read region list.
-            if (databaseAccount == null && this.preferredLocations != null && this.preferredLocations.size() > 0) {
-                for (String regionName : this.preferredLocations) {
-                    URI regionalUri = this.getRegionalEndpoint(regionName);
-                    if (regionalUri != null) {
-                        databaseAccount = this.client.getDatabaseAccountFromEndpoint(regionalUri);
-                        if (databaseAccount != null) {
-                            break;
-                        }
-                    }
-                }                
-            }
-        } catch (DocumentClientException e) {
-            this.logger.warning(String.format("Failed to retrieve database account information. %s", e.toString()));            
-        }
-        
-        return databaseAccount;
     }
 
-    URI getRegionalEndpoint(String regionName)
-    {
+    URI getRegionalEndpoint(String regionName) {
         if (StringUtils.isNotEmpty(regionName)) {
             String databaseAccountName = this.defaultEndpoint.getHost();
             int indexOfDot = this.defaultEndpoint.getHost().indexOf('.');
             if (indexOfDot >= 0) {
                 databaseAccountName = databaseAccountName.substring(0, indexOfDot);
             }
-            
+
             // Add region name suffix to the account name.
             String reginalAccountName = databaseAccountName + "-" + regionName.replace(" ", "");
             String regionalUrl = this.defaultEndpoint.toString().replace(databaseAccountName, reginalAccountName);
-            
+
             try {
                 return new URI(regionalUrl);
             } catch (URISyntaxException e) {
                 return null;
             }
         }
-        
+
         return null;
     }
 }
