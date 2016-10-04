@@ -7,6 +7,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.logging.Logger;
@@ -16,13 +17,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.HashMap;
-
-class JsonSerializable {
+public class JsonSerializable {
     JSONObject propertyBag = null;
     private Logger logger = null;
 
-    JsonSerializable() {
+    protected JsonSerializable() {
         this.propertyBag = new JSONObject();
     }
 
@@ -31,7 +30,7 @@ class JsonSerializable {
      * 
      * @param jsonString the json string that represents the JsonSerializable.
      */
-    JsonSerializable(String jsonString) {
+    protected JsonSerializable(String jsonString) {
         this.propertyBag = new JSONObject(jsonString);
     }
 
@@ -40,41 +39,22 @@ class JsonSerializable {
      * 
      * @param jsonObject the json object that represents the JsonSerializable.
      */
-    JsonSerializable(JSONObject jsonObject) {
+    protected JsonSerializable(JSONObject jsonObject) {
         this.propertyBag = new JSONObject(jsonObject);
     }
     
-    Logger getLogger() {
-        if (this.logger == null) {
-            this.logger = Logger.getLogger(this.getClass().getPackage().getName());
-        }
-        
-        return this.logger;
-    }
-
-    /**
-     * Returns the propertybag(JSONObject) in a hashMap
-     * 
-     * @return the HashMap. 
-     */
-    public HashMap<String, Object> getHashMap() {
-        return JsonSerializable.toMap(this.propertyBag);
-    }
-
     private static HashMap<String, Object> toMap(JSONObject object) throws JSONException {
         HashMap<String, Object> map = new HashMap<String, Object>();
 
-        @SuppressWarnings("unchecked")  // Using legacy API
+        @SuppressWarnings("unchecked") // Using legacy API
         Iterator<String> keysItr = object.keys();
-        while(keysItr.hasNext()) {
+        while (keysItr.hasNext()) {
             String key = keysItr.next();
             Object value = object.get(key);
 
-            if(value instanceof JSONArray) {
+            if (value instanceof JSONArray) {
                 value = toList((JSONArray) value);
-            }
-
-            else if(value instanceof JSONObject) {
+            } else if (value instanceof JSONObject) {
                 value = toMap((JSONObject) value);
             }
             map.put(key, value);
@@ -84,19 +64,61 @@ class JsonSerializable {
 
     private static List<Object> toList(JSONArray array) throws JSONException {
         List<Object> list = new ArrayList<Object>();
-        for(int i = 0; i < array.length(); i++)
-        {
+        for (int i = 0; i < array.length(); i++) {
             Object value = array.get(i);
-            if(value instanceof JSONArray) {
+            if (value instanceof JSONArray) {
                 value = toList((JSONArray) value);
-            }
-
-            else if(value instanceof JSONObject) {
+            } else if (value instanceof JSONObject) {
                 value = toMap((JSONObject) value);
             }
             list.add(value);
         }
         return list;
+    }
+
+    private static Object[] convertToObjectArray(Object array) {
+        Class<?> ofArray = array.getClass().getComponentType();
+        if (ofArray.isPrimitive()) {
+            List<Object> ar = new ArrayList<Object>();
+            int length = Array.getLength(array);
+            for (int i = 0; i < length; i++) {
+                ar.add(Array.get(array, i));
+            }
+            return ar.toArray();
+        } else {
+            return (Object[]) array;
+        }
+    }
+
+    private static void checkForValidPOJO(Class<?> c) {
+        if (c.isAnonymousClass() || c.isLocalClass()) {
+            throw new IllegalArgumentException(
+                    String.format("%s can't be an anonymous or local class.", c.getName()));
+        }
+        if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
+            throw new IllegalArgumentException(
+                    String.format("%s must be static if it's a member class.", c.getName()));
+        }
+    }
+
+    protected Logger getLogger() {
+        if (this.logger == null) {
+            this.logger = Logger.getLogger(this.getClass().getPackage().getName());
+        }
+
+        return this.logger;
+    }
+
+    void onSave() {
+    }
+
+    /**
+     * Returns the propertybag(JSONObject) in a hashMap
+     *
+     * @return the HashMap.
+     */
+    public HashMap<String, Object> getHashMap() {
+        return JsonSerializable.toMap(this.propertyBag);
     }
 
     /**
@@ -118,29 +140,14 @@ class JsonSerializable {
         this.propertyBag.remove(propertyName);
     }
 
-    private static Object[] convertToObjectArray(Object array) {
-        Class<?> ofArray = array.getClass().getComponentType();
-        if (ofArray.isPrimitive()) {
-            List<Object> ar = new ArrayList<Object>();
-            int length = Array.getLength(array);
-            for (int i = 0; i < length; i++) {
-                ar.add(Array.get(array, i));
-            }
-            return ar.toArray();
-        }
-        else {
-            return (Object[]) array;
-        }
-    }
-
     /**
      * Sets the value of a property.
      * 
-     * @param <T> the type of the object.
+     * @param <T>          the type of the object.
      * @param propertyName the property to set.
-     * @param value the value of the property.
+     * @param value        the value of the property.
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public <T extends Object> void set(String propertyName, T value) {
         if (value == null) {
             // Sets null.
@@ -148,21 +155,22 @@ class JsonSerializable {
         } else if (value instanceof Collection) {
             // Collection.
             JSONArray jsonArray = new JSONArray();
-            this.internalSetCollection(propertyName, (Collection)value, jsonArray);
+            this.internalSetCollection(propertyName, (Collection) value, jsonArray);
             this.propertyBag.put(propertyName, jsonArray);
         } else if (value.getClass().isArray()) {
             // Array.
             JSONArray jsonArray = new JSONArray();
-            this.internalSetCollection(propertyName,
-                                       Arrays.asList(JsonSerializable.convertToObjectArray(value)), jsonArray);
+            this.internalSetCollection(propertyName, Arrays.asList(JsonSerializable.convertToObjectArray(value)),
+                    jsonArray);
             this.propertyBag.put(propertyName, jsonArray);
-        } else if (value instanceof Number || value instanceof Boolean || value instanceof String ||
-                value instanceof JSONObject) {
-            // JSONObject, number (includes int, float, double etc), boolean, and string.
+        } else if (value instanceof Number || value instanceof Boolean || value instanceof String
+                || value instanceof JSONObject) {
+            // JSONObject, number (includes int, float, double etc), boolean,
+            // and string.
             this.propertyBag.put(propertyName, value);
         } else if (value instanceof JsonSerializable) {
             // JsonSerializable
-            JsonSerializable castedValue = (JsonSerializable)value;
+            JsonSerializable castedValue = (JsonSerializable) value;
             if (castedValue != null) {
                 castedValue.onSave();
             }
@@ -178,7 +186,7 @@ class JsonSerializable {
         }
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private <T> void internalSetCollection(String propertyName, Collection<T> collection, JSONArray targetArray) {
             ObjectMapper mapper = null;
 
@@ -191,18 +199,20 @@ class JsonSerializable {
                     JSONArray childArray = new JSONArray();
                     this.internalSetCollection(propertyName, (Collection) childValue, childArray);
                     targetArray.put(childArray);
-                } else if (childValue instanceof Number || childValue instanceof Boolean || childValue instanceof String ||
-                        childValue instanceof JSONObject) {
-                    // JSONObject, Number (includes Int, Float, Double etc), Boolean, and String.
+            } else if (childValue instanceof Number || childValue instanceof Boolean || childValue instanceof String
+                    || childValue instanceof JSONObject) {
+                // JSONObject, Number (includes Int, Float, Double etc),
+                // Boolean, and String.
                     targetArray.put(childValue);
                 } else if (childValue instanceof JsonSerializable) {
                     // JsonSerializable
-                    JsonSerializable castedValue = (JsonSerializable)childValue;
+                JsonSerializable castedValue = (JsonSerializable) childValue;
                     castedValue.onSave();
                     targetArray.put(castedValue.propertyBag != null ? castedValue.propertyBag : new JSONObject());
                 } else {
                     // POJO
-                    if (mapper == null) mapper = new ObjectMapper();
+                if (mapper == null)
+                    mapper = new ObjectMapper();
                     try {
                         targetArray.put(new JSONObject(mapper.writeValueAsString(childValue)));
                     } catch (IOException e) {
@@ -299,28 +309,32 @@ class JsonSerializable {
     /**
      * Gets an object value.
      * 
-     * @param <T> the type of the object.
+     * @param <T>          the type of the object.
      * @param propertyName the property to get.
-     * @param c the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
-     *     and a static one.
+     * @param c            the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
+     *                     and a static one.
      * @return the object value.
      */
     public <T extends Object> T getObject(String propertyName, Class<T> c) {
         if (this.propertyBag.has(propertyName) && !this.propertyBag.isNull(propertyName)) {
             JSONObject jsonObj = this.propertyBag.getJSONObject(propertyName);
-            if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                    Boolean.class.isAssignableFrom(c) || Object.class == c) {
+            if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c)
+                    || Boolean.class.isAssignableFrom(c) || Object.class == c) {
                 // Number, String, Boolean
                 return c.cast(jsonObj);
+            } else if (Enum.class.isAssignableFrom(c)) {
+                try {
+                    c.cast(c.getMethod("valueOf", String.class).invoke(null, String.class.cast(jsonObj)));
+                } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException
+                        | NoSuchMethodException | SecurityException | JSONException e) {
+                    throw new IllegalStateException("Failed to create enum.", e);
+                }
             } else if (JsonSerializable.class.isAssignableFrom(c)) {
                 try {
-                    return c.getConstructor(String.class).newInstance(
-                        jsonObj.toString());
-                } catch (InstantiationException | IllegalAccessException
-                        | IllegalArgumentException | InvocationTargetException
-                        | NoSuchMethodException | SecurityException e) {
-                    throw new IllegalStateException(
-                            "Failed to instantiate class object.", e);
+                    return c.getConstructor(String.class).newInstance(jsonObj.toString());
+                } catch (InstantiationException | IllegalAccessException | IllegalArgumentException
+                        | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+                    throw new IllegalStateException("Failed to instantiate class object.", e);
                 }
             } else {
                 // POJO
@@ -337,24 +351,13 @@ class JsonSerializable {
         return null;
     }
 
-    private static void checkForValidPOJO(Class<?> c){
-        if (c.isAnonymousClass() || c.isLocalClass()) {
-            throw new IllegalArgumentException(
-                String.format("%s can't be an anonymous or local class.", c.getName()));
-        }
-        if (c.isMemberClass() && !Modifier.isStatic(c.getModifiers())) {
-            throw new IllegalArgumentException(
-                String.format("%s must be static if it's a member class.", c.getName()));
-        }
-    }
-
     /**
      * Gets an object collection.
      * 
-     * @param <T> the type of the objects in the collection.
+     * @param <T>          the type of the objects in the collection.
      * @param propertyName the property to get
-     * @param c the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
-     *     and a static one.
+     * @param c            the class of the object. If c is a POJO class, it must be a member (and not an anonymous or local)
+     *                     and a static one.
      * @return the object collection.
      */
     public <T extends Object> Collection<T> getCollection(String propertyName, Class<T> c) {
@@ -363,12 +366,15 @@ class JsonSerializable {
             Collection<T> result = new ArrayList<T>();
             ObjectMapper mapper = null;
             boolean isBaseClass = false;
+            boolean isEnumClass = false;
             boolean isJsonSerializable = false;
 
             // Check once.
-            if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                Boolean.class.isAssignableFrom(c) || Object.class == c) {
+            if (Number.class.isAssignableFrom(c) || String.class.isAssignableFrom(c)
+                    || Boolean.class.isAssignableFrom(c) || Object.class == c) {
                 isBaseClass = true;
+            } else if (Enum.class.isAssignableFrom(c)) {
+                isEnumClass = true;
             } else if (JsonSerializable.class.isAssignableFrom(c)) {
                 isJsonSerializable = true;
             } else {
@@ -380,15 +386,22 @@ class JsonSerializable {
                 if (isBaseClass) {
                     // Number, String, Boolean 
                     result.add(c.cast(jsonArray.get(i)));
+                } else if (isEnumClass) {
+                    try {
+                        result.add(c.cast(c.getMethod("valueOf", String.class).invoke(null,
+                                String.class.cast(jsonArray.get(i)))));
+                    } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException
+                            | NoSuchMethodException | SecurityException | JSONException e) {
+                        throw new IllegalStateException("Failed to create enum.", e);
+                    }
                 } else if (isJsonSerializable) {
                     JSONObject jsonObject = jsonArray.getJSONObject(i);
                     // JsonSerializable
                     try {
                         result.add(c.getConstructor(String.class).newInstance(jsonObject.toString()));
-                    } catch (InstantiationException | IllegalAccessException | IllegalArgumentException |
-                            InvocationTargetException | NoSuchMethodException | SecurityException e) {
-                        throw new IllegalStateException(
-                                "Failed to instantiate class object.", e);
+                    } catch (InstantiationException | IllegalAccessException | IllegalArgumentException
+                            | InvocationTargetException | NoSuchMethodException | SecurityException e) {
+                        throw new IllegalStateException("Failed to instantiate class object.", e);
                     }
                 } else {
                     JSONObject jsonObject = jsonArray.getJSONObject(i);
@@ -442,9 +455,6 @@ class JsonSerializable {
         return result;    
     }
 
-    void onSave() {
-    }
-
     /**
      * Gets the value of a property identified by an array of property names that forms the path.
      * 
@@ -466,9 +476,8 @@ class JsonSerializable {
                     if (value.getClass() != JSONObject.class) {
                         break;
                     }
-                    propBag = (JSONObject)value;
-                }
-                else {
+                    propBag = (JSONObject) value;
+                } else {
                     break;
                 }
             } while (iterator.hasNext());
@@ -485,13 +494,13 @@ class JsonSerializable {
      * Converts to an Object (only POJOs and JSONObject are supported).
      * 
      * @param <T> the type of the object.
-     * @param c the class of the object, either a POJO class or JSONObject. If c is a POJO class, it must be a member
-     *     (and not an anonymous or local) and a static one.
+     * @param c   the class of the object, either a POJO class or JSONObject. If c is a POJO class, it must be a member
+     *            (and not an anonymous or local) and a static one.
      * @return the POJO.
      */
     public <T extends Object> T toObject(Class<T> c) {
-        if (JsonSerializable.class.isAssignableFrom(c) || String.class.isAssignableFrom(c) ||
-                Number.class.isAssignableFrom(c) || Boolean.class.isAssignableFrom(c)) {
+        if (JsonSerializable.class.isAssignableFrom(c) || String.class.isAssignableFrom(c)
+                || Number.class.isAssignableFrom(c) || Boolean.class.isAssignableFrom(c)) {
             throw new IllegalArgumentException("c can only be a POJO class or JSONObject");
         }
         if (JSONObject.class.isAssignableFrom(c)) {

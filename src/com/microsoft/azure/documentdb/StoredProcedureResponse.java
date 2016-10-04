@@ -3,6 +3,9 @@ package com.microsoft.azure.documentdb;
 import java.util.Map;
 import java.util.logging.Logger;
 
+import com.microsoft.azure.documentdb.internal.DocumentServiceResponse;
+import com.microsoft.azure.documentdb.internal.HttpConstants;
+
 /**
  * Represents the response returned from a stored procedure. Wraps the response body and headers.
  */
@@ -12,7 +15,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Constructs StoredProcedureResponse.
-     * 
+     *
      * @param response the document service response.
      */
     StoredProcedureResponse(DocumentServiceResponse response) {
@@ -22,7 +25,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the Activity ID of the request.
-     * 
+     *
      * @return the activity id.
      */
     public String getActivityId() {
@@ -31,7 +34,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the token for use with session consistency requests.
-     * 
+     *
      * @return the session token.
      */
     public String getSessionToken() {
@@ -40,7 +43,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the request completion status code.
-     * 
+     *
      * @return the status code.
      */
     public int getStatusCode() {
@@ -50,7 +53,7 @@ public final class StoredProcedureResponse {
     /**
      * Gets the maximum size limit for this entity (in megabytes (MB) for server resources and in count for master
      * resources).
-     * 
+     *
      * @return the max resource quota.
      */
     public String getMaxResourceQuota() {
@@ -59,7 +62,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the current size of this entity (in megabytes (MB) for server resources and in count for master resources)
-     * 
+     *
      * @return the current resource quota usage.
      */
     public String getCurrentResourceQuotaUsage() {
@@ -68,7 +71,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the number of normalized requests charged.
-     * 
+     *
      * @return the request charge.
      */
     public double getRequestCharge() {
@@ -84,7 +87,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the headers associated with the response.
-     * 
+     *
      * @return the response headers.
      */
     public Map<String, String> getResponseHeaders() {
@@ -93,7 +96,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the response of a stored procedure, serialized into a document.
-     * 
+     *
      * @return the response as a document.
      */
     public Document getResponseAsDocument() {
@@ -102,7 +105,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the response of a stored procedure, serialized into an attachment.
-     * 
+     *
      * @return the response as an attachment.
      */
     public Attachment getResponseAsAttachment() {
@@ -111,7 +114,7 @@ public final class StoredProcedureResponse {
 
     /**
      * Gets the response of a stored procedure as a string.
-     * 
+     *
      * @return the response as a string.
      */
     public String getResponseAsString() {

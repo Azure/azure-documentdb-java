@@ -11,69 +11,55 @@ import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.theories.DataPoints;
-import org.junit.experimental.theories.FromDataPoints;
-import org.junit.experimental.theories.Theories;
-import org.junit.experimental.theories.Theory;
-import org.junit.runner.RunWith;
-
-import com.microsoft.azure.documentdb.AccessCondition;
-import com.microsoft.azure.documentdb.AccessConditionType;
-import com.microsoft.azure.documentdb.Attachment;
-import com.microsoft.azure.documentdb.ConnectionPolicy;
-import com.microsoft.azure.documentdb.ConsistencyLevel;
-import com.microsoft.azure.documentdb.DataType;
-import com.microsoft.azure.documentdb.Database;
-import com.microsoft.azure.documentdb.DatabaseAccount;
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
-import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.HashIndex;
-import com.microsoft.azure.documentdb.IncludedPath;
-import com.microsoft.azure.documentdb.Index;
-import com.microsoft.azure.documentdb.IndexKind;
-import com.microsoft.azure.documentdb.IndexingMode;
-import com.microsoft.azure.documentdb.IndexingPolicy;
-import com.microsoft.azure.documentdb.MediaOptions;
-import com.microsoft.azure.documentdb.MediaReadMode;
-import com.microsoft.azure.documentdb.Permission;
-import com.microsoft.azure.documentdb.PermissionMode;
-import com.microsoft.azure.documentdb.QueryIterable;
-import com.microsoft.azure.documentdb.RangeIndex;
-import com.microsoft.azure.documentdb.RequestOptions;
-import com.microsoft.azure.documentdb.ResourceResponse;
-import com.microsoft.azure.documentdb.SpatialIndex;
-import com.microsoft.azure.documentdb.SqlParameter;
-import com.microsoft.azure.documentdb.SqlParameterCollection;
-import com.microsoft.azure.documentdb.SqlQuerySpec;
-import com.microsoft.azure.documentdb.StoredProcedure;
-import com.microsoft.azure.documentdb.Trigger;
-import com.microsoft.azure.documentdb.TriggerOperation;
-import com.microsoft.azure.documentdb.TriggerType;
-import com.microsoft.azure.documentdb.User;
-import com.microsoft.azure.documentdb.UserDefinedFunction;
 
 final class AnotherPOJO {
     public String pojoProp = "789";
 }
 
-@RunWith(Theories.class)
-public final class GatewayTests extends GatewayTestBase {
+public final class GatewayTests extends ParameterizedGatewayTestBase {
 
-    static class StaticPOJOForTest {
-        // Jackson's readValue method supports member class only if it's static.
-        public String pojoProp = "456";
+    public GatewayTests(DocumentClient client) {
+        super(client);
     }
 
-    @DataPoints("Empty/null PartitionKey")
-    public static Object[] emptyNullPartitionKeyValues = { "partitionKey", null, Undefined.Value() };
+    private static void checkDefaultPolicyPaths(IndexingPolicy indexingPolicy) {
+        // no excluded paths
+        Assert.assertEquals(0, indexingPolicy.getExcludedPaths().size());
+        // included path should be 1 '/'
+        Assert.assertEquals(1, indexingPolicy.getIncludedPaths().size());
 
-    @DataPoints("isNameBased")
-    public static boolean[] isNameBasedValues = { true, false };
-    
+        // check default path and ts path
+        IncludedPath rootIncludedPath = null;
+        for (IncludedPath path : indexingPolicy.getIncludedPaths()) {
+            if (path.getPath().equals("/*")) {
+                rootIncludedPath = path;
+            }
+        }
+
+        // root path should exist.
+        Assert.assertNotNull(rootIncludedPath);
+        // RangeIndex for Numbers and HashIndex for Strings.
+        Assert.assertEquals(2, rootIncludedPath.getIndexes().size());
+
+        // There exists one HashIndex and one RangeIndex out of these 2 indexes.
+        HashIndex hashIndex = null;
+        RangeIndex rangeIndex = null;
+        for (Index index : rootIncludedPath.getIndexes()) {
+            if (index.getKind() == IndexKind.Hash) {
+                hashIndex = (HashIndex) index;
+            } else if (index.getKind() == IndexKind.Range) {
+                rangeIndex = (RangeIndex) index;
+            }
+        }
+        Assert.assertNotNull(hashIndex);
+        Assert.assertNotNull(rangeIndex);
+
+        // HashIndex for Strings, skipping checking for precision as that default is set at backend and can change
+        Assert.assertEquals(DataType.String, hashIndex.getDataType());
+        // RangeIndex for Numbers, skipping checking for precision as that default is set at backend and can change
+        Assert.assertEquals(DataType.Number, rangeIndex.getDataType());
+    }
+
     @Test
     public void testJsonSerialization() {
         Document document = new Document();
@@ -127,7 +113,7 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'collection2': [{'foo': 'bar'}]," +
                         "  'collection3': [{'pojoProp': '456'}]," +
                         "  'collection4': [[['ABCD']]]" +
-                "}");
+                        "}");
         Assert.assertEquals(expectedDocument.toString(), document.toString());
 
         Assert.assertEquals("456", document.getObject("child3", StaticPOJOForTest.class).pojoProp);
@@ -148,35 +134,35 @@ public final class GatewayTests extends GatewayTestBase {
         Assert.assertEquals("{\"query\":\"SELECT 1\"}", (new SqlQuerySpec("SELECT 1")).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                "{\"name\":\"@p1\",\"value\":5}" +
-                "]}",
+                        "{\"name\":\"@p1\",\"value\":5}" +
+                        "]}",
                 (new SqlQuerySpec("SELECT 1",
                         new SqlParameterCollection(new SqlParameter("@p1", 5)))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                "{\"name\":\"@p1\",\"value\":5}," +
-                "{\"name\":\"@p1\",\"value\":true}" +
-                "]}",
+                        "{\"name\":\"@p1\",\"value\":5}," +
+                        "{\"name\":\"@p1\",\"value\":true}" +
+                        "]}",
                 (new SqlQuerySpec("SELECT 1",
                         new SqlParameterCollection(new SqlParameter("@p1", 5),
                                 new SqlParameter("@p1", true)))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                "{\"name\":\"@p1\",\"value\":\"abc\"}" +
-                "]}",
+                        "{\"name\":\"@p1\",\"value\":\"abc\"}" +
+                        "]}",
                 (new SqlQuerySpec("SELECT 1",
                         new SqlParameterCollection(new SqlParameter("@p1", "abc")))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                "{\"name\":\"@p1\",\"value\":[1,2,3]}" +
-                "]}",
+                        "{\"name\":\"@p1\",\"value\":[1,2,3]}" +
+                        "]}",
                 (new SqlQuerySpec("SELECT 1",
                         new SqlParameterCollection(
-                                new SqlParameter("@p1", new int[] {1,2,3})))).toString());
+                                new SqlParameter("@p1", new int[] {1, 2, 3})))).toString());
 
         Assert.assertEquals("{\"query\":\"SELECT 1\",\"parameters\":[" +
-                "{\"name\":\"@p1\",\"value\":{\"a\":[1,2,3]}}" +
-                "]}",
+                        "{\"name\":\"@p1\",\"value\":{\"a\":[1,2,3]}}" +
+                        "]}",
                 (new SqlQuerySpec("SELECT 1",
                         new SqlParameterCollection(new SqlParameter(
                                 "@p1", new JSONObject("{\"a\":[1,2,3]}"))))).toString());
@@ -194,7 +180,7 @@ public final class GatewayTests extends GatewayTestBase {
         testDatabaseCrud(isNameBased);
     }
 
-    private void testDatabaseCrud(boolean isNameBased) throws DocumentClientException {        
+    private void testDatabaseCrud(boolean isNameBased) throws DocumentClientException {
         // Read databases.
         List<Database> databases = client.readDatabases(null).getQueryIterable().toList();
         // Create a database.
@@ -210,18 +196,18 @@ public final class GatewayTests extends GatewayTestBase {
         Assert.assertEquals(beforeCreateDatabasesCount + 1, databases.size());
         // query databases.
         databases = client.queryDatabases(new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
-                new SqlParameterCollection(new SqlParameter(
-                        "@id", databaseDefinition.getId()))),
+                        new SqlParameterCollection(new SqlParameter(
+                                "@id", databaseDefinition.getId()))),
                 null).getQueryIterable().toList();
         // number of results for the query should be > 0.
         Assert.assertTrue(databases.size() > 0);
 
         // Delete database.
-        client.deleteDatabase(getDatabaseLink(createdDb, isNameBased), null);
+        client.deleteDatabase(TestUtils.getDatabaseLink(createdDb, isNameBased), null);
 
         // Read database after deletion.
         try {
-            client.readDatabase(getDatabaseLink(createdDb, isNameBased), null);
+            client.readDatabase(TestUtils.getDatabaseLink(createdDb, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -242,27 +228,27 @@ public final class GatewayTests extends GatewayTestBase {
     }
 
     private void testCollectionCrud(boolean isNameBased) throws DocumentClientException {
-        List<DocumentCollection> collections = client.readCollections(getDatabaseLink(this.databaseForTest, isNameBased),
+        List<DocumentCollection> collections = client.readCollections(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 null).getQueryIterable().toList();
         // Create a collection.
         int beforeCreateCollectionsCount = collections.size();
 
         IndexingPolicy consistentPolicy = new IndexingPolicy("{'indexingMode': 'Consistent'}");
         DocumentCollection collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId(GatewayTests.getUID());
+        collectionDefinition.setId(TestUtils.getUID());
         collectionDefinition.setIndexingPolicy(consistentPolicy);
-        DocumentCollection createdCollection = client.createCollection(getDatabaseLink(this.databaseForTest, isNameBased),
+        DocumentCollection createdCollection = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 collectionDefinition,
                 null).getResource();
         Assert.assertEquals(collectionDefinition.getId(), createdCollection.getId());
         Assert.assertEquals(IndexingMode.Consistent, createdCollection.getIndexingPolicy().getIndexingMode());
 
         // Read collections after creation.
-        collections = client.readCollections(getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
+        collections = client.readCollections(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         // Create should increase the number of collections.
         Assert.assertEquals(collections.size(), beforeCreateCollectionsCount + 1);
         // Query collections.
-        collections = client.queryCollections(getDatabaseLink(this.databaseForTest, isNameBased),
+        collections = client.queryCollections(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter(
                                 "@id", collectionDefinition.getId()))),
@@ -277,7 +263,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Replacing collection Id should fail.
         try {
-            createdCollection.setId(GatewayTests.getUID());
+            createdCollection.setId(TestUtils.getUID());
             client.replaceCollection(createdCollection, null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
@@ -290,22 +276,22 @@ public final class GatewayTests extends GatewayTestBase {
         createdCollection.setId(collectionDefinition.getId());
 
         // Delete collection.
-        client.deleteCollection(getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
+        client.deleteCollection(TestUtils.getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
         // Read collection after deletion.
 
         try {
-            client.readCollection(getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
+            client.readCollection(TestUtils.getDocumentCollectionLink(this.databaseForTest, createdCollection, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
     }
-    
+
     @Test
     public void testSpatialIndex() throws DocumentClientException {
         DocumentCollection collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId(GatewayTests.getUID());
+        collectionDefinition.setId(TestUtils.getUID());
         IndexingPolicy indexingPolicy = new IndexingPolicy();
         IncludedPath includedPath1 = new IncludedPath();
         includedPath1.setPath("/\"Location\"/?");
@@ -411,7 +397,7 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'indexingPolicy': {" +
                         "    'indexingMode': 'lazy'" +
                         "  }" +
-                "}");
+                        "}");
         client.deleteCollection(this.collectionForTest.getSelfLink(), null);
         DocumentCollection lazyCollection = client.createCollection(this.databaseForTest.getSelfLink(),
                 lazyCollectionDefinition,
@@ -425,7 +411,7 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'indexingPolicy': {" +
                         "    'indexingMode': 'Consistent'" +
                         "  }" +
-                "}");
+                        "}");
         client.deleteCollection(lazyCollection.getSelfLink(), null);
         DocumentCollection consistentCollection = client.createCollection(this.databaseForTest.getSelfLink(),
                 consistentCollectionDefinition,
@@ -439,7 +425,7 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'indexingPolicy': {" +
                         "    'automatic': true," +
                         "    'indexingMode': 'Consistent'," +
-                        "    'includedPaths': ["+
+                        "    'includedPaths': [" +
                         "      {" +
                         "        'path': '/'," +
                         "        'indexes': [" +
@@ -457,10 +443,10 @@ public final class GatewayTests extends GatewayTestBase {
                         "      }" +
                         "    ]" +
                         "  }" +
-                "}");
+                        "}");
 
         // Change the index using the setter.
-        HashIndex indexToChange = (HashIndex)(
+        HashIndex indexToChange = (HashIndex) (
                 collectionDefinition.getIndexingPolicy().getIncludedPaths().iterator().next().getIndexes().iterator().next());
         indexToChange.setDataType(DataType.String);
         indexToChange.setPrecision(3);
@@ -489,14 +475,14 @@ public final class GatewayTests extends GatewayTestBase {
     public void testCreateDefaultPolicy() throws DocumentClientException {
         // no indexing policy specified
         DocumentCollection collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setId("TestCreateDefaultPolicy" + TestUtils.getUID());
         DocumentCollection collection = client.createCollection(
                 this.databaseForTest.getSelfLink(), collectionDefinition, null).getResource();
         GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
 
         // partial policy specified
         collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setId("TestCreateDefaultPolicy" + TestUtils.getUID());
         collectionDefinition.getIndexingPolicy().setIndexingMode(IndexingMode.Lazy);
         collectionDefinition.getIndexingPolicy().setAutomatic(true);
 
@@ -506,7 +492,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // default policy
         collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setId("TestCreateDefaultPolicy" + TestUtils.getUID());
         collectionDefinition.setIndexingPolicy(new IndexingPolicy());
 
         collection = client.createCollection(
@@ -515,7 +501,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // missing indexes
         collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setId("TestCreateDefaultPolicy" + TestUtils.getUID());
         collectionDefinition.setIndexingPolicy(new IndexingPolicy());
         IncludedPath includedPath = new IncludedPath();
         includedPath.setPath("/*");
@@ -527,7 +513,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // missing precision
         collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId("TestCreateDefaultPolicy" + GatewayTests.getUID());
+        collectionDefinition.setId("TestCreateDefaultPolicy" + TestUtils.getUID());
         collectionDefinition.setIndexingPolicy(new IndexingPolicy());
         includedPath = new IncludedPath();
         includedPath.setPath("/*");
@@ -542,44 +528,6 @@ public final class GatewayTests extends GatewayTestBase {
         GatewayTests.checkDefaultPolicyPaths(collection.getIndexingPolicy());
     }
 
-    private static void checkDefaultPolicyPaths(IndexingPolicy indexingPolicy) {
-        // no excluded paths            
-        Assert.assertEquals(0, indexingPolicy.getExcludedPaths().size());
-        // included path should be 1 '/'
-        Assert.assertEquals(1, indexingPolicy.getIncludedPaths().size());
-
-        // check default path and ts path
-        IncludedPath rootIncludedPath = null;
-        for (IncludedPath path : indexingPolicy.getIncludedPaths()) {
-            if (path.getPath().equals("/*")) {
-                rootIncludedPath = path;
-            }
-        }
-
-        // root path should exist.
-        Assert.assertNotNull(rootIncludedPath);
-        // RangeIndex for Numbers and HashIndex for Strings.
-        Assert.assertEquals(2, rootIncludedPath.getIndexes().size());
-
-        // There exists one HashIndex and one RangeIndex out of these 2 indexes.
-        HashIndex hashIndex = null;
-        RangeIndex rangeIndex = null;
-        for (Index index : rootIncludedPath.getIndexes()) {
-            if (index.getKind() == IndexKind.Hash) {
-                hashIndex = (HashIndex)index;
-            } else if (index.getKind() == IndexKind.Range) {
-                rangeIndex = (RangeIndex)index;
-            }
-        }
-        Assert.assertNotNull(hashIndex);
-        Assert.assertNotNull(rangeIndex);
-
-        // HashIndex for Strings, skipping checking for precision as that default is set at backend and can change
-        Assert.assertEquals(DataType.String, hashIndex.getDataType());
-        // RangeIndex for Numbers, skipping checking for precision as that default is set at backend and can change
-        Assert.assertEquals(DataType.Number, rangeIndex.getDataType());
-    }
-
     @Test
     public void testIndexingPolicyOverrides() throws DocumentClientException {
 
@@ -591,7 +539,7 @@ public final class GatewayTests extends GatewayTestBase {
         IndexingPolicy indexingPolicy = new IndexingPolicy(indexes);
 
         DocumentCollection collection = new DocumentCollection();
-        collection.setId(GatewayTests.getUID());
+        collection.setId(TestUtils.getUID());
         collection.setIndexingPolicy(indexingPolicy);
 
         DocumentCollection createdCollection = client.createCollection(this.databaseForTest.getSelfLink(), collection, null).getResource();
@@ -613,11 +561,11 @@ public final class GatewayTests extends GatewayTestBase {
         SpatialIndex spatialIndex = null;
         for (Index index : rootIncludedPath.getIndexes()) {
             if (index.getKind() == IndexKind.Hash) {
-                hashIndex = (HashIndex)index;
+                hashIndex = (HashIndex) index;
             } else if (index.getKind() == IndexKind.Range) {
-                rangeIndex = (RangeIndex)index;
+                rangeIndex = (RangeIndex) index;
             } else if (index.getKind() == IndexKind.Spatial) {
-                spatialIndex = (SpatialIndex)index;
+                spatialIndex = (SpatialIndex) index;
             }
         }
         Assert.assertNotNull(hashIndex);
@@ -665,27 +613,27 @@ public final class GatewayTests extends GatewayTestBase {
     private void testDocumentCrud(boolean isNameBased) throws DocumentClientException {
 
         // Read documents.
-        List<Document> documents = client.readDocuments(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        List<Document> documents = this.client.readDocuments(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null).getQueryIterable().toList();
         Assert.assertEquals(0, documents.size());
+
         // create a document
         Document documentDefinition = new Document(
                 "{" +
                         "  'name': 'sample document'," +
                         "  'foo': 'bar Ã¤Â½Â Ã¥Â¥Â½'," +  // foo contains some UTF-8 characters.
                         "  'key': 'value'" +
-                "}");
+                        "}");
 
         // Should throw an error because automatic id generation is disabled.
         try {
-            client.createDocument(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), documentDefinition, null, true);
+            this.client.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), documentDefinition, null, true);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(400, e.getStatusCode());
-            Assert.assertEquals("BadRequest", e.getError().getCode());
         }
 
-        Document document = client.createDocument(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        Document document = this.client.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 documentDefinition,
                 null,
                 false).getResource();
@@ -694,23 +642,34 @@ public final class GatewayTests extends GatewayTestBase {
         Assert.assertEquals(documentDefinition.getString("bar"), document.getString("bar"));
         Assert.assertNotNull(document.getId());
 
+        // create a document using upsert
+        documentDefinition.setId(TestUtils.getUID());
+        Document document2 = this.client.upsertDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                documentDefinition,
+                null,
+                true).getResource();
+        Assert.assertEquals(documentDefinition.getString("name"), document2.getString("name"));
+        Assert.assertEquals(documentDefinition.getString("foo"), document2.getString("foo"));
+        Assert.assertEquals(documentDefinition.getString("bar"), document2.getString("bar"));
+        Assert.assertNotNull(document2.getId());
+
         // Read documents after creation.
-        documents = client.readDocuments(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
+        documents = this.client.readDocuments(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
         // Create should increase the number of documents.
-        Assert.assertEquals(1, documents.size());
+        Assert.assertEquals(2, documents.size());
 
         // Query documents.
-        documents = client.queryDocuments(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        documents = this.client.queryDocuments(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.name=@id",
                         new SqlParameterCollection(new SqlParameter(
                                 "@id", documentDefinition.getString("name")))),
                 null).getQueryIterable().toList();
-        Assert.assertEquals(1, documents.size());
+        Assert.assertEquals(2, documents.size());
 
         // Replace document.
         document.set("name", "replaced document");
         document.set("foo", "not bar");
-        Document replacedDocument = client.replaceDocument(document, null).getResource();
+        Document replacedDocument = this.client.replaceDocument(document, null).getResource();
         // Document id property should change.
         Assert.assertEquals("replaced document", replacedDocument.getString("name"));
         // Property should have changed.
@@ -718,24 +677,24 @@ public final class GatewayTests extends GatewayTestBase {
         // Document id should stay the same.
         Assert.assertEquals(document.getId(), replacedDocument.getId());
         // Read document.
-        Document oneDocumentFromRead = client.readDocument(getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null).getResource();
+        Document oneDocumentFromRead = this.client.readDocument(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null).getResource();
         Assert.assertEquals(replacedDocument.getId(), oneDocumentFromRead.getId());
 
         AccessCondition accessCondition = new AccessCondition();
-        accessCondition.setCondition(oneDocumentFromRead.getETag()) ;
+        accessCondition.setCondition(oneDocumentFromRead.getETag());
         accessCondition.setType(AccessConditionType.IfNoneMatch);
 
         RequestOptions options = new RequestOptions();
         options.setAccessCondition(accessCondition);
-        ResourceResponse<Document> rr = client.readDocument(getDocumentLink(this.databaseForTest, this.collectionForTest, oneDocumentFromRead, isNameBased), options);
+        ResourceResponse<Document> rr = this.client.readDocument(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, oneDocumentFromRead, isNameBased), options);
         Assert.assertEquals(rr.getStatusCode(), HttpStatus.SC_NOT_MODIFIED);
 
         // delete document
-        client.deleteDocument(getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
+        this.client.deleteDocument(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
 
         // read documents after deletion
         try {
-            client.readDocument(getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
+            this.client.readDocument(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, replacedDocument, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
@@ -762,29 +721,29 @@ public final class GatewayTests extends GatewayTestBase {
         // Read documents and get initial count
         List<Document> documents = client
                 .readDocuments(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         int initialDocumentCount = documents.size();
 
         // Create a document definition
         Document documentDefinition = new Document(
-                "{" + 
-                        "  'name': 'sample document'," + 
-                        "  'key': 'value'" + 
-                "}");
+                "{" +
+                        "  'name': 'sample document'," +
+                        "  'key': 'value'" +
+                        "}");
 
         // Upsert should create the document with the definition
         Document createdDocument = client.upsertDocument(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 documentDefinition, null, false).getResource();
 
         // Read documents to check the count and it should increase
         documents = client
                 .readDocuments(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialDocumentCount + 1, documents.size());
 
         // Update document.
@@ -793,7 +752,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Upsert should replace the existing document since Id exists
         Document upsertedDocument = client.upsertDocument(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
                 null, true).getResource();
 
         // Document id should stay the same.
@@ -806,17 +765,17 @@ public final class GatewayTests extends GatewayTestBase {
         // Documents count should remain the same
         documents = client
                 .readDocuments(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialDocumentCount + 1, documents.size());
 
         // Update document id
-        createdDocument.setId(GatewayTests.getUID());
+        createdDocument.setId(TestUtils.getUID());
 
         // Upsert should create new document
         Document newDocument = client.upsertDocument(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), createdDocument,
                 null, true).getResource();
 
         // Verify id property
@@ -825,70 +784,32 @@ public final class GatewayTests extends GatewayTestBase {
         // Read documents after upsert to check the count and it should increase
         documents = client
                 .readDocuments(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialDocumentCount + 2, documents.size());
 
         // Delete documents
         client.deleteDocument(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, upsertedDocument, isNameBased),
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, upsertedDocument, isNameBased),
                 null);
         client.deleteDocument(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, newDocument, isNameBased), null);
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, newDocument, isNameBased), null);
 
         // Read documents after delete to check the count and it should be back to original
         documents = client
                 .readDocuments(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialDocumentCount, documents.size());
-    }
-
-    class TestPOJOInner {
-        public int intProperty;
-
-        public TestPOJOInner(int i) {
-            this.intProperty = i;
-        }
-    }
-
-    class TestPOJO {
-
-        private String privateStringProperty;
-
-        public String id;
-        public int intProperty;
-        public String  stringProperty;
-        public TestPOJOInner objectProperty;
-        public List<String>  stringList;
-        public String[]  stringArray;
-
-        public TestPOJO(int i) {
-            this.intProperty = i;
-
-            this.stringList = new ArrayList<String>();
-            this.stringList.add("ONE");
-            this.stringList.add("TWO");
-            this.stringList.add("THREE");
-
-            this.stringArray = new String[] { "One", "Two", "Three" };
-        }
-
-        public String getPrivateStringProperty() {
-            return this.privateStringProperty;
-        }
-        public void setPrivateStringProperty(String value) {
-            this.privateStringProperty = value;
-        }
     }
 
     @Test
     public void testPOJODocumentCrud() throws DocumentClientException {
 
         TestPOJO testPojo = new TestPOJO(10);
-        testPojo.id= "MyPojoObejct" + GatewayTests.getUID();
+        testPojo.id = "MyPojoObejct" + TestUtils.getUID();
         testPojo.stringProperty = "testString";
         testPojo.objectProperty = new TestPOJOInner(100);
         testPojo.setPrivateStringProperty("testStringAccess");
@@ -942,13 +863,13 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'id': 'sample document'," +
                         "  'foo': 'bar'," +
                         "  'key': 'value'" +
-                "}");
-        Document document = client.createDocument(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        "}");
+        Document document = this.client.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 documentDefinition,
                 null,
                 false).getResource();
         // List all attachments.
-        List<Attachment> attachments = client.readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+        List<Attachment> attachments = this.client.readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 null).getQueryIterable().toList();
         Assert.assertEquals(0, attachments.size());
 
@@ -962,7 +883,7 @@ public final class GatewayTests extends GatewayTestBase {
         // Create attachment with invalid content type.
         ReadableStream mediaStream = new ReadableStream("stream content.");
         try {
-            client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, invalidMediaOptions);
+            this.client.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, invalidMediaOptions);
             Assert.assertTrue(false);  // This line shouldn't execute.
         } catch (DocumentClientException e) {
             Assert.assertEquals(400, e.getStatusCode());
@@ -971,7 +892,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Create attachment with valid content type.
         mediaStream = new ReadableStream("stream content.");
-        Attachment validAttachment = client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+        Attachment validAttachment = this.client.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 mediaStream,
                 validMediaOptions).getResource();
         Assert.assertEquals("attachment id", validAttachment.getId());
@@ -979,7 +900,7 @@ public final class GatewayTests extends GatewayTestBase {
         mediaStream = new ReadableStream("stream content");
         // Create colliding attachment.
         try {
-            client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, validMediaOptions);
+            this.client.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream, validMediaOptions);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(409, e.getStatusCode());
@@ -995,8 +916,8 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'Author': 'My Book Author'," +
                         "  'Title': 'My Book Title'," +
                         "  'contentType': 'application/text'" +
-                "}");
-        Attachment attachment = client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                        "}");
+        Attachment attachment = this.client.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 attachmentDefinition,
                 null).getResource();
         Assert.assertEquals("Book", attachment.getString("MediaType"));
@@ -1005,57 +926,57 @@ public final class GatewayTests extends GatewayTestBase {
         // List all attachments.
         FeedOptions fo = new FeedOptions();
         fo.setPageSize(1);
-        attachments = client.readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo).getQueryIterable().toList();
+        attachments = this.client.readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo).getQueryIterable().toList();
         Assert.assertEquals(2, attachments.size());
         attachment.set("Author", "new author");
 
         // Replace the attachment.
-        client.replaceAttachment(attachment, null);
+        this.client.replaceAttachment(attachment, null);
         Assert.assertEquals("Book", attachment.getString("MediaType"));
         Assert.assertEquals("new author", attachment.getString("Author"));
         // Read attachment media.
-        InputStream mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("stream content.", GatewayTestBase.getStringFromInputStream(mediaResponse));
+        InputStream mediaResponse = this.client.readMedia(validAttachment.getMediaLink()).getMedia();
+        Assert.assertEquals("stream content.", TestUtils.getStringFromInputStream(mediaResponse));
 
         mediaStream = new ReadableStream("updated stream content");
         // Update attachment media.
-        client.updateMedia(validAttachment.getMediaLink(), mediaStream, validMediaOptions);
+        this.client.updateMedia(validAttachment.getMediaLink(), mediaStream, validMediaOptions);
 
         // Read attachment media after update.
         // read media buffered (default).
-        mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("updated stream content", GatewayTestBase.getStringFromInputStream(mediaResponse));
+        mediaResponse = this.client.readMedia(validAttachment.getMediaLink()).getMedia();
+        Assert.assertEquals("updated stream content", TestUtils.getStringFromInputStream(mediaResponse));
 
         // read media streamed, should still work.
         ConnectionPolicy streamPolicy = new ConnectionPolicy();
         streamPolicy.setMediaReadMode(MediaReadMode.Streamed);
-        client = new DocumentClient(HOST, MASTER_KEY, streamPolicy, ConsistencyLevel.Session);
-        mediaResponse = client.readMedia(validAttachment.getMediaLink()).getMedia();
-        Assert.assertEquals("updated stream content", GatewayTestBase.getStringFromInputStream(mediaResponse));
+        DocumentClient mediaClient = new DocumentClient(HOST, MASTER_KEY, streamPolicy, ConsistencyLevel.Session);
+        mediaResponse = mediaClient.readMedia(validAttachment.getMediaLink()).getMedia();
+        Assert.assertEquals("updated stream content", TestUtils.getStringFromInputStream(mediaResponse));
 
         // Share attachment with a second document.
         documentDefinition = new Document("{'id': 'document 2'}");
-        document = client.createDocument(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        document = mediaClient.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 documentDefinition,
                 null,
                 false).getResource();
         String secondAttachmentJson = String.format("{" +
-                "  'id': '%s'," +
-                "  'contentType': '%s'," +
-                "  'media': '%s'," +
-                " }",
+                        "  'id': '%s'," +
+                        "  'contentType': '%s'," +
+                        "  'media': '%s'," +
+                        " }",
                 validAttachment.getId(),
                 validAttachment.getContentType(),
                 validAttachment.getMediaLink());
         Attachment secondAttachmentDefinition = new Attachment(secondAttachmentJson);
-        attachment = client.createAttachment(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), secondAttachmentDefinition, null).getResource();
+        attachment = mediaClient.createAttachment(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), secondAttachmentDefinition, null).getResource();
         Assert.assertEquals(validAttachment.getId(), attachment.getId());
         Assert.assertEquals(validAttachment.getMediaLink(), attachment.getMediaLink());
         Assert.assertEquals(validAttachment.getContentType(), attachment.getContentType());
         // Deleting attachment.
-        client.deleteAttachment(getAttachmentLink(this.databaseForTest, this.collectionForTest, document, attachment, isNameBased), null);
+        mediaClient.deleteAttachment(TestUtils.getAttachmentLink(this.databaseForTest, this.collectionForTest, document, attachment, isNameBased), null);
         // read attachments after deletion
-        attachments = client.readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null).getQueryIterable().toList();
+        attachments = mediaClient.readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(0, attachments.size());
     }
 
@@ -1096,48 +1017,48 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Create document definition
         Document documentDefinition = new Document(
-                "{" +  
-                        "  'name': 'document'," + 
-                        "  'key': 'value'" + 
-                "}");
+                "{" +
+                        "  'name': 'document'," +
+                        "  'key': 'value'" +
+                        "}");
 
         // Create document
         Document document = client.createDocument(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 documentDefinition, null, false).getResource();
 
         // Read attachments and get initial count
         List<Attachment> attachments = client
                 .readAttachments(
-                        getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
+                        TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         int initialAttachmentCount = attachments.size();
 
         // Set MediaOptions
         MediaOptions mediaOptions = new MediaOptions();
         mediaOptions.setSlug("attachment id");
         mediaOptions.setContentType("application/text");
-        
+
         // Set Feed Options
         FeedOptions fo = new FeedOptions();
         fo.setPageSize(1);
-        
+
         // Initialize media stream
         ReadableStream mediaStream = new ReadableStream("stream content.");
 
         // Upsert should create the attachment
         Attachment createdMediaStreamAttachment = client.upsertAttachment(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
                 mediaOptions).getResource();
-        
+
         Assert.assertEquals("attachment id", createdMediaStreamAttachment.getId());
-        
+
         // Read attachments to check the count and it should increase
         attachments = client
-                .readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount + 1, attachments.size());
 
         // Update MediaOptions
@@ -1146,32 +1067,32 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Upsert should create new attachment
         Attachment newMediaStreamAttachment = client.upsertAttachment(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), mediaStream,
                 mediaOptions).getResource();
-        
+
         Assert.assertEquals("new attachment id", newMediaStreamAttachment.getId());
 
         // Read attachments to check the count and it should increase
         attachments = client
-                .readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount + 2, attachments.size());
 
         // Create attachment definition with media link.
         Attachment attachmentDefinition = new Attachment(
-                "{" + 
+                "{" +
                         "  'id': 'dynamic attachment'," +
-                        "  'media': 'http://xstore.'," + 
-                        "  'MediaType': 'Book'," + 
+                        "  'media': 'http://xstore.'," +
+                        "  'MediaType': 'Book'," +
                         "  'Author': 'My Book Author'," +
-                        "  'Title': 'My Book Title'," + 
-                        "  'contentType': 'application/text'" + 
-                "}");
+                        "  'Title': 'My Book Title'," +
+                        "  'contentType': 'application/text'" +
+                        "}");
 
-        // Upsert should create the attachment 
+        // Upsert should create the attachment
         Attachment createdDynamicAttachment = client.upsertAttachment(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 attachmentDefinition, null).getResource();
 
         // Verify id property
@@ -1179,9 +1100,9 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Read all attachments and verify the count increase
         attachments = client
-                .readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount + 3, attachments.size());
 
         // Update attachment
@@ -1189,7 +1110,7 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Upsert should replace the existing attachment since Id exists
         Attachment upsertedDynamicAttachment = client.upsertAttachment(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 createdDynamicAttachment, null).getResource();
 
         // Verify id property
@@ -1200,17 +1121,17 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Read all attachments and verify the count remains the same
         attachments = client
-                .readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                .readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount + 3, attachments.size());
 
         // Change id property
-        createdDynamicAttachment.setId(GatewayTests.getUID());
+        createdDynamicAttachment.setId(TestUtils.getUID());
 
         // Upsert should create new attachment
         Attachment newDynamicAttachment = client.upsertAttachment(
-                getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
+                TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased),
                 createdDynamicAttachment, null).getResource();
 
         // Verify id property
@@ -1219,26 +1140,26 @@ public final class GatewayTests extends GatewayTestBase {
         // Read all attachments and verify the count increases
         attachments = client
                 .readAttachments(
-                        getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
+                        TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), fo)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount + 4, attachments.size());
 
         // Deleting attachments.
-        client.deleteAttachment(getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+        client.deleteAttachment(TestUtils.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
                 createdMediaStreamAttachment, isNameBased), null);
-        client.deleteAttachment(getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+        client.deleteAttachment(TestUtils.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
                 newMediaStreamAttachment, isNameBased), null);
-        client.deleteAttachment(getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+        client.deleteAttachment(TestUtils.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
                 upsertedDynamicAttachment, isNameBased), null);
-        client.deleteAttachment(getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
+        client.deleteAttachment(TestUtils.getAttachmentLink(this.databaseForTest, this.collectionForTest, document,
                 newDynamicAttachment, isNameBased), null);
 
         // read attachments after deletion and verify count remains the same
         attachments = client
-                .readAttachments(getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
+                .readAttachments(TestUtils.getDocumentLink(this.databaseForTest, this.collectionForTest, document, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialAttachmentCount, attachments.size());
     }
 
@@ -1258,11 +1179,11 @@ public final class GatewayTests extends GatewayTestBase {
 
         // create..
         Trigger triggerDef = new Trigger();
-        triggerDef.setId(GatewayTests.getUID());
+        triggerDef.setId(TestUtils.getUID());
         triggerDef.setTriggerType(TriggerType.Pre);
         triggerDef.setTriggerOperation(TriggerOperation.All);
         triggerDef.setBody("function() {var x = 10;}");
-        Trigger newTrigger = client.createTrigger(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        Trigger newTrigger = client.createTrigger(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 triggerDef,
                 null).getResource();
         Assert.assertNotNull(newTrigger.getBody());
@@ -1275,19 +1196,19 @@ public final class GatewayTests extends GatewayTestBase {
 
         Document document = new Document();
         document.setId("noname");
-        client.createDocument(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), document, options, false);
+        client.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), document, options, false);
 
         // replace...
-        String id = GatewayTests.getUID();
+        String id = TestUtils.getUID();
         newTrigger.setId(id);
 
         newTrigger = client.replaceTrigger(newTrigger, null).getResource();
         Assert.assertEquals(newTrigger.getId(), id);
 
-        newTrigger = client.readTrigger(getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null).getResource();
+        newTrigger = client.readTrigger(TestUtils.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null).getResource();
 
         // read triggers:
-        List<Trigger> triggers = client.readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        List<Trigger> triggers = client.readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null).getQueryIterable().toList();
         if (triggers.size() > 0) {
             //
@@ -1295,7 +1216,7 @@ public final class GatewayTests extends GatewayTestBase {
             Assert.fail("Readfeeds fail to find trigger");
         }
 
-        triggers = client.queryTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        triggers = client.queryTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(
                                 new SqlParameter("@id", newTrigger.getId()))),
@@ -1306,7 +1227,7 @@ public final class GatewayTests extends GatewayTestBase {
             Assert.fail("Query fail to find trigger");
         }
 
-        client.deleteTrigger(getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null);
+        client.deleteTrigger(TestUtils.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased), null);
     }
 
     // Upsert test for Trigger resource - self link version
@@ -1327,86 +1248,86 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Read triggers and get initial count
         List<Trigger> triggers = client
-                .readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                .readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                         null)
                 .getQueryIterable().toList();
-        
+
         int initialTriggerCount = triggers.size();
 
         // Create trigger definition
         Trigger triggerDefinition = new Trigger();
-        triggerDefinition.setId(GatewayTests.getUID());
+        triggerDefinition.setId(TestUtils.getUID());
         triggerDefinition.setTriggerType(TriggerType.Pre);
         triggerDefinition.setTriggerOperation(TriggerOperation.All);
         triggerDefinition.setBody("function() {var x = 10;}");
 
         // Upsert should create the trigger
         Trigger createdTrigger = client.upsertTrigger(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 triggerDefinition, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(triggerDefinition.getId(), createdTrigger.getId());
-        
+
         // Read triggers to check the count and it should increase
-        triggers = client.readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        null)
+        triggers = client.readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialTriggerCount + 1, triggers.size());
 
         // Update trigger
         createdTrigger.setTriggerOperation(TriggerOperation.Update);
         createdTrigger.setBody("function() {var x = 20;}");
-        
+
         // Upsert should replace the trigger since it already exists
         Trigger upsertedTrigger = client.upsertTrigger(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdTrigger, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdTrigger.getId(), upsertedTrigger.getId());
-        
+
         // Verify updated property
         Assert.assertEquals(createdTrigger.getTriggerOperation(), upsertedTrigger.getTriggerOperation());
         Assert.assertEquals(createdTrigger.getBody(), upsertedTrigger.getBody());
-        
+
         // Read triggers to check the count and it should remain the same
-        triggers = client.readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        null)
+        triggers = client.readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialTriggerCount + 1, triggers.size());
-        
+
         // Update trigger id
-        createdTrigger.setId(GatewayTests.getUID());
-        
+        createdTrigger.setId(TestUtils.getUID());
+
         // Upsert should create new trigger since id is changed
         Trigger newTrigger = client.upsertTrigger(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdTrigger, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdTrigger.getId(), newTrigger.getId());
-        
+
         // Read triggers to check the count and it should increase
-        triggers = client.readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        null)
+        triggers = client.readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
                 .getQueryIterable().toList();
-        
-        Assert.assertEquals(initialTriggerCount + 2, triggers.size());        
+
+        Assert.assertEquals(initialTriggerCount + 2, triggers.size());
 
         // Delete triggers
-        client.deleteTrigger(getTriggerLink(this.databaseForTest, this.collectionForTest, upsertedTrigger, isNameBased),
+        client.deleteTrigger(TestUtils.getTriggerLink(this.databaseForTest, this.collectionForTest, upsertedTrigger, isNameBased),
                 null);
-        client.deleteTrigger(getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased),
+        client.deleteTrigger(TestUtils.getTriggerLink(this.databaseForTest, this.collectionForTest, newTrigger, isNameBased),
                 null);
-        
+
         // Read triggers to check the count and it should remain same
-        triggers = client.readTriggers(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        null)
+        triggers = client.readTriggers(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialTriggerCount, triggers.size());
     }
 
@@ -1426,26 +1347,26 @@ public final class GatewayTests extends GatewayTestBase {
 
         // create..
         StoredProcedure storedProcedureDef = new StoredProcedure();
-        storedProcedureDef.setId(GatewayTests.getUID());
+        storedProcedureDef.setId(TestUtils.getUID());
         storedProcedureDef.setBody("function() {var x = 10;}");
 
-        StoredProcedure newStoredProcedure = client.createStoredProcedure(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        StoredProcedure newStoredProcedure = client.createStoredProcedure(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 storedProcedureDef,
                 null).getResource();
         Assert.assertNotNull(newStoredProcedure.getBody());
         Assert.assertNotNull(newStoredProcedure.getETag());
 
         // replace...
-        String id = GatewayTests.getUID();
+        String id = TestUtils.getUID();
         newStoredProcedure.setId(id);
 
         newStoredProcedure = client.replaceStoredProcedure(newStoredProcedure, null).getResource();
         Assert.assertEquals(newStoredProcedure.getId(), id);
 
-        newStoredProcedure = client.readStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null).getResource();
+        newStoredProcedure = client.readStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null).getResource();
 
         // read storedProcedures:
-        List<StoredProcedure> storedProcedures = client.readStoredProcedures(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        List<StoredProcedure> storedProcedures = client.readStoredProcedures(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null).getQueryIterable().toList();
         if (storedProcedures.size() > 0) {
             //
@@ -1453,20 +1374,20 @@ public final class GatewayTests extends GatewayTestBase {
             Assert.fail("Readfeeds fail to find StoredProcedure");
         }
 
-        storedProcedures = client.queryStoredProcedures(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
+        storedProcedures = client.queryStoredProcedures(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter(
                                 "@id", newStoredProcedure.getId()))),
-                 null).getQueryIterable().toList();
+                null).getQueryIterable().toList();
         if (storedProcedures.size() > 0) {
             //
         } else {
             Assert.fail("Query fail to find StoredProcedure");
         }
 
-        client.deleteStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null);
+        client.deleteStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, newStoredProcedure, isNameBased), null);
     }
-    
+
     // Upsert test for StoredProcedure resource - self link version
     @Test
     public void testStoredProcedureUpsert_SelfLink() throws DocumentClientException {
@@ -1482,89 +1403,89 @@ public final class GatewayTests extends GatewayTestBase {
     }
 
     private void testStoredProcedureUpsert(boolean isNameBased) throws DocumentClientException {
-        
+
         // Read sprocs and get initial count
         List<StoredProcedure> sprocs = client
-                .readStoredProcedures(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                .readStoredProcedures(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                         null)
                 .getQueryIterable().toList();
-        
+
         int initialStoredProcedureCount = sprocs.size();
-        
+
         // Create stored procedure definition
         StoredProcedure storedProcedureDefinition = new StoredProcedure();
-        storedProcedureDefinition.setId(GatewayTests.getUID());
+        storedProcedureDefinition.setId(TestUtils.getUID());
         storedProcedureDefinition.setBody("function() {var x = 10;}");
 
         // Upsert should create the sproc
         StoredProcedure createdStoredProcedure = client.upsertStoredProcedure(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 storedProcedureDefinition, null).getResource();
-        
+
         // Verify Id property
         Assert.assertEquals(storedProcedureDefinition.getId(), createdStoredProcedure.getId());
 
         // Read sprocs to check the count and it should increase
         sprocs = client
                 .readStoredProcedures(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialStoredProcedureCount + 1, sprocs.size());
-        
+
         // Update sproc
         createdStoredProcedure.setBody("function() {var x = 20;}");
-        
+
         // Upsert should replace the sproc
         StoredProcedure upsertedStoredProcedure = client.upsertStoredProcedure(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdStoredProcedure, null).getResource();
-        
+
         // Verify Id property
         Assert.assertEquals(createdStoredProcedure.getId(), upsertedStoredProcedure.getId());
-        
+
         // Verify updated property
         Assert.assertEquals(createdStoredProcedure.getBody(), upsertedStoredProcedure.getBody());
 
         // Read the sprocs and the count should remain the same
         sprocs = client
                 .readStoredProcedures(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialStoredProcedureCount + 1, sprocs.size());
-        
+
         // Update sproc id
-        createdStoredProcedure.setId(GatewayTests.getUID());
-        
+        createdStoredProcedure.setId(TestUtils.getUID());
+
         // Upsert should create the sproc since id is changed
         StoredProcedure newStoredProcedure = client.upsertStoredProcedure(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdStoredProcedure, null).getResource();
-        
+
         // Verify Id property
         Assert.assertEquals(createdStoredProcedure.getId(), newStoredProcedure.getId());
 
         // Read the sprocs and the count should increase
         sprocs = client
                 .readStoredProcedures(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialStoredProcedureCount + 2, sprocs.size());
-        
+
         // Delete sprocs
-        client.deleteStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
+        client.deleteStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
                 upsertedStoredProcedure, isNameBased), null);
-        client.deleteStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
+        client.deleteStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest,
                 newStoredProcedure, isNameBased), null);
-        
+
         // Read the sprocs and the count should remain the same
         sprocs = client
                 .readStoredProcedures(
-                        getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
+                        TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialStoredProcedureCount, sprocs.size());
     }
 
@@ -1586,19 +1507,19 @@ public final class GatewayTests extends GatewayTestBase {
         StoredProcedure sproc1 = new StoredProcedure(
                 "{" +
                         "  'id': 'storedProcedure1'," +
-                                "  'body':" +
-                                "    'function () {" +
-                                "      for (var i = 0; i < 1000; i++) {" +
-                                "        var item = getContext().getResponse().getBody();" +
-                                "        if (i > 0 && item != i - 1) throw \"body mismatch\";" +
-                                "        getContext().getResponse().setBody(i);" +
-                                "      }" +
-                                "    }'" +
-                "}");
-        StoredProcedure retrievedSproc = client.createStoredProcedure(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        "  'body':" +
+                        "    'function () {" +
+                        "      for (var i = 0; i < 1000; i++) {" +
+                        "        var item = getContext().getResponse().getBody();" +
+                        "        if (i > 0 && item != i - 1) throw \"body mismatch\";" +
+                        "        getContext().getResponse().setBody(i);" +
+                        "      }" +
+                        "    }'" +
+                        "}");
+        StoredProcedure retrievedSproc = client.createStoredProcedure(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 sproc1,
                 null).getResource();
-        String result = client.executeStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc, isNameBased), null).getResponseAsString();
+        String result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc, isNameBased), null).getResponseAsString();
         Assert.assertEquals("999", result);
 
         StoredProcedure sproc2 = new StoredProcedure(
@@ -1610,11 +1531,11 @@ public final class GatewayTests extends GatewayTestBase {
                         "        getContext().getResponse().appendValue(\"Body\", i);" +
                         "      }" +
                         "    }'" +
-                "}");
-        StoredProcedure retrievedSproc2 = client.createStoredProcedure(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        "}");
+        StoredProcedure retrievedSproc2 = client.createStoredProcedure(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 sproc2,
                 null).getResource();
-        result = client.executeStoredProcedure(getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc2, isNameBased), null).getResponseAsString();
+        result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(this.databaseForTest, this.collectionForTest, retrievedSproc2, isNameBased), null).getResponseAsString();
         Assert.assertEquals("\"0123456789\"", result);
 
         // String and Integer
@@ -1626,11 +1547,11 @@ public final class GatewayTests extends GatewayTestBase {
                         "      getContext().getResponse().setBody(" +
                         "          \"a\" + value + num * 2);" +
                         "    }'" +
-                "}");
-        StoredProcedure retrievedSproc3 = client.createStoredProcedure(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        "}");
+        StoredProcedure retrievedSproc3 = client.createStoredProcedure(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 sproc3,
                 null).getResource();
-        result = client.executeStoredProcedure(getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc3, isNameBased),
+        result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc3, isNameBased),
                 new Object[] {"so", 123}).getResponseAsString();
         Assert.assertEquals("\"aso246\"", result);
 
@@ -1648,23 +1569,23 @@ public final class GatewayTests extends GatewayTestBase {
                         "      getContext().getResponse().setBody(" +
                         "          \"a\" + value.temp);" +
                         "    }'" +
-                "}");
-        StoredProcedure retrievedSproc4 = client.createStoredProcedure(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                        "}");
+        StoredProcedure retrievedSproc4 = client.createStoredProcedure(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 sproc4,
                 null).getResource();
-        result = client.executeStoredProcedure(getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+        result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
                 new Object[] {tempPOJO}).getResponseAsString();
         Assert.assertEquals("\"aso2\"", result);
 
         // JSONObject
         JSONObject jsonObject = new JSONObject("{'temp': 'so3'}");
-        result = client.executeStoredProcedure(getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+        result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
                 new Object[] {jsonObject}).getResponseAsString();
         Assert.assertEquals("\"aso3\"", result);
 
         // Document
         Document document = new Document("{'temp': 'so4'}");
-        result = client.executeStoredProcedure(getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
+        result = client.executeStoredProcedure(TestUtils.getStoredProcedureLink(databaseForTest, this.collectionForTest, retrievedSproc4, isNameBased),
                 new Object[] {document}).getResponseAsString();
         Assert.assertEquals("\"aso4\"", result);
     }
@@ -1685,27 +1606,27 @@ public final class GatewayTests extends GatewayTestBase {
 
         // create..
         UserDefinedFunction udfDef = new UserDefinedFunction();
-        udfDef.setId(GatewayTests.getUID());
+        udfDef.setId(TestUtils.getUID());
         udfDef.setBody("function() {var x = 10;}");
-        UserDefinedFunction newUdf = client.createUserDefinedFunction(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        UserDefinedFunction newUdf = client.createUserDefinedFunction(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 udfDef,
                 null).getResource();
         Assert.assertNotNull(newUdf.getBody());
         Assert.assertNotNull(newUdf.getETag());
 
         // replace...
-        String id = GatewayTests.getUID();
+        String id = TestUtils.getUID();
         newUdf.setId(id);
 
         newUdf = client.replaceUserDefinedFunction(newUdf, null).getResource();
         Assert.assertEquals(newUdf.getId(), id);
 
-        newUdf = client.readUserDefinedFunction(getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null).getResource();
+        newUdf = client.readUserDefinedFunction(TestUtils.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null).getResource();
         Assert.assertEquals(newUdf.getId(), id);
 
         // read udf feed:
         {
-            List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+            List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                     null).getQueryIterable().toList();
             if (udfs.size() > 0) {
                 //
@@ -1715,7 +1636,7 @@ public final class GatewayTests extends GatewayTestBase {
         }
         {
             List<UserDefinedFunction> udfs = client.queryUserDefinedFunctions(
-                    getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                    TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                     new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                             new SqlParameterCollection(new SqlParameter("@id", newUdf.getId()))),
                     null).getQueryIterable().toList();
@@ -1725,9 +1646,9 @@ public final class GatewayTests extends GatewayTestBase {
                 Assert.fail("Query fail to find UserDefinedFunction");
             }
         }
-        client.deleteUserDefinedFunction(getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null);
+        client.deleteUserDefinedFunction(TestUtils.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUdf, isNameBased), null);
     }
-    
+
     // Upsert test for UserDefinedFunction resource - self link version
     @Test
     public void testUserDefinedFunctionUpsert_SelfLink() throws DocumentClientException {
@@ -1743,80 +1664,80 @@ public final class GatewayTests extends GatewayTestBase {
     }
 
     private void testUserDefinedFunctionUpsert(boolean isNameBased) throws DocumentClientException {
-        
+
         // Read user defined functions and get initial count
-        List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        List<UserDefinedFunction> udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null).getQueryIterable().toList();
-        
+
         int initialUserDefinedFunctionCount = udfs.size();
 
-        // Create user defined function definition 
+        // Create user defined function definition
         UserDefinedFunction udfDefinition = new UserDefinedFunction();
-        udfDefinition.setId(GatewayTests.getUID());
+        udfDefinition.setId(TestUtils.getUID());
         udfDefinition.setBody("function() {var x = 10;}");
-        
+
         // Upsert should create the udf
         UserDefinedFunction createdUserDefinedFunction = client.upsertUserDefinedFunction(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 udfDefinition, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(udfDefinition.getId(), createdUserDefinedFunction.getId());
-        
+
         // Read udfs to check the count and it should increase
-        udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                        null)
+        udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialUserDefinedFunctionCount + 1, udfs.size());
-        
+
         // Update udf
         createdUserDefinedFunction.setBody("function() {var x = 20;}");
-        
+
         // Upsert should replace the trigger since it already exists
         UserDefinedFunction upsertedUserDefinedFunction = client.upsertUserDefinedFunction(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdUserDefinedFunction, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdUserDefinedFunction.getId(), upsertedUserDefinedFunction.getId());
-        
+
         // Verify updated property
         Assert.assertEquals(createdUserDefinedFunction.getBody(), upsertedUserDefinedFunction.getBody());
-        
+
         // Read udfs to check the count and it should remain the same
-        udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null)
-        .getQueryIterable().toList();
+                .getQueryIterable().toList();
 
         Assert.assertEquals(initialUserDefinedFunctionCount + 1, udfs.size());
-        
+
         // Update udf id
-        createdUserDefinedFunction.setId(GatewayTests.getUID());
-        
+        createdUserDefinedFunction.setId(TestUtils.getUID());
+
         // Upsert should create new udf since id is changed
         UserDefinedFunction newUserDefinedFunction = client.upsertUserDefinedFunction(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 createdUserDefinedFunction, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdUserDefinedFunction.getId(), newUserDefinedFunction.getId());
-        
-        // Read udfs to check the count and it should increase
-        udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
-                null)
-        .getQueryIterable().toList();
 
-        Assert.assertEquals(initialUserDefinedFunctionCount + 2, udfs.size());        
-        
-        // Delete udfs
-        client.deleteUserDefinedFunction(getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, upsertedUserDefinedFunction, isNameBased), null);
-        client.deleteUserDefinedFunction(getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUserDefinedFunction, isNameBased), null);
-        
-        // Read udfs to check the count and it should remain same
-        udfs = client.readUserDefinedFunctions(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+        // Read udfs to check the count and it should increase
+        udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 null)
-        .getQueryIterable().toList();
+                .getQueryIterable().toList();
+
+        Assert.assertEquals(initialUserDefinedFunctionCount + 2, udfs.size());
+
+        // Delete udfs
+        client.deleteUserDefinedFunction(TestUtils.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, upsertedUserDefinedFunction, isNameBased), null);
+        client.deleteUserDefinedFunction(TestUtils.getUserDefinedFunctionLink(this.databaseForTest, this.collectionForTest, newUserDefinedFunction, isNameBased), null);
+
+        // Read udfs to check the count and it should remain same
+        udfs = client.readUserDefinedFunctions(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                null)
+                .getQueryIterable().toList();
 
         Assert.assertEquals(initialUserDefinedFunctionCount, udfs.size());
     }
@@ -1836,18 +1757,18 @@ public final class GatewayTests extends GatewayTestBase {
     private void testUserCrud(boolean isNameBased) throws DocumentClientException {
 
         // List users.
-        List<User> users = client.readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
+        List<User> users = client.readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         int beforeCreateCount = users.size();
         // Create user.
-        User user = client.createUser(getDatabaseLink(this.databaseForTest, isNameBased),
+        User user = client.createUser(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 new User("{ 'id': 'new user' }"),
                 null).getResource();
         Assert.assertEquals("new user", user.getId());
         // List users after creation.
-        users = client.readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
+        users = client.readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(beforeCreateCount + 1, users.size());
         // Query users.
-        users = client.queryUsers(getDatabaseLink(this.databaseForTest, isNameBased),
+        users = client.queryUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter("@id", "new user"))),
                 null).getQueryIterable().toList();
@@ -1860,20 +1781,20 @@ public final class GatewayTests extends GatewayTestBase {
 
         Assert.assertEquals(user.getId(), replacedUser.getId());
         // Read user.
-        user = client.readUser(getUserLink(this.databaseForTest, replacedUser, isNameBased), null).getResource();
+        user = client.readUser(TestUtils.getUserLink(this.databaseForTest, replacedUser, isNameBased), null).getResource();
         Assert.assertEquals(replacedUser.getId(), user.getId());
         // Delete user.
-        client.deleteUser(getUserLink(this.databaseForTest, user, isNameBased), null);
+        client.deleteUser(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null);
         // Read user after deletion.
         try {
-            client.readUser(getUserLink(this.databaseForTest, replacedUser, isNameBased), null);
+            client.readUser(TestUtils.getUserLink(this.databaseForTest, replacedUser, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
     }
-    
+
     // Upsert test for User resource - self link version
     @Test
     public void testUserUpsert_SelfLink() throws DocumentClientException {
@@ -1889,57 +1810,57 @@ public final class GatewayTests extends GatewayTestBase {
     }
 
     private void testUserUpsert(boolean isNameBased) throws DocumentClientException {
-        
+
         // Read users and get initial count
         List<User> users = client
-                .readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null)
+                .readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         int initialUserCount = users.size();
-        
+
         // Create user definition
         User userDefinition = new User();
-        userDefinition.setId(GatewayTests.getUID());
-        
+        userDefinition.setId(TestUtils.getUID());
+
         // Upsert should create the user
         User createdUser = client.upsertUser(
-                getDatabaseLink(this.databaseForTest, isNameBased),
+                TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 userDefinition, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(userDefinition.getId(), createdUser.getId());
-        
+
         // Read users to check the count and it should increase
-        users = client.readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null)
+        users = client.readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialUserCount + 1, users.size());
-        
+
         // Update user id
-        userDefinition.setId(GatewayTests.getUID());
-        
+        userDefinition.setId(TestUtils.getUID());
+
         // Upsert should create new user since id is changed
         User newUser = client.upsertUser(
-                getDatabaseLink(this.databaseForTest, isNameBased),
+                TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 userDefinition, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(userDefinition.getId(), newUser.getId());
-        
+
         // Read users to check the count and it should increase
-        users = client.readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null)
+        users = client.readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
-        Assert.assertEquals(initialUserCount + 2, users.size());        
+
+        Assert.assertEquals(initialUserCount + 2, users.size());
 
         // Delete users
-        client.deleteUser(getUserLink(this.databaseForTest, createdUser, isNameBased), null);
-        client.deleteUser(getUserLink(this.databaseForTest, newUser, isNameBased), null);
-        
+        client.deleteUser(TestUtils.getUserLink(this.databaseForTest, createdUser, isNameBased), null);
+        client.deleteUser(TestUtils.getUserLink(this.databaseForTest, newUser, isNameBased), null);
+
         // Read users to check the count and it should remain same
-        users = client.readUsers(getDatabaseLink(this.databaseForTest, isNameBased), null)
+        users = client.readUsers(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialUserCount, users.size());
     }
 
@@ -1958,11 +1879,11 @@ public final class GatewayTests extends GatewayTestBase {
     private void testPermissionCrud(boolean isNameBased) throws DocumentClientException {
 
         // Create user.
-        User user = client.createUser(getDatabaseLink(this.databaseForTest, isNameBased),
+        User user = client.createUser(TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 new User("{ 'id': 'new user' }"),
                 null).getResource();
         // List permissions.
-        List<Permission> permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
+        List<Permission> permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
         int beforeCreateCount = permissions.size();
         Permission permissionDefinition = new Permission();
         permissionDefinition.setId("new permission");
@@ -1970,15 +1891,15 @@ public final class GatewayTests extends GatewayTestBase {
         permissionDefinition.setResourceLink("dbs/AQAAAA==/colls/AQAAAJ0fgTc=");
 
         // Create permission.
-        Permission permission = client.createPermission(getUserLink(this.databaseForTest, user, isNameBased), permissionDefinition, null).getResource();
+        Permission permission = client.createPermission(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), permissionDefinition, null).getResource();
         Assert.assertEquals("new permission", permission.getId());
 
         // List permissions after creation.
-        permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
+        permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null).getQueryIterable().toList();
         Assert.assertEquals(beforeCreateCount + 1, permissions.size());
 
         // Query permissions.
-        permissions = client.queryPermissions(getUserLink(this.databaseForTest, user, isNameBased),
+        permissions = client.queryPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter(
                                 "@id", permission.getId()))),
@@ -1993,20 +1914,20 @@ public final class GatewayTests extends GatewayTestBase {
         Assert.assertEquals(permission.getId(), replacedPermission.getId());
 
         // Read permission.
-        permission = client.readPermission(getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null).getResource();
+        permission = client.readPermission(TestUtils.getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null).getResource();
         Assert.assertEquals(replacedPermission.getId(), permission.getId());
         // Delete permission.
-        client.deletePermission(getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null);
+        client.deletePermission(TestUtils.getPermissionLink(this.databaseForTest, user, replacedPermission, isNameBased), null);
         // Read permission after deletion.
         try {
-            client.readPermission(getPermissionLink(this.databaseForTest, user, permission, isNameBased), null);
+            client.readPermission(TestUtils.getPermissionLink(this.databaseForTest, user, permission, isNameBased), null);
             Assert.fail("Exception didn't happen.");
         } catch (DocumentClientException e) {
             Assert.assertEquals(404, e.getStatusCode());
             Assert.assertEquals("NotFound", e.getError().getCode());
         }
     }
-    
+
     // Upsert test for Permission resource - self link version
     @Test
     public void testPermissionUpsert_SelfLink() throws DocumentClientException {
@@ -2025,93 +1946,93 @@ public final class GatewayTests extends GatewayTestBase {
 
         // Create user definition
         User userDefinition = new User();
-        userDefinition.setId(GatewayTests.getUID());
+        userDefinition.setId(TestUtils.getUID());
 
         // Create user.
         User user = client.createUser(
-                getDatabaseLink(this.databaseForTest, isNameBased),
+                TestUtils.getDatabaseLink(this.databaseForTest, isNameBased),
                 userDefinition, null).getResource();
-        
+
         // Read permissions and get initial count
         List<Permission> permissions = client
-                .readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null)
+                .readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         int initialPermissionCount = permissions.size();
 
         // Create permission definition
         Permission permissionDefinition = new Permission();
-        permissionDefinition.setId(GatewayTests.getUID());
+        permissionDefinition.setId(TestUtils.getUID());
         permissionDefinition.setPermissionMode(PermissionMode.Read);
         permissionDefinition.setResourceLink("dbs/AQAAAA==/colls/AQAAAJ0fgTc=");
 
         // Upsert should create the permission
         Permission createdPermission = client.upsertPermission(
-                getUserLink(this.databaseForTest, user, isNameBased),
+                TestUtils.getUserLink(this.databaseForTest, user, isNameBased),
                 permissionDefinition, null).getResource();
-        
+
         // Verify Id property
         Assert.assertEquals(permissionDefinition.getId(), createdPermission.getId());
-        
+
         // Read permissions to check the count and it should increase
-        permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null)
+        permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialPermissionCount + 1, permissions.size());
-        
+
         // Update permission
         createdPermission.setPermissionMode(PermissionMode.All);
-        
+
         // Upsert should replace the permission since it already exists
         Permission upsertedPermission = client.upsertPermission(
-                getUserLink(this.databaseForTest, user, isNameBased),
+                TestUtils.getUserLink(this.databaseForTest, user, isNameBased),
                 createdPermission, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdPermission.getId(), upsertedPermission.getId());
-        
+
         // Verify updated property
         Assert.assertEquals(createdPermission.getPermissionMode(), upsertedPermission.getPermissionMode());
-        
+
         // Read permissions to check the count and it should remain the same
-        permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null)
+        permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialPermissionCount + 1, permissions.size());
-        
+
         // Update permission id
-        createdPermission.setId(GatewayTests.getUID());
-        // ResourceLink needs to be changed along with the ID in order to create a new permission 
+        createdPermission.setId(TestUtils.getUID());
+        // ResourceLink needs to be changed along with the ID in order to create a new permission
         createdPermission.setResourceLink("dbs/N9EdAA==/colls/N9EdAIugXgA=");
-        
+
         // Upsert should create new permission since id is changed
         Permission newPermission = client.upsertPermission(
-                getUserLink(this.databaseForTest, user, isNameBased),
+                TestUtils.getUserLink(this.databaseForTest, user, isNameBased),
                 createdPermission, null).getResource();
 
         // Verify Id property
         Assert.assertEquals(createdPermission.getId(), newPermission.getId());
-        
+
         // Verify ResourceLink property
         Assert.assertEquals(createdPermission.getResourceLink(), newPermission.getResourceLink());
-        
+
         // Read permissions to check the count and it should increase
-        permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null)
+        permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialPermissionCount + 2, permissions.size());
-        
+
         // Delete permissions
-        client.deletePermission(getPermissionLink(this.databaseForTest, user, upsertedPermission, isNameBased), null);
-        client.deletePermission(getPermissionLink(this.databaseForTest, user, newPermission, isNameBased), null);
-        
+        client.deletePermission(TestUtils.getPermissionLink(this.databaseForTest, user, upsertedPermission, isNameBased), null);
+        client.deletePermission(TestUtils.getPermissionLink(this.databaseForTest, user, newPermission, isNameBased), null);
+
         // Read permissions to check the count and it should remain same
-        permissions = client.readPermissions(getUserLink(this.databaseForTest, user, isNameBased), null)
+        permissions = client.readPermissions(TestUtils.getUserLink(this.databaseForTest, user, isNameBased), null)
                 .getQueryIterable().toList();
-        
+
         Assert.assertEquals(initialPermissionCount, permissions.size());
     }
-    
+
     @Test
     public void testDatabaseAccount() throws DocumentClientException {
 
@@ -2130,26 +2051,22 @@ public final class GatewayTests extends GatewayTestBase {
     @Test
     public void testAuthorization() throws DocumentClientException {
         // Sets up entities for this test.
-        DocumentClient client = new DocumentClient(HOST,
-                MASTER_KEY,
-                new ConnectionPolicy(),
-                ConsistencyLevel.Session);
         // Create document1
-        Document document1 = client.createDocument(
+        Document document1 = this.client.createDocument(
                 collectionForTest.getSelfLink(),
                 new Document("{ 'id': 'coll1doc1', 'spam': 'eggs', 'key': 'value' }"), null, false).getResource();
         // Create document2
-        Document document2 = client.createDocument(
+        Document document2 = this.client.createDocument(
                 collectionForTest.getSelfLink(),
                 new Document("{ 'id': 'coll1doc2', 'spam': 'eggs2', 'key': 'value2' }"), null, false).getResource();
 
         // Create a new collection for test.
-        DocumentCollection anotherCollectionForTest = client.createCollection(
+        DocumentCollection anotherCollectionForTest = this.client.createCollection(
                 databaseForTest.getSelfLink(),
                 new DocumentCollection("{ 'id': 'sample collection2' }"),
                 null).getResource();
         // Create user1.
-        User user1 = client.createUser(databaseForTest.getSelfLink(),
+        User user1 = this.client.createUser(databaseForTest.getSelfLink(),
                 new User("{ 'id': 'user1' }"),
                 null).getResource();
 
@@ -2160,12 +2077,12 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'resource': '%s'" +
                         "}", collectionForTest.getSelfLink()));
         // Create permission for collectionForTest
-        Permission permission1 = client.createPermission(user1.getSelfLink(),
+        Permission permission1 = this.client.createPermission(user1.getSelfLink(),
                 permission1Definition,
                 null).getResource();
 
         // Create user 2.
-        User user2 = client.createUser(databaseForTest.getSelfLink(),
+        User user2 = this.client.createUser(databaseForTest.getSelfLink(),
                 new User("{ 'id': 'user2' }"),
                 null).getResource();
 
@@ -2176,10 +2093,9 @@ public final class GatewayTests extends GatewayTestBase {
                         "  'resource': '%s'" +
                         "}", anotherCollectionForTest.getSelfLink()));
         // Create permission on anotherCollectionForTest.
-        Permission permission2 = client.createPermission(user2.getSelfLink(),
+        Permission permission2 = this.client.createPermission(user2.getSelfLink(),
                 permission2Definition,
                 null).getResource();
-
 
         // Now the resources for this test is fully prepared.
 
@@ -2265,11 +2181,11 @@ public final class GatewayTests extends GatewayTestBase {
     private void testConflictCrud(boolean isNameBased) throws DocumentClientException {
 
         // Read conflicts.
-        client.readConflicts(getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
+        client.readConflicts(TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased), null).getQueryIterable().toList();
 
         // Query for conflicts.
         client.queryConflicts(
-                getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
+                TestUtils.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased),
                 new SqlQuerySpec("SELECT * FROM root r WHERE r.id=@id",
                         new SqlParameterCollection(new SqlParameter("@id", "FakeId"))),
                 null).getQueryIterable().toList();
@@ -2288,20 +2204,20 @@ public final class GatewayTests extends GatewayTestBase {
 
         try {
             Database dbToCreate = new Database();
-            dbToCreate.setId("DocumentQuotaDB" + getUID());
+            dbToCreate.setId("DocumentQuotaDB" + TestUtils.getUID());
             Database db = client.createDatabase(dbToCreate, null).getResource();
 
             DocumentCollection collectionToCreate = new DocumentCollection();
             collectionToCreate.setId("DocumentQuotaDBDocumentCollectionConsistent");
             IndexingPolicy policy = new IndexingPolicy();
             policy.setIndexingMode(IndexingMode.Consistent);
-            collectionToCreate.setIndexingPolicy(policy);;
+            collectionToCreate.setIndexingPolicy(policy);
+            ;
 
             DocumentCollection collection = client.createCollection(db.getSelfLink(), collectionToCreate, null).getResource();
 
-            for(int i = 0; i< 10000; i++)
-            {
-                String docName = getUID().substring(0,10);
+            for (int i = 0; i < 10000; i++) {
+                String docName = TestUtils.getUID().substring(0, 10);
                 Document smallDoc = new Document();
                 smallDoc.setId(docName);
                 client.createDocument(collection.getSelfLink(), smallDoc, null, false).getResource();
@@ -2426,7 +2342,7 @@ public final class GatewayTests extends GatewayTestBase {
     @Test
     public void testIdCaseValidation() throws DocumentClientException {
 
-        List<DocumentCollection> collections = client.readCollections(getDatabaseLink(this.databaseForTest, true),
+        List<DocumentCollection> collections = client.readCollections(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 null).getQueryIterable().toList();
 
         int beforeCreateCollectionsCount = collections.size();
@@ -2440,19 +2356,19 @@ public final class GatewayTests extends GatewayTestBase {
         collectionDefinition2.setId("SampleCollection");
 
         // Create 2 collections with different casing of IDs
-        DocumentCollection createdCollection1 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+        DocumentCollection createdCollection1 = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition1,
                 null).getResource();
 
-        DocumentCollection createdCollection2 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+        DocumentCollection createdCollection2 = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition2,
                 null).getResource();
 
         // Verify if additional 2 collections got created
-        collections = client.readCollections(getDatabaseLink(this.databaseForTest, true), null).getQueryIterable().toList();
-        Assert.assertEquals(collections.size(), beforeCreateCollectionsCount+2);
+        collections = client.readCollections(TestUtils.getDatabaseLink(this.databaseForTest, true), null).getQueryIterable().toList();
+        Assert.assertEquals(collections.size(), beforeCreateCollectionsCount + 2);
 
-        // Verify that collections are created with specified IDs    
+        // Verify that collections are created with specified IDs
         Assert.assertEquals(collectionDefinition1.getId(), createdCollection1.getId());
         Assert.assertEquals(collectionDefinition2.getId(), createdCollection2.getId());
     }
@@ -2469,15 +2385,15 @@ public final class GatewayTests extends GatewayTestBase {
         collectionDefinition2.setId("!@$%^&*()-~`'_[]{}|;:,.<>");
 
         // verify that collections are created with specified IDs
-        DocumentCollection createdCollection1 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+        DocumentCollection createdCollection1 = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition1,
                 null).getResource();
 
-        DocumentCollection createdCollection2 = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+        DocumentCollection createdCollection2 = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition2,
                 null).getResource();
 
-        // Verify that collections are created with specified IDs    
+        // Verify that collections are created with specified IDs
         Assert.assertEquals(collectionDefinition1.getId(), createdCollection1.getId());
         Assert.assertEquals(collectionDefinition2.getId(), createdCollection2.getId());
     }
@@ -2486,8 +2402,8 @@ public final class GatewayTests extends GatewayTestBase {
     public void testSessionContainer() throws DocumentClientException {
 
         DocumentCollection collectionDefinition = new DocumentCollection();
-        collectionDefinition.setId(GatewayTests.getUID());
-        DocumentCollection collection = client.createCollection(getDatabaseLink(this.databaseForTest, true),
+        collectionDefinition.setId(TestUtils.getUID());
+        DocumentCollection collection = client.createCollection(TestUtils.getDatabaseLink(this.databaseForTest, true),
                 collectionDefinition,
                 null).getResource();
         // create a document
@@ -2495,16 +2411,15 @@ public final class GatewayTests extends GatewayTestBase {
                 "{" +
                         "  'name': 'sample document'," +
                         "  'key': '0'" +
-                "}");
+                        "}");
 
-        Document document = client.createDocument(getDocumentCollectionLink(this.databaseForTest, collection, false),
+        Document document = client.createDocument(TestUtils.getDocumentCollectionLink(this.databaseForTest, collection, false),
                 documentDefinition,
                 null,
                 false).getResource();
 
-
         // Replace document.
-        for(int i=0; i<100; i++) {
+        for (int i = 0; i < 100; i++) {
 
             // Update the "key" property in a tight loop
             document.set("key", Integer.toString(i));
@@ -2512,83 +2427,52 @@ public final class GatewayTests extends GatewayTestBase {
             Document replacedDocument = client.replaceDocument(document, null).getResource();
 
             // Read the document.
-            Document documentFromRead = client.readDocument(getDocumentLink(this.databaseForTest, collection, replacedDocument, true), null).getResource();
-            // Verify that we read our own write(key property) 
+            Document documentFromRead = client.readDocument(TestUtils.getDocumentLink(this.databaseForTest, collection, replacedDocument, true), null).getResource();
+            // Verify that we read our own write(key property)
             Assert.assertEquals(replacedDocument.getString("key"), documentFromRead.getString("key"));
-        }       
+        }
     }
 
-    @Theory
-    public void testDocumentCrudWithPartitionKey(
-            @FromDataPoints("Empty/null PartitionKey") Object partitionKey, 
-            @FromDataPoints("isNameBased") boolean isNameBased) throws DocumentClientException {
+    static class StaticPOJOForTest {
+        // Jackson's readValue method supports member class only if it's static.
+        public String pojoProp = "456";
+    }
 
-        String testCollection = GatewayTests.getDocumentCollectionLink(this.databaseForTest, this.collectionForTest, isNameBased);
+    class TestPOJOInner {
+        public int intProperty;
 
-        String sampleDocumentTemplate =
-                "{" +
-                        "  'id': '%s'," +
-                        "  'name': 'sample document %s'," +
-                "}";
-
-        // Create document with PartitionKey should fail
-        String documentId = GatewayTests.getUID();
-        Document sampleDocument = new Document(String.format(sampleDocumentTemplate, documentId, documentId));
-        RequestOptions requestOptions = new RequestOptions();
-        requestOptions.setPartitionKey(new PartitionKey(partitionKey));
-        Document document;
-        try {
-	        document = client.createDocument(
-	                testCollection,
-	                sampleDocument,
-	                requestOptions,
-	                false).getResource();
-	        Assert.fail("Creating document in single partition collection with a partition key did not fail.");
+        public TestPOJOInner(int i) {
+            this.intProperty = i;
         }
-        catch (DocumentClientException e) {
-            Assert.assertEquals(400, e.getStatusCode());
-	        Assert.assertEquals("BadRequest", e.getError().getCode());
-        }
+    }
 
-        // Create document without PartitionKey
-        document = client.createDocument(
-                testCollection,
-                sampleDocument,
-                null,
-                false).getResource();
-        Assert.assertEquals(documentId, document.getString("id"));
-        Assert.assertEquals(sampleDocument.getString("name"), document.getString("name"));
-        Assert.assertNotNull(document.getId());
+    class TestPOJO {
 
-        // Read document with PartitionKey should fail
-        try {
-        	document = this.client.readDocument(document.getSelfLink(), requestOptions).getResource();
-        	Assert.fail("Reading document in single partition collection with a partition key did not fail.");
-        }
-        catch (DocumentClientException e) {
-            Assert.assertEquals(400, e.getStatusCode());
-            Assert.assertEquals("BadRequest", e.getError().getCode());
+        public String id;
+        public int intProperty;
+        public String stringProperty;
+        public TestPOJOInner objectProperty;
+        public List<String> stringList;
+        public String[] stringArray;
+        private String privateStringProperty;
+
+        public TestPOJO(int i) {
+            this.intProperty = i;
+
+            this.stringList = new ArrayList<String>();
+            this.stringList.add("ONE");
+            this.stringList.add("TWO");
+            this.stringList.add("THREE");
+
+            this.stringArray = new String[] {"One", "Two", "Three"};
         }
 
-        // Update document with PartitionKey should fail
-        document.set("name", "updated name 2");
-        try {
-            document = this.client.replaceDocument(document, requestOptions).getResource();
-            Assert.fail("Updating document in single partition collection with a partition key did not fail.");
-        }
-        catch (DocumentClientException e) {
-            Assert.assertEquals(400, e.getStatusCode());
-            Assert.assertEquals("BadRequest", e.getError().getCode());
+        public String getPrivateStringProperty() {
+            return this.privateStringProperty;
         }
 
-        // Delete document with PartitionKey should fail
-        try {
-            this.client.deleteDocument(document.getSelfLink(), requestOptions);
-            Assert.fail("Deleting document in single partition collection with a partition key did not fail.");
-        }
-        catch (DocumentClientException e) {
-            Assert.assertEquals(400, e.getStatusCode());
-            Assert.assertEquals("BadRequest", e.getError().getCode());
+        public void setPrivateStringProperty(String value) {
+            this.privateStringProperty = value;
         }
     }
 }

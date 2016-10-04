@@ -3,8 +3,7 @@ package com.microsoft.azure.documentdb;
 /**
  * Enumeration specifying applicability of permission.
  */
-public enum PermissionMode
-{
+public enum PermissionMode {
     /**
      * Permission applicable for read operations only.
      */
@@ -23,7 +22,7 @@ public enum PermissionMode
 
     /**
      * Gets the numerical value of the permission mode.
-     * 
+     *
      * @return the numerical value.
      */
     public int getValue() {

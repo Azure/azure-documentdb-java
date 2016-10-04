@@ -4,21 +4,22 @@ import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+import com.microsoft.azure.documentdb.internal.HttpConstants;
+
 /**
  * This class defines a custom exception type for all operations on
  * DocumentClient. Applications are expected to catch DocumentClientException
  * and handle errors as appropriate when calling methods on DocumentClient.
- * 
  * <p>
  * Errors coming from the service during normal execution are converted to
  * DocumentClientException before returning to the application with the following exception:
  * <p>
- *  When a BE error is encountered during a QueryIterable iteration, an IllegalStateException
- *  is thrown instead of DocumentClientException.
+ * When a BE error is encountered during a QueryIterable&lt;T&gt; iteration, an IllegalStateException
+ * is thrown instead of DocumentClientException.
  * <p>
- *  When a transport level error happens that request is not able to reach the service,
- *  an IllegalStateException is thrown instead of DocumentClientException.
- * 
+ * When a transport level error happens that request is not able to reach the service,
+ * an IllegalStateException is thrown instead of DocumentClientException.
  */
 public class DocumentClientException extends Exception {
     private static final long serialVersionUID = 1L;
@@ -31,11 +32,57 @@ public class DocumentClientException extends Exception {
     /**
      * Creates a new instance of the DocumentClientException class.
      *
-     * @param resourceAddress the resource address
-     * @param statusCode the http status code of the response
-     * @param errorResource the error resource object
-     * @param responseHeaders the response headers
+     * @param statusCode the http status code of the response.
      */
+    public DocumentClientException(int statusCode) {
+        this.statusCode = statusCode;
+    }
+
+    /**
+     * Creates a new instance of the DocumentClientException class.
+     *
+     * @param statusCode   the http status code of the response.
+     * @param errorMessage the error message.
+     */
+    public DocumentClientException(int statusCode, String errorMessage) {
+        Error error = new Error();
+        error.set(Constants.Properties.MESSAGE, errorMessage);
+        this.statusCode = statusCode;
+        this.error = error;
+    }
+
+    /**
+     * Creates a new instance of the DocumentClientException class.
+     *
+     * @param statusCode     the http status code of the response.
+     * @param innerException the original exception.
+     */
+    public DocumentClientException(int statusCode, Exception innerException) {
+        super(innerException);
+        this.statusCode = statusCode;
+    }
+
+
+    /**
+     * Creates a new instance of the DocumentClientException class.
+     *
+     * @param statusCode      the http status code of the response.
+     * @param errorResource   the error resource object.
+     * @param responseHeaders the response headers.
+     */
+    public DocumentClientException(int statusCode, Error errorResource, Map<String, String> responseHeaders) {
+        this(null, statusCode, errorResource, responseHeaders);
+    }
+
+    /**
+     * Creates a new instance of the DocumentClientException class.
+     *
+     * @param resourceAddress the address of the resource the request is associated with.
+     * @param statusCode      the http status code of the response.
+     * @param errorResource   the error resource object.
+     * @param responseHeaders the response headers.
+     */
+
     public DocumentClientException(String resourceAddress, int statusCode, Error errorResource, Map<String, String> responseHeaders) {
         super(errorResource.getMessage());
 
@@ -47,7 +94,7 @@ public class DocumentClientException extends Exception {
 
     /**
      * Gets the activity ID associated with the request.
-     * 
+     *
      * @return the activity ID.
      */
     public String getActivityId() {
@@ -60,7 +107,7 @@ public class DocumentClientException extends Exception {
 
     /**
      * Gets the http status code.
-     * 
+     *
      * @return the status code.
      */
     public int getStatusCode() {
@@ -69,7 +116,7 @@ public class DocumentClientException extends Exception {
 
     /**
      * Gets the sub status code.
-     * 
+     *
      * @return the status code.
      */
     public Integer getSubStatusCode() {
@@ -90,7 +137,7 @@ public class DocumentClientException extends Exception {
 
     /**
      * Gets the error code associated with the exception.
-     * 
+     *
      * @return the error.
      */
     public Error getError() {
@@ -100,9 +147,9 @@ public class DocumentClientException extends Exception {
     /**
      * Gets the recommended time interval after which the client can retry
      * failed requests
-     * 
+     *
      * @return the recommended time interval after which the client can retry
-     *         failed requests.
+     * failed requests.
      */
     public long getRetryAfterInMilliseconds() {
         long retryIntervalInMilliseconds = 0;
@@ -124,10 +171,19 @@ public class DocumentClientException extends Exception {
         // any unilateral retry delays here.
         return retryIntervalInMilliseconds;
     }
-    
+
+    /**
+     * Gets the response headers as key-value pairs
+     *
+     * @return the response headers
+     */
+    public Map<String, String> getResponseHeaders() {
+        return this.responseHeaders;
+    }
+
     /**
      * Gets the resource address associated with this exception.
-     * 
+     *
      * @return the resource address associated with this exception.
      */
     String getResourceAddress() {

@@ -25,21 +25,18 @@ package com.microsoft.azure.documentdb;
 
 import org.junit.Assert;
 
-import com.microsoft.azure.documentdb.Document;
-import com.microsoft.azure.documentdb.PartitionKeyExtractor;;
-
 @Deprecated
 public class TestValPartitionKeyExtractor implements PartitionKeyExtractor {
     @Override
     public Object getPartitionKey(Object document) {
-        if(document == null) {
+        if (document == null) {
             throw new IllegalArgumentException("document");
         }
-        
+
         // For this TestValPartitionKeyExtractor, we expect document to be of type Document 
         Assert.assertTrue("document should be of type Document", document instanceof Document);
-        
+
         // For this TestValPartitionKeyExtractor, "val" property of the document is the partition key
-        return ((Document)document).getInt("val");
+        return ((Document) document).getInt("val");
     }
 }

@@ -5,28 +5,28 @@ package com.microsoft.azure.documentdb;
  */
 public enum TriggerOperation {
     /**
-    *  All operations.
-    */ 
+     * All operations.
+     */
     All(0x0),
 
     /**
-    *  Create operations only.
-    */ 
+     * Create operations only.
+     */
     Create(0x1),
 
     /**
-    *  Update operations only.
-    */ 
+     * Update operations only.
+     */
     Update(0x2),
 
     /**
-    *  Delete operations only.
-    */ 
+     * Delete operations only.
+     */
     Delete(0x3),
 
     /**
-    *  Replace operations only.
-    */ 
+     * Replace operations only.
+     */
     Replace(0x4);
 
     private int value;
@@ -37,7 +37,7 @@ public enum TriggerOperation {
 
     /**
      * Gets the numerical value of the trigger operation.
-     * 
+     *
      * @return the numerical value.
      */
     public int getValue() {

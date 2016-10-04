@@ -24,7 +24,7 @@ SOFTWARE.
 package com.microsoft.azure.documentdb;
 
 /**
- * HashGenerator interface to be implemented for computing the hash used in the hashing algorithm  
+ * HashGenerator interface to be implemented for computing the hash used in the hashing algorithm
  */
 @Deprecated
 public interface HashGenerator {

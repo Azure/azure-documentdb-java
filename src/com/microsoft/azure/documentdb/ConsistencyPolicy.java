@@ -9,6 +9,8 @@ import java.util.logging.Logger;
 import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 /**
  * ConsistencyPolicy
  */
@@ -31,7 +33,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the consistency policy.
      */
     public ConsistencyPolicy(String jsonString) {
@@ -40,7 +42,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the consistency policy.
      */
     public ConsistencyPolicy(JSONObject jsonObject) {
@@ -49,7 +51,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Get the name of the resource.
-     * 
+     *
      * @return the default consistency level.
      */
     public ConsistencyLevel getDefaultConsistencyLevel() {
@@ -68,7 +70,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Set the name of the resource.
-     * 
+     *
      * @param level the consistency level.
      */
     public void setDefaultConsistencyLevel(ConsistencyLevel level) {
@@ -78,7 +80,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
     /**
      * Gets the bounded staleness consistency, the maximum allowed staleness in terms difference in sequence numbers
      * (aka version).
-     * 
+     *
      * @return the max staleness prefix.
      */
     public int getMaxStalenessPrefix() {
@@ -92,7 +94,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
     /**
      * Sets the bounded staleness consistency, the maximum allowed staleness in terms difference in sequence numbers
      * (aka version).
-     * 
+     *
      * @param maxStalenessPrefix the max staleness prefix.
      */
     public void setMaxStalenessPrefix(int maxStalenessPrefix) {
@@ -101,7 +103,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Gets the in bounded staleness consistency, the maximum allowed staleness in terms time interval.
-     * 
+     *
      * @return the max staleness prefix.
      */
     public int getMaxStalenessIntervalInSeconds() {
@@ -114,7 +116,7 @@ public final class ConsistencyPolicy extends JsonSerializable {
 
     /**
      * Sets the in bounded staleness consistency, the maximum allowed staleness in terms time interval.
-     * 
+     *
      * @param maxStalenessIntervalInSeconds the max staleness interval in seconds.
      */
     public void setMaxStalenessIntervalInSeconds(int maxStalenessIntervalInSeconds) {

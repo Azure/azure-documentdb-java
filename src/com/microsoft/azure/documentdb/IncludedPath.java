@@ -7,6 +7,8 @@ import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 public class IncludedPath extends JsonSerializable {
 
     private Collection<Index> indexes;
@@ -20,7 +22,7 @@ public class IncludedPath extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonString the json string that represents the included path.
      */
     public IncludedPath(String jsonString) {
@@ -29,7 +31,7 @@ public class IncludedPath extends JsonSerializable {
 
     /**
      * Constructor.
-     * 
+     *
      * @param jsonObject the json object that represents the included path.
      */
     public IncludedPath(JSONObject jsonObject) {
@@ -38,7 +40,7 @@ public class IncludedPath extends JsonSerializable {
 
     /**
      * Gets path.
-     * 
+     *
      * @return the path.
      */
     public String getPath() {
@@ -47,7 +49,7 @@ public class IncludedPath extends JsonSerializable {
 
     /**
      * Sets path.
-     * 
+     *
      * @param path the path.
      */
     public void setPath(String path) {
@@ -56,7 +58,7 @@ public class IncludedPath extends JsonSerializable {
 
     /**
      * Gets the paths that are chosen to be indexed by the user.
-     * 
+     *
      * @return the included paths.
      */
     public Collection<Index> getIndexes() {
@@ -70,7 +72,11 @@ public class IncludedPath extends JsonSerializable {
 
         return this.indexes;
     }
-    
+
+    public void setIndexes(Collection<Index> indexes) {
+        this.indexes = indexes;
+    }
+
     private Collection<Index> getIndexCollection() {
         if (this.propertyBag != null && this.propertyBag.has(Constants.Properties.INDEXES)) {
             JSONArray jsonArray = this.propertyBag.getJSONArray(Constants.Properties.INDEXES);
@@ -78,19 +84,19 @@ public class IncludedPath extends JsonSerializable {
 
             for (int i = 0; i < jsonArray.length(); i++) {
                 JSONObject jsonObject = jsonArray.getJSONObject(i);
-                
+
                 IndexKind indexKind = IndexKind.valueOf(WordUtils.capitalize(
                         jsonObject.getString(Constants.Properties.INDEX_KIND)));
                 switch (indexKind) {
-                case Hash:
-                    result.add(new HashIndex(jsonObject.toString()));
-                    break;
-                case Range:
-                    result.add(new RangeIndex(jsonObject.toString()));
-                    break;
-                case Spatial:
-                    result.add(new SpatialIndex(jsonObject.toString()));
-                    break;
+                    case Hash:
+                        result.add(new HashIndex(jsonObject.toString()));
+                        break;
+                    case Range:
+                        result.add(new RangeIndex(jsonObject.toString()));
+                        break;
+                    case Spatial:
+                        result.add(new SpatialIndex(jsonObject.toString()));
+                        break;
                 }
             }
 
@@ -98,10 +104,6 @@ public class IncludedPath extends JsonSerializable {
         }
 
         return null;
-    }
-
-    public void setIndexes(Collection<Index> indexes) {
-        this.indexes = indexes;
     }
 
     @Override

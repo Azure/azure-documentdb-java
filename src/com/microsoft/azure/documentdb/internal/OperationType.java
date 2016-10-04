@@ -1,0 +1,25 @@
+package com.microsoft.azure.documentdb.internal;
+
+public enum OperationType {
+    Invalid,
+    Crash,
+    Create,
+    Delete,
+    ExecuteJavaScript,
+    ForceConfigRefresh,
+    Head,
+    HeadFeed,
+    Query,
+    Pause,
+    Read,
+    ReadFeed,
+    Recreate,
+    Recycle,
+    Replace,
+    Resume,
+    Stop,
+    SqlQuery,
+    Update,
+    Upsert,
+    Throttle,
+}

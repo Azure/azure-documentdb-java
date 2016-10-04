@@ -3,21 +3,22 @@ package com.microsoft.azure.documentdb;
 import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONObject;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+
 public final class HashIndex extends Index {
 
     /**
      * Specifies an instance of HashIndex class with specified DataType.
-     *
+     * <p>
      * Here is an example to instantiate HashIndex class passing in the DataType:
-     *
      * <pre>
      * {@code
-     * 
+     *
      * HashIndex hashIndex = new HashIndex(DataType.String);
-     * 
+     *
      * }
      * </pre>
-     * 
+     *
      * @param dataType the data type.
      */
     public HashIndex(DataType dataType) {
@@ -27,18 +28,17 @@ public final class HashIndex extends Index {
 
     /**
      * Initializes a new instance of the HashIndex class with specified DataType and precision.
-     *
+     * <p>
      * Here is an example to instantiate HashIndex class passing in the DataType:
-     *
      * <pre>
      * {@code
-     * 
+     *
      * HashIndex hashIndex = new HashIndex(DataType.String, 3);
-     * 
+     *
      * }
      * </pre>
-     * 
-     * @param dataType the data type.
+     *
+     * @param dataType  the data type.
      * @param precision the precision.
      */
     public HashIndex(DataType dataType, int precision) {
@@ -49,7 +49,7 @@ public final class HashIndex extends Index {
 
     /**
      * Initializes a new instance of the HashIndex class with json string.
-     * 
+     *
      * @param jsonString the json string that represents the index.
      */
     public HashIndex(String jsonString) {
@@ -61,7 +61,7 @@ public final class HashIndex extends Index {
 
     /**
      * Initializes a new instance of the HashIndex class with json object.
-     * 
+     *
      * @param jsonObject the json object that represents the index.
      */
     public HashIndex(JSONObject jsonObject) {
@@ -73,14 +73,14 @@ public final class HashIndex extends Index {
 
     /**
      * Gets data type.
-     * 
+     *
      * @return the data type.
      */
     public DataType getDataType() {
         DataType result = null;
         try {
             result = DataType.valueOf(WordUtils.capitalize(super.getString(Constants.Properties.DATA_TYPE)));
-        } catch(IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             // Ignore exception and let the caller handle null value.
             this.getLogger().warning(
                     String.format("Invalid index dataType value %s.", super.getString(Constants.Properties.DATA_TYPE)));
@@ -90,7 +90,7 @@ public final class HashIndex extends Index {
 
     /**
      * Sets data type.
-     * 
+     *
      * @param dataType the data type.
      */
     public void setDataType(DataType dataType) {
@@ -99,7 +99,7 @@ public final class HashIndex extends Index {
 
     /**
      * Gets precision.
-     * 
+     *
      * @return the precision.
      */
     public int getPrecision() {
@@ -108,7 +108,7 @@ public final class HashIndex extends Index {
 
     /**
      * Sets precision.
-     * 
+     *
      * @param precision the precision.
      */
     public void setPrecision(int precision) {

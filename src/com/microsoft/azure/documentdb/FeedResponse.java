@@ -6,8 +6,10 @@ import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 
+import com.microsoft.azure.documentdb.internal.Constants;
+import com.microsoft.azure.documentdb.internal.HttpConstants;
+
 /**
- *
  * Template class used by feed methods (enumeration operations).
  *
  * @param <T> the resource type of the feed response.
@@ -18,13 +20,25 @@ public final class FeedResponse<T extends Resource> {
     private Map<String, Long> usageHeaders;
     private Map<String, Long> quotaHeaders;
 
+    FeedResponse(QueryIterable<T> result) {
+        this.inner = result;
+        this.usageHeaders = new HashMap<String, Long>();
+        this.quotaHeaders = new HashMap<String, Long>();
+    }
+
+    private static String getValueOrNull(Map<String, String> map, String key) {
+        if (map != null) {
+            return map.get(key);
+        }
+        return null;
+    }
+
     /**
      * Max Quota.
      *
      * @return the database quota.
      */
-    public long getDatabaseQuota()
-    {
+    public long getDatabaseQuota() {
         return this.getMaxQuotaHeader(Constants.Quota.DATABASE);
     }
 
@@ -87,8 +101,7 @@ public final class FeedResponse<T extends Resource> {
      *
      * @return the current permission usage.
      */
-    public long getPermissionUsage()
-    {
+    public long getPermissionUsage() {
         return this.getCurrentQuotaHeader(Constants.Quota.PERMISSION);
     }
 
@@ -164,12 +177,6 @@ public final class FeedResponse<T extends Resource> {
         return this.getCurrentQuotaHeader(Constants.Quota.USER_DEFINED_FUNCTION);
     }
 
-    FeedResponse(QueryIterable<T> result) {
-        this.inner = result;
-        this.usageHeaders = new HashMap<String, Long>();
-        this.quotaHeaders = new HashMap<String, Long>();
-    }
-
     /**
      * Gets the maximum size limit for this entity (in megabytes (MB) for server resources and in count for master
      * resources).
@@ -178,7 +185,7 @@ public final class FeedResponse<T extends Resource> {
      */
     public String getMaxResourceQuota() {
         return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
-                                           HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
+                HttpConstants.HttpHeaders.MAX_RESOURCE_QUOTA);
     }
 
     /**
@@ -188,7 +195,7 @@ public final class FeedResponse<T extends Resource> {
      */
     public String getCurrentResourceQuotaUsage() {
         return FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
-                                           HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
+                HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
     }
 
     /**
@@ -198,7 +205,7 @@ public final class FeedResponse<T extends Resource> {
      */
     public double getRequestCharge() {
         String value = FeedResponse.getValueOrNull(this.inner.getResponseHeaders(),
-                                                   HttpConstants.HttpHeaders.REQUEST_CHARGE);
+                HttpConstants.HttpHeaders.REQUEST_CHARGE);
         if (StringUtils.isEmpty(value)) {
             return 0;
         }
@@ -291,8 +298,7 @@ public final class FeedResponse<T extends Resource> {
         String[] headerMaxQuotaWords = headerMaxQuota.split(Constants.Quota.DELIMITER_CHARS, -1);
         String[] headerCurrentUsageWords = headerCurrentUsage.split(Constants.Quota.DELIMITER_CHARS, -1);
 
-        for(int i = 0; i < headerMaxQuotaWords.length; ++i)
-        {
+        for (int i = 0; i < headerMaxQuotaWords.length; ++i) {
             if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.DATABASE)) {
                 this.quotaHeaders.put(Constants.Quota.DATABASE, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.DATABASE, Long.valueOf(headerCurrentUsageWords[i + 1]));
@@ -317,15 +323,8 @@ public final class FeedResponse<T extends Resource> {
             } else if (headerMaxQuotaWords[i].equalsIgnoreCase(Constants.Quota.USER_DEFINED_FUNCTION)) {
                 this.quotaHeaders.put(Constants.Quota.USER_DEFINED_FUNCTION, Long.valueOf(headerMaxQuotaWords[i + 1]));
                 this.usageHeaders.put(Constants.Quota.USER_DEFINED_FUNCTION,
-                                      Long.valueOf(headerCurrentUsageWords[i + 1]));
+                        Long.valueOf(headerCurrentUsageWords[i + 1]));
             }
         }
-    }
-
-    private static String getValueOrNull(Map<String, String> map, String key) {
-        if (map != null) {
-            return map.get(key);
-        }
-        return null;
     }
 }

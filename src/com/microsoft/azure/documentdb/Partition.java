@@ -27,54 +27,53 @@ package com.microsoft.azure.documentdb;
 final class Partition implements Comparable<Partition> {
     private byte[] hashValue;
     private String node;
-     
+
     public Partition(byte[] hashValue, String node) {
-        if(hashValue == null) {
+        if (hashValue == null) {
             throw new IllegalArgumentException("hashValue");
         }
-        if(node == null) {
+        if (node == null) {
             throw new IllegalArgumentException("node");
         }
-        
+
         this.hashValue = hashValue;
         this.node = node;
     }
-    
-    public byte[] getHashValue() {
-        return this.hashValue;
-    }
-    
-    public String getNode() {
-        return this.node;
-    }
-    
-    @Override
-    public int compareTo(Partition otherPartition) {
-        return compareTo(otherPartition.hashValue);
-    }
-    
-    public int compareTo(byte[] otherHashValue) {
-        return CompareHashValues(this.hashValue, otherHashValue);
-    }
-    
+
     private static int CompareHashValues(byte[] hash1, byte[] hash2) {
-        if(hash1.length != hash2.length)
+        if (hash1.length != hash2.length)
             throw new IllegalArgumentException("Length of hashes doesn't match.");
-        
-        // Casting "byte" which is 8-bit signed data type to a "char" which is a 16 bit unsigned data type in Java, 
+
+        // Casting "byte" which is 8-bit signed data type to a "char" which is a 16 bit unsigned data type in Java,
         // so that they are compared the same way in all SDKs which have the native 8-bit types as unsigned.
-        
+
         // The hash byte array that is returned from ComputeHash method has the MSB at the end of the array
         // so comparing the bytes from the end for compare operations.
         for (int i = 0; i < hash1.length; i++) {
-            if ((char)hash1[hash1.length - i - 1] < (char)hash2[hash1.length - i - 1]) {
+            if ((char) hash1[hash1.length - i - 1] < (char) hash2[hash1.length - i - 1]) {
                 return -1;
-            }
-            else if ((char)hash1[hash1.length - i - 1] > (char)hash2[hash1.length - i - 1]) {
+            } else if ((char) hash1[hash1.length - i - 1] > (char) hash2[hash1.length - i - 1]) {
                 return 1;
             }
         }
 
         return 0;
+    }
+
+    public byte[] getHashValue() {
+        return this.hashValue;
+    }
+
+    public String getNode() {
+        return this.node;
+    }
+
+    @Override
+    public int compareTo(Partition otherPartition) {
+        return compareTo(otherPartition.hashValue);
+    }
+
+    public int compareTo(byte[] otherHashValue) {
+        return CompareHashValues(this.hashValue, otherHashValue);
     }
 }
