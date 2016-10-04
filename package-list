@@ -1,1 +1,5 @@
 com.microsoft.azure.documentdb
+com.microsoft.azure.documentdb.directconnectivity
+com.microsoft.azure.documentdb.internal
+com.microsoft.azure.documentdb.internal.query
+com.microsoft.azure.documentdb.internal.routing
