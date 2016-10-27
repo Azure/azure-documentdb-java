@@ -1,3 +1,10 @@
+## Changes in 1.9.1 : ##
+
+    - Added support for BoundedStaleness consistency level.
+    - Added support for direct connectivity for CRUD operations for partitioned collections.
+    - Fixed a bug in querying a database with SQL.
+    - Fixed a bug in the session cache where session token may be set incorrectly.
+
 ## Changes in 1.9.0 : ##
 
     - Added support for cross partition parallel queries.
