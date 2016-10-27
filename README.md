@@ -88,6 +88,7 @@ public class HelloWorld {
 
         System.out.println("Created a new database:");
         System.out.println(myDatabase.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Define a new collection using the id above.
@@ -105,11 +106,12 @@ public class HelloWorld {
 
         System.out.println("Created a new collection:");
         System.out.println(myCollection.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Create an object, serialize it in to JSON, and wrap it in to a
+        // Create an object, serialize it into JSON, and wrap it into a
         // document.
-        SomePojo andrewPojo = new SomePojo("123", "Andrew Liu", "andrl@microsoft.com");
+        SomePojo andrewPojo = new SomePojo("123", "Andrew Liu", "andrl [at] microsoft.com");
         String andrewJson = gson.toJson(andrewPojo);
         Document andrewDocument = new Document(andrewJson);
 
@@ -120,12 +122,13 @@ public class HelloWorld {
 
         System.out.println("Created 1st document:");
         System.out.println(andrewDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Create another object, serialize it in to JSON, and wrap it in to a
+        // Create another object, serialize it into JSON, and wrap it into a
         // document.
         SomePojo mimiPojo = new SomePojo("456", "Mimi Gentz",
-                "mimig@microsoft.com");
+                "mimig [at] microsoft.com");
         String somePojoJson = gson.toJson(mimiPojo);
         Document mimiDocument = new Document(somePojoJson);
 
@@ -136,23 +139,25 @@ public class HelloWorld {
 
         System.out.println("Created 2nd document:");
         System.out.println(mimiDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Query documents
         List<Document> results = documentClient
                 .queryDocuments(
                         myCollection.getSelfLink(),
-                        "SELECT * FROM myCollection WHERE myCollection.email = 'andrl@microsoft.com'",
+                        "SELECT * FROM myCollection WHERE myCollection.email = 'andrl [at] microsoft.com'",
                         null).getQueryIterable().toList();
 
-        System.out.println("Query document where e-mail address = 'andrl@microsoft.com':");
+        System.out.println("Query document where e-mail address = 'andrl [at] microsoft.com':");
         System.out.println(results.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Replace Document Andrew with Shireesh
         andrewPojo = gson.fromJson(results.get(0).toString(), SomePojo.class);
         andrewPojo.setName("Shireesh Thota");
-        andrewPojo.setEmail("Shireesh.Thota@microsoft.com");
+        andrewPojo.setEmail("Shireesh.Thota [at] microsoft.com");
 
         andrewDocument = documentClient.replaceDocument(
                 andrewDocument.getSelfLink(),
@@ -161,19 +166,21 @@ public class HelloWorld {
 
         System.out.println("Replaced Andrew's document with Shireesh's contact information");
         System.out.println(andrewDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Delete Shireesh's Document
-
         documentClient.deleteDocument(andrewDocument.getSelfLink(), null);
 
         System.out.println("Deleted Shireesh's document");
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Delete Database
         documentClient.deleteDatabase(myDatabase.getSelfLink(), null);
 
         System.out.println("Deleted database");
+        System.out.println("Press any key to continue..");
         System.in.read();
 
     }
