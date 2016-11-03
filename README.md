@@ -6,42 +6,25 @@
 
 This project provides a client library in Java that makes it easy to interact with Azure DocumentDB. For documentation please see the Microsoft Azure [Java Developer Center](http://azure.microsoft.com/en-us/develop/java/) and the [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc).
 
-##Download
-###Option 1: Via Maven
+##Disclaimer
+The implementation in this project is intended for reference purpose only and does not reflect the latest official Azure DocumentDB Java SDK released on Maven repository.  
 
-To get the binaries of this library as distributed by Microsoft, ready for use within your project, you can use Maven.
+##Consuming the official Microsoft Azure DocumentDB Java SDK
+
+To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK as distributed by Microsoft, ready for use within your project, you can use Maven.
 
     <dependency>
     	<groupId>com.microsoft.azure</groupId>
     	<artifactId>azure-documentdb</artifactId>
-    	<version>1.8.1</version>
+    	<version>1.9.3</version>
     </dependency>
-
-###Option 2: Source Via Git
-
-To get the source code of the SDK via git just type:
-
-    git clone git://github.com/Azure/azure-documentdb-java.git
-
-###Option 3: Source Zip
-
-To download a copy of the source code, click "Download ZIP" on the right side of the page or click [here](https://github.com/Azure/azure-documentdb-java/archive/master.zip).
-
 
 ##Minimum Requirements
 * Java Development Kit 7
 * (Optional) Maven
 
 ### Dependencies
-* Apache Commons Lang 3.3.2 (org.apache.commons / commons-lang3 / 3.3.2)
-* Apache HttpClient 4.2.5 (org.apache.httpcomponents / httpclient / 4.2.5)
-* Apache HttpCore 4.2.5 (org.apache.httpcomponents / httpcore / 4.2.5)
-* Jackson Data Mapper 1.8 (org.codehaus.jackson / jackson-mapper-asl / 1.8.5)
-* JSON 20140107 (org.json / json / 20140107)
-* JUnit 4.12 (junit / junit / 4.12)
-* mockito 1.10.19 (org.mockito / mockito-core / 1.10.19)
-
-Dependencies will be added automatically if Maven is used. Otherwise, please download the jars and add them to your build path. 
+Dependencies will be added automatically if Maven is used. Otherwise, please download the dependencies from the pom.xml file and add them to your build path. 
 
 ##Usage
 
@@ -75,7 +58,6 @@ public class HelloWorld {
     // We'll use Gson for POJO <=> JSON serialization for this sample.
     // Codehaus' Jackson is another great POJO <=> JSON serializer.
     private static Gson gson = new Gson();
-
     public static void main(String[] args) throws DocumentClientException,
             IOException {
         // Instantiate a DocumentClient w/ your DocumentDB Endpoint and AuthKey.
@@ -84,8 +66,13 @@ public class HelloWorld {
                 ConsistencyLevel.Session);
 
         // Start from a clean state (delete database in case it already exists).
-        documentClient.deleteDatabase("dbs/" + DATABASE_ID, null);
-        
+        try {
+            documentClient.deleteDatabase("dbs/" + DATABASE_ID, null);
+        }
+        catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+
         // Define a new database using the id above.
         Database myDatabase = new Database();
         myDatabase.setId(DATABASE_ID);
@@ -94,8 +81,10 @@ public class HelloWorld {
         myDatabase = documentClient.createDatabase(myDatabase, null)
                 .getResource();
 
+
         System.out.println("Created a new database:");
         System.out.println(myDatabase.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Define a new collection using the id above.
@@ -108,80 +97,86 @@ public class HelloWorld {
 
         // Create a new collection.
         myCollection = documentClient.createCollection(
-                myDatabase.getSelfLink(), myCollection, requestOptions)
+                "dbs/" + DATABASE_ID, myCollection, requestOptions)
                 .getResource();
 
         System.out.println("Created a new collection:");
         System.out.println(myCollection.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Create an object, serialize it in to JSON, and wrap it in to a
+        // Create an object, serialize it into JSON, and wrap it into a
         // document.
-        SomePojo andrewPojo = new SomePojo("123", "Andrew Liu", "andrl@microsoft.com");
-        String andrewJson = gson.toJson(andrewPojo);
-        Document andrewDocument = new Document(andrewJson);
+        SomePojo allenPojo = new SomePojo("123", "Allen Brewer", "allen [at] contoso.com");
+        String allenJson = gson.toJson(allenPojo);
+        Document allenDocument = new Document(allenJson);
 
         // Create the 1st document.
-        andrewDocument = documentClient.createDocument(
-                myCollection.getSelfLink(), andrewDocument, null, false)
+        allenDocument = documentClient.createDocument(
+                "dbs/" + DATABASE_ID + "/colls/" + COLLECTION_ID, allenDocument, null, false)
                 .getResource();
 
         System.out.println("Created 1st document:");
-        System.out.println(andrewDocument.toString());
+        System.out.println(allenDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Create another object, serialize it in to JSON, and wrap it in to a
+        // Create another object, serialize it into JSON, and wrap it into a
         // document.
-        SomePojo mimiPojo = new SomePojo("456", "Mimi Gentz",
-                "mimig@microsoft.com");
-        String somePojoJson = gson.toJson(mimiPojo);
-        Document mimiDocument = new Document(somePojoJson);
+        SomePojo lisaPojo = new SomePojo("456", "Lisa Andrews",
+                "lisa [at] contoso.com");
+        String somePojoJson = gson.toJson(lisaPojo);
+        Document lisaDocument = new Document(somePojoJson);
 
         // Create the 2nd document.
-        mimiDocument = documentClient.createDocument(
-                myCollection.getSelfLink(), mimiDocument, null, false)
+        lisaDocument = documentClient.createDocument(
+                "dbs/" + DATABASE_ID + "/colls/" + COLLECTION_ID, lisaDocument, null, false)
                 .getResource();
 
         System.out.println("Created 2nd document:");
-        System.out.println(mimiDocument.toString());
+        System.out.println(lisaDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Query documents
         List<Document> results = documentClient
                 .queryDocuments(
-                        myCollection.getSelfLink(),
-                        "SELECT * FROM myCollection WHERE myCollection.email = 'andrl@microsoft.com'",
+                        "dbs/" + DATABASE_ID + "/colls/" + COLLECTION_ID,
+                        "SELECT * FROM myCollection WHERE myCollection.email = 'allen [at] contoso.com'",
                         null).getQueryIterable().toList();
 
-        System.out.println("Query document where e-mail address = 'andrl@microsoft.com':");
+        System.out.println("Query document where e-mail address = 'allen [at] contoso.com':");
         System.out.println(results.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Replace Document Andrew with Shireesh
-        andrewPojo = gson.fromJson(results.get(0).toString(), SomePojo.class);
-        andrewPojo.setName("Shireesh Thota");
-        andrewPojo.setEmail("Shireesh.Thota@microsoft.com");
+        // Replace Document Allen with Percy
+        allenPojo = gson.fromJson(results.get(0).toString(), SomePojo.class);
+        allenPojo.setName("Percy Bowman");
+        allenPojo.setEmail("Percy Bowman [at] contoso.com");
 
-        andrewDocument = documentClient.replaceDocument(
-                andrewDocument.getSelfLink(),
-                new Document(gson.toJson(andrewPojo)), null)
+        allenDocument = documentClient.replaceDocument(
+                allenDocument.getSelfLink(),
+                new Document(gson.toJson(allenPojo)), null)
                 .getResource();
 
-        System.out.println("Replaced Andrew's document with Shireesh's contact information");
-        System.out.println(andrewDocument.toString());
+        System.out.println("Replaced Allen's document with Percy's contact information");
+        System.out.println(allenDocument.toString());
+        System.out.println("Press any key to continue..");
         System.in.read();
 
-        // Delete Shireesh's Document
+        // Delete Percy's Document
+        documentClient.deleteDocument(allenDocument.getSelfLink(), null);
 
-        documentClient.deleteDocument(andrewDocument.getSelfLink(), null);
-
-        System.out.println("Deleted Shireesh's document");
+        System.out.println("Deleted Percy's document");
+        System.out.println("Press any key to continue..");
         System.in.read();
 
         // Delete Database
-        documentClient.deleteDatabase(myDatabase.getSelfLink(), null);
+        documentClient.deleteDatabase("dbs/" + DATABASE_ID, null);
 
         System.out.println("Deleted database");
+        System.out.println("Press any key to continue..");
         System.in.read();
 
     }
