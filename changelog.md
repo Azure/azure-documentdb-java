@@ -1,3 +1,14 @@
+## Changes in 1.9.5 : ##
+
+- Added support for aggregation queries (AVG, COUNT, MIN, MAX, and SUM).
+- Added support for change feed.
+- Added support for collection quota information through RequestOptions.setPopulateQuotaInfo.
+- Added support for stored procedure script logging through RequestOptions.setScriptLoggingEnabled.
+- Fixed a bug where query in DirectHttps mode may hang when encountering throttle failures.
+- Fixed a bug in session consistency mode.
+- Fixed a bug which may cause NullReferenceException in HttpContext when request rate is high.
+- Improved performance of DirectHttps mode.
+
 ## Changes in 1.9.4 : ##
 
 - Added simple client instance-based proxy support with ConnectionPolicy.setProxy() API.
