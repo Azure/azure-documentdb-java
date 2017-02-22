@@ -1,3 +1,8 @@
+## Changes in 1.9.6 : ##
+
+- Fixed a bug in the query engine configuration that may cause exceptions for queries in Gateway mode.
+- Fixed a few bugs in the session container that may cause an "Owner resource not found" exception for requests immediately after collection creation.
+
 ## Changes in 1.9.5 : ##
 
 - Added support for aggregation queries (AVG, COUNT, MIN, MAX, and SUM).
