@@ -1,3 +1,8 @@
+## Changes in 1.10.0 : ##
+
+- Enabled support for partitioned collection with as low as 2,500 RU/sec and scale in increments of 100 RU/sec.
+- Fixed a bug in the native assembly which can cause NullRef exception in some queries.
+
 ## Changes in 1.9.6 : ##
 
 - Fixed a bug in the query engine configuration that may cause exceptions for queries in Gateway mode.
