@@ -1,4 +1,4 @@
-#Microsoft Azure DocumentDB Java SDK
+#Microsoft Azure DocumentDB SDK for Java
 
 ![](https://img.shields.io/github/release/azure/azure-documentdb-java.svg)
 ![](https://img.shields.io/maven-central/v/com.microsoft.azure/azure-documentdb.svg)
