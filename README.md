@@ -1,6 +1,5 @@
 #Microsoft Azure DocumentDB Java SDK
 
-![](https://img.shields.io/github/release/azure/azure-documentdb-java.svg)
 ![](https://img.shields.io/maven-central/v/com.microsoft.azure/azure-documentdb.svg)
 ![](https://img.shields.io/github/issues/azure/azure-documentdb-java.svg)
 
@@ -16,7 +15,7 @@ To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK a
     <dependency>
     	<groupId>com.microsoft.azure</groupId>
     	<artifactId>azure-documentdb</artifactId>
-    	<version>1.10.0</version>
+    	<version>1.11.0</version>
     </dependency>
 
 ##Minimum Requirements
