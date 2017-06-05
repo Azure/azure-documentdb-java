@@ -1,14 +1,14 @@
-#Microsoft Azure DocumentDB Java SDK
+# Microsoft Azure DocumentDB Java SDK
 
 ![](https://img.shields.io/maven-central/v/com.microsoft.azure/azure-documentdb.svg)
 ![](https://img.shields.io/github/issues/azure/azure-documentdb-java.svg)
 
 This project provides a client library in Java that makes it easy to interact with Azure DocumentDB. For documentation please see the Microsoft Azure [Java Developer Center](http://azure.microsoft.com/en-us/develop/java/) and the [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc).
 
-##Disclaimer
+## Disclaimer
 The implementation in this project is intended for reference purpose only and does not reflect the latest official Azure DocumentDB Java SDK released on Maven repository.  
 
-##Consuming the official Microsoft Azure DocumentDB Java SDK
+## Consuming the official Microsoft Azure DocumentDB Java SDK
 
 To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK as distributed by Microsoft, ready for use within your project, you can use Maven.
 
@@ -18,14 +18,14 @@ To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK a
     	<version>1.11.0</version>
     </dependency>
 
-##Minimum Requirements
+## Minimum Requirements
 * Java Development Kit 7
 * (Optional) Maven
 
 ### Dependencies
 Dependencies will be added automatically if Maven is used. Otherwise, please download the dependencies from the pom.xml file and add them to your build path. 
 
-##Usage
+## Usage
 
 To use this SDK to call Azure DocumentDB, you need to first [create an account](http://azure.microsoft.com/en-us/documentation/articles/documentdb-create-account/).
 
@@ -259,17 +259,17 @@ newDocument = documentClient.readDocument(newDocument.getSelfLink(), options).ge
 
 Additional samples are provided in the unit tests.
 
-##Need Help?
+## Need Help?
 
 Be sure to check out the Microsoft Azure [Developer Forums on MSDN](https://social.msdn.microsoft.com/forums/azure/en-US/home?forum=AzureDocumentDB) or the [Developer Forums on Stack Overflow](http://stackoverflow.com/questions/tagged/azure-documentdb) if you have trouble with the provided code.
 
-##Contribute Code or Provide Feedback
+## Contribute Code or Provide Feedback
 
 If you would like to become an active contributor to this project please follow the instructions provided in [Azure Projects Contribution Guidelines](http://azure.github.io/guidelines.html).
 
 If you encounter any bugs with the library please file an issue in the [Issues](https://github.com/Azure/azure-documentdb-java/issues) section of the project.
 
-##Learn More
+## Learn More
 
 * [Azure Developer Center](http://azure.microsoft.com/en-us/develop/java/)
 * [Azure DocumentDB Service](http://azure.microsoft.com/en-us/documentation/services/documentdb/)
