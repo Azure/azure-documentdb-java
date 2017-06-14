@@ -1,3 +1,9 @@
+## Changes in 1.11.0 : ##
+
+- Added support for Request Unit per Minute (RU/m) feature.
+- Added support for a new consistency level called ConsistentPrefix.
+- Fixed a bug in reading collection in session mode.
+
 ## Changes in 1.10.0 : ##
 
 - Enabled support for partitioned collection with as low as 2,500 RU/sec and scale in increments of 100 RU/sec.
