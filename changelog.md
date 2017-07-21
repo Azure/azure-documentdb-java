@@ -1,3 +1,8 @@
+## Changes in 1.12.0 : ##
+
+- Critical bug fixes to request processing during partition splits.
+- Fixed an issue with the Strong and BoundedStaleness consistency levels.
+
 ## Changes in 1.11.0 : ##
 
 - Added support for Request Unit per Minute (RU/m) feature.
