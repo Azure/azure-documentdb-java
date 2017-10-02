@@ -42,7 +42,7 @@ import com.microsoft.azure.documentdb.IndexingPolicy;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RequestOptions;
 
-public class CollectionCrudTests
+public class CollectionCrudSamples
 {
     private final String databaseId = "exampleDB";
 
@@ -51,7 +51,7 @@ public class CollectionCrudTests
     @Before
     public void setUp() throws DocumentClientException {
         // create client
-        client = new DocumentClient(TestConfigurations.HOST, TestConfigurations.MASTER_KEY, null, null);
+        client = new DocumentClient(AccountCredentials.HOST, AccountCredentials.MASTER_KEY, null, null);
 
         // removes the database "exampleDB" (if exists)
         deleteDatabase();

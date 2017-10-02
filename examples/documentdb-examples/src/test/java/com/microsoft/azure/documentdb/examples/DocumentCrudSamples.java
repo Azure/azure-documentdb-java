@@ -49,7 +49,7 @@ import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 
 
-public class DocumentCrudTests
+public class DocumentCrudSamples
 {
     private final String databaseId = "exampleDB";
     private final String collectionId = "testCollection";
@@ -61,7 +61,7 @@ public class DocumentCrudTests
     @Before
     public void setUp() throws DocumentClientException {
         // create client
-        client = new DocumentClient(TestConfigurations.HOST, TestConfigurations.MASTER_KEY, null, null);
+        client = new DocumentClient(AccountCredentials.HOST, AccountCredentials.MASTER_KEY, null, null);
 
         // removes the database "exampleDB" (if exists)
         deleteDatabase();

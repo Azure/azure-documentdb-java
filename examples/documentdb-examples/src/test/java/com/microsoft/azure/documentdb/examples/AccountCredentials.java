@@ -27,12 +27,11 @@ package com.microsoft.azure.documentdb.examples;
 /**
  * Contains the configurations for test file
  */
-public final class TestConfigurations {
+public final class AccountCredentials {
     // Replace MASTER_KEY and HOST with values from your DocumentDB account.
     // The default values are credentials of the local emulator, which are not used in any production environment.
     // <!--[SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine")]-->
     public static final String MASTER_KEY =
             "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
     public static final String HOST = "https://localhost:443/";
-
 }

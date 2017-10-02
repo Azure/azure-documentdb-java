@@ -39,7 +39,7 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 
-public class DatabaseCrudTests
+public class DatabaseCrudSamples
 {
     private final String databaseId = "exampleDB";
 
@@ -47,7 +47,8 @@ public class DatabaseCrudTests
 
     @Before
     public void setUp() {
-        client = new DocumentClient(TestConfigurations.HOST, TestConfigurations.MASTER_KEY, null, null);
+        // instantiate document client
+        client = new DocumentClient(AccountCredentials.HOST, AccountCredentials.MASTER_KEY, null, null);
         deleteDatabase();
     }
 
@@ -65,12 +66,12 @@ public class DatabaseCrudTests
         Database databaseDefinition = new Database();
         databaseDefinition.setId(databaseId);
 
-        // this will create a database with resource URI: /dbs/${databaseId}
         RequestOptions options = new RequestOptions();
         client.createDatabase(databaseDefinition, options);
 
         String databaseLink = String.format("/dbs/%s", databaseId);
 
+        // read the database that we just create
         ResourceResponse<Database> response = client.readDatabase(databaseLink, options);
         Database readDatabase = response.getResource();
 
@@ -83,7 +84,6 @@ public class DatabaseCrudTests
         Database databaseDefinition = new Database();
         databaseDefinition.setId(databaseId);
 
-        // this will create a database with resource URI: /dbs/${databaseId}
         RequestOptions options = new RequestOptions();
         client.createDatabase(databaseDefinition, options);
 
