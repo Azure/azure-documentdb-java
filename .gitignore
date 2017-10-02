@@ -19,3 +19,8 @@ hs_err_pid*
 
 # Eclipse
 .settings/
+.classpath
+.project
+
+# Windows dll 
+*.dll
