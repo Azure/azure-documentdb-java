@@ -30,18 +30,23 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.microsoft.azure.documentdb.DataType;
 import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.IncludedPath;
+import com.microsoft.azure.documentdb.Index;
+import com.microsoft.azure.documentdb.IndexingPolicy;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RequestOptions;
 
-public class DocumentCollectionTests
+public class CollectionCrudTests
 {
+    private final String databaseId = "exampleDB";
+
     private DocumentClient client;
-    private String databaseId = "exampleDB";
 
     @Before
     public void setUp() throws DocumentClientException {
@@ -95,7 +100,7 @@ public class DocumentCollectionTests
     }
 
     @Test
-    public void createMultiPartitionCollection() throws DocumentClientException {
+    public void createCustomMultiPartitionCollection() throws DocumentClientException {
 
         String databaseLink = String.format("/dbs/%s", databaseId);
         String collectionId = "testCollection";
@@ -113,6 +118,27 @@ public class DocumentCollectionTests
         // set the throughput to be 20,000
         RequestOptions options = new RequestOptions();
         options.setOfferThroughput(20000);
+
+        // set ttl to 100 seconds
+        collectionDefinition.setDefaultTimeToLive(100);
+
+        // set indexing policy to be range range for string and number
+        IndexingPolicy indexingPolicy = new IndexingPolicy();
+        Collection<IncludedPath> includedPaths = new ArrayList<IncludedPath>();
+        IncludedPath includedPath = new IncludedPath();
+        includedPath.setPath("/*");
+        Collection<Index> indexes = new ArrayList<Index>();
+        Index stringIndex = Index.Range(DataType.String);
+        stringIndex.set("precision", -1);
+        indexes.add(stringIndex);
+
+        Index numberIndex = Index.Range(DataType.Number);
+        numberIndex.set("precision", -1);
+        indexes.add(numberIndex);
+        includedPath.setIndexes(indexes);
+        includedPaths.add(includedPath);
+        indexingPolicy.setIncludedPaths(includedPaths);
+        collectionDefinition.setIndexingPolicy(indexingPolicy);
 
         // create a collection
         client.createCollection(databaseLink, collectionDefinition, options);

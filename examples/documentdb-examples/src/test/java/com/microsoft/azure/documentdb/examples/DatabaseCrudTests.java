@@ -39,10 +39,11 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.ResourceResponse;
 
-public class DatabaseTests
+public class DatabaseCrudTests
 {
+    private final String databaseId = "exampleDB";
+
     private DocumentClient client;
-    private String databaseId = "exampleDB";
 
     @Before
     public void setUp() {
