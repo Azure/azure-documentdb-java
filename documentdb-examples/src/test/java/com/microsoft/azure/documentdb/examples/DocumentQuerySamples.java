@@ -25,11 +25,12 @@ package com.microsoft.azure.documentdb.examples;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -40,13 +41,12 @@ import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.IncludedPath;
 import com.microsoft.azure.documentdb.Index;
 import com.microsoft.azure.documentdb.IndexingPolicy;
-import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RequestOptions;
-import com.microsoft.azure.documentdb.ResourceResponse;
 
 
 public class DocumentQuerySamples
@@ -55,6 +55,7 @@ public class DocumentQuerySamples
     private final String collectionId = "testCollection";
     private final String partitionKeyFieldName = "city";
     private final String partitionKeyPath = "/" + partitionKeyFieldName;
+    private final String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
 
     private DocumentClient client;
 
@@ -70,6 +71,9 @@ public class DocumentQuerySamples
 
         // create collection
         createMultiPartitionCollection();
+
+        // populate documents
+        populateDocuments();
     }
 
     @After
@@ -80,47 +84,73 @@ public class DocumentQuerySamples
         }
     }
 
-    @Test
-    public void createDocumentAndReadAndDelete() throws DocumentClientException {
+    private void populateDocuments() throws DocumentClientException {
 
-        // create a document in the collection
-        String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
-        Document documentDefinition = new Document(
-                "{" +
-                        "   \"id\": \"test-document\"," +
-                        "   \"city\" : \"Seattle\"," +
-                        "   \"population\" : 704352" +
+        String[] cities = new String [] { "Amherst", "Seattle", "Redmond", "北京市", "बंगलौर - विकिपीडिया", "شیراز‎‎" };
+        String[] poetNames = new String[] { "Emily Elizabeth Dickinson", "Hafez", "Lao Tzu" };
 
-                "} ") ;
+        for(int i = 0; i < 100; i++) {
+            Document documentDefinition = new Document();
+            documentDefinition.setId("test-document" + i);
+            documentDefinition.set("city", cities[i % cities.length]);
+            documentDefinition.set("cnt", i);
 
-        ResourceResponse<Document> response = client.createDocument(collectionLink, documentDefinition, null, false);
+            documentDefinition.set("poetName", poetNames[ i % poetNames.length ]);
+            documentDefinition.set("popularity", RandomUtils.nextDouble(0, 1));
 
-        // access request charge associated with document create
-        assertThat(response.getRequestCharge(), greaterThan((double) 0));
+            client.createDocument(collectionLink, documentDefinition, null, true);
 
-        String documentLink = String.format("/dbs/%s/colls/%s/docs/%s", databaseId, collectionId, "test-document");
-
-        // since it is a Point Read and the collection is multi partition collection, partition key has to be provided
-        RequestOptions options = new RequestOptions();
-        options.setPartitionKey(new PartitionKey("Seattle"));
-
-        // read document using the collectionlink and the provided partition key
-        response = client.readDocument(documentLink, options);
-        // access request charge associated with document read
-        assertThat(response.getRequestCharge(), greaterThan((double) 0));
-
-        // access individual fields
-        Document readDocument = response.getResource();
-
-        assertThat(readDocument.getId(), equalTo("test-document"));
-        assertThat(readDocument.getInt("population"), equalTo(704352));
-        assertThat(readDocument.getString("city"), equalTo("Seattle"));
-
-        // delete document
-        response = client.deleteDocument(documentLink, options);
-        assertThat(response.getRequestCharge(), greaterThan((double) 0));
+        }
     }
 
+    @Test
+    public void simpleDocumentQuery() throws DocumentClientException {
+
+        // as this is a multi collection enable cross partition query
+        FeedOptions options = new FeedOptions();
+        options.setEnableCrossPartitionQuery(true);
+
+        Iterator<Document> it = client.queryDocuments(collectionLink, "SELECT * from r", options).getQueryIterator();
+
+        int i = 0;
+        while(it.hasNext()) {
+            Document d = it.next();
+
+            System.out.println("id is " + d.getId());
+            System.out.println("citi is " + d.getString("city"));
+            System.out.println("cnt is " + d.getInt("cnt"));
+            System.out.println("popularity is " + d.getDouble("popularity"));
+
+            i++;
+        }
+
+        assertThat(i, equalTo(100));
+    }
+
+    @Test
+    public void orderByQuery() throws DocumentClientException {
+
+        // as this is a multi collection enable cross partition query
+        FeedOptions options = new FeedOptions();
+        options.setEnableCrossPartitionQuery(true);
+
+        Iterator<Document> it = client.queryDocuments(collectionLink, "SELECT * from r ORDER BY r.cnt", options).getQueryIterator();
+
+        int i = 0;
+        while(it.hasNext()) {
+            Document d = it.next();
+
+            System.out.println("id is " + d.getId());
+            System.out.println("citi is " + d.getString("city"));
+            System.out.println("cnt is " + d.getInt("cnt"));
+            System.out.println("popularity is " + d.getDouble("popularity"));
+
+            assertThat(d.getInt("cnt"), equalTo(i));
+
+            i++;
+        }
+        assertThat(i, equalTo(100));
+    }
 
     private void createDatabase() throws DocumentClientException {
         Database databaseDefinition = new Database();
