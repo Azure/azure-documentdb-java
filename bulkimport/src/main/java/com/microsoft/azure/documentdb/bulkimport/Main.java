@@ -61,6 +61,7 @@ public class Main {
 
         BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
 
+        // returned stats
         System.out.println("Number of documents inserted: " + bulkImportResponse.getNumberOfDocumentsImported());
         System.out.println("Import total time: " + bulkImportResponse.getTotalTimeTaken());
         System.out.println("Total request unit consumed: " + bulkImportResponse.getTotalRequestUnitsConsumed());
