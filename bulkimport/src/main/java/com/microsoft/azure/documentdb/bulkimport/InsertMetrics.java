@@ -26,7 +26,7 @@ import java.time.Duration;
 
 import com.google.common.base.Preconditions;
 
-public class InsertMetrics {
+class InsertMetrics {
 
     final long numberOfDocumentsInserted;
     final Duration timeTaken;

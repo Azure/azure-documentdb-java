@@ -31,7 +31,7 @@ import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
 
-public class Main {
+public class Sample {
 
     public static final String MASTER_KEY = "[YOUR-MASTERKEY]";
     public static final String HOST = "[YOUR-ENDPOINT]";
@@ -59,7 +59,7 @@ public class Main {
             docs.add(doc);
         }
 
-        BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
+        BulkImportResponse bulkImportResponse = importer.bulkImport(docs.iterator(), false);
 
         // returned stats
         System.out.println("Number of documents inserted: " + bulkImportResponse.getNumberOfDocumentsImported());

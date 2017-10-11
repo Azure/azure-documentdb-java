@@ -32,11 +32,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +57,8 @@ import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
@@ -130,6 +136,11 @@ public class BulkImporter {
     private final Future<Void> initializationFuture;
 
     /**
+     * Collection offer throughput
+     */
+    private int collectionThroughput;
+
+    /**
      * Initializes a new instance of {@link BulkImporter}
      *
      * @param client {@link DocumentClient} instance to use
@@ -181,6 +192,16 @@ public class BulkImporter {
 
         this.partitionKeyRangeIds = partitionKeyRanges.stream().map(partitionKeyRange -> partitionKeyRange.getId()).collect(Collectors.toList());
 
+        FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
+
+        Iterator<Offer> offerIterator = offers.getQueryIterator();
+        if (!offerIterator.hasNext()) {
+            throw new IllegalStateException("Cannot find Collection's corresponding offer");
+        }
+
+        Offer offer = offerIterator.next();
+        this.collectionThroughput = offer.getContent().getInt("offerThroughput");
+
         logger.debug("Initialization completed");
     }
 
@@ -209,7 +230,7 @@ public class BulkImporter {
      *      docs.add(doc);
      * }
      *
-     * BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
+     * BulkImportResponse bulkImportResponse = importer.bulkImport(docs.iterator(), false);
      *
      * client.close();
      * </code>
@@ -218,7 +239,7 @@ public class BulkImporter {
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse bulkImport(Collection<String> documents, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse bulkImport(Iterator<String> documents, boolean enableUpsert) throws DocumentClientException {
 
         Preconditions.checkNotNull(documents, "documents cannot be null");
         try {
@@ -230,9 +251,8 @@ public class BulkImporter {
         }
     }
 
-    private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Collection<String> documents, boolean enableUpsert) {
+    private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Iterator<String> documents, boolean enableUpsert) {
 
-        Stopwatch watch = Stopwatch.createStarted();
         BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, enableUpsert);
 
         ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
@@ -245,7 +265,12 @@ public class BulkImporter {
 
         // Sort documents into partition buckets.
         logger.debug("Sorting documents into partition buckets");
-        documents.parallelStream().forEach(document -> {
+
+        Stream<String> stream = StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(documents, Spliterator.ORDERED),
+                false).parallel();
+
+        stream.forEach(document -> {
             PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(document, partitionKeyDefinition);
             String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
             String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
@@ -267,8 +292,7 @@ public class BulkImporter {
             {
                 List<String> currentMiniBatch = new ArrayList<String>();
                 int currentMiniBatchSize = 0;
-                do
-                {
+                do {
                     String currentDocument = it.next();
                     int currentDocumentSize = getSizeInBytes(currentDocument);
                     if (currentDocumentSize > maxMiniBatchSize)
@@ -301,8 +325,10 @@ public class BulkImporter {
 
 
             congestionControllers.put(partitionKeyRangeId,
-                    new CongestionController(listeningExecutorService, partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));
+                    new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));
         }
+
+        Stopwatch watch = Stopwatch.createStarted();
 
         List<ListenableFuture<Void>> futures = congestionControllers.values().parallelStream().map(c -> c.ExecuteAll()).collect(Collectors.toList());
         FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);

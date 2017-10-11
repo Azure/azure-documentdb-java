@@ -67,6 +67,12 @@ class CongestionController {
     private static final int MULTIPLICATIVE_DECREASE_FACTOR = 2;
 
     /**
+     * The threshold to grow to.
+     * For example if this is set to .9 and the collection has 10k RU, then the code will keep increasing the degree of concurrency until we hit .9 * 10k = 9k RU.
+     */
+    private static final double THROUGHPUT_THRESHOLD  = 0.9;
+
+    /**
      * The id of the physical partition that this congestion controller is responsible for.
      */
     private final String partitionKeyRangeId;
@@ -113,11 +119,16 @@ class CongestionController {
      */
     private ListeningExecutorService executor;
 
-    public CongestionController(ListeningExecutorService executor, String partitionKeyRangeId, BatchInserter batchInserter) {
-        this(executor, partitionKeyRangeId, batchInserter, null);
+    /**
+     * Partition throughput
+     */
+    private int partitionThroughput;
+
+    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId, BatchInserter batchInserter) {
+        this(executor, partitionThroughput, partitionKeyRangeId, batchInserter, null);
     }
 
-    public CongestionController(ListeningExecutorService executor, String partitionKeyRangeId, BatchInserter batchInserter, Integer startingDegreeOfConcurrency) {
+    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId, BatchInserter batchInserter, Integer startingDegreeOfConcurrency) {
         this.partitionKeyRangeId = partitionKeyRangeId;
         this.batchInserter = batchInserter;
 
@@ -126,8 +137,8 @@ class CongestionController {
         this.degreeOfConcurrency = startingDegreeOfConcurrency != null ? startingDegreeOfConcurrency: STARTING_DEGREE_OF_CONCURRENCY;
         this.throttleSemaphore = new Semaphore(this.degreeOfConcurrency);
         this.aggregatedInsertMetrics = new InsertMetrics();
-
         this.executor = executor;
+        this.partitionThroughput = partitionThroughput;
     }
 
     private synchronized InsertMetrics atomicGetAndReplace(InsertMetrics metrics) {
@@ -166,7 +177,7 @@ class CongestionController {
 
                             logger.trace("{} encountered {} throttling", partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
 
-                            degreeOfConcurrency /= MULTIPLICATIVE_DECREASE_FACTOR;
+                            degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
                         }
 
                         if (insertMetricsSample.numberOfDocumentsInserted == 0) {
@@ -177,8 +188,8 @@ class CongestionController {
                         logger.trace("{} aggregating inserts metrics", partitionKeyRangeId);
 
                         if (insertMetricsSample.numberOfThrottles == 0) {
-
-                            if (degreeOfConcurrency + ADDITIVE_INCREASE_FACTOR <= MAX_DEGREE_OF_CONCURRENCY) {
+                            if ((insertMetricsSample.requestUnitsConsumed < THROUGHPUT_THRESHOLD * partitionThroughput) &&
+                                    degreeOfConcurrency + ADDITIVE_INCREASE_FACTOR <= MAX_DEGREE_OF_CONCURRENCY) {
                                 // We aren't getting throttles, so we should bump of the degree of concurrency (AIAD).
                                 throttleSemaphore.release(ADDITIVE_INCREASE_FACTOR);
                                 degreeOfConcurrency += ADDITIVE_INCREASE_FACTOR;

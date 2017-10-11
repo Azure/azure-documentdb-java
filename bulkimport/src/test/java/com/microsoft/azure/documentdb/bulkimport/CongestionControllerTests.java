@@ -98,7 +98,7 @@ public class CongestionControllerTests {
         when(client.executeStoredProcedure(Mockito.any(String.class), Mockito.any(RequestOptions.class),
                 Mockito.any(Object[].class))).thenReturn(bulkImportResponse);
 
-        CongestionController cc = new CongestionController(listeningExecutorService, paritionKeyRangeId, bi);
+        CongestionController cc = new CongestionController(listeningExecutorService, 10000, paritionKeyRangeId, bi);
         ListenableFuture<Void> listenableFuture = cc.ExecuteAll();
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -167,7 +167,7 @@ public class CongestionControllerTests {
         when(client.executeStoredProcedure(Mockito.any(String.class), Mockito.any(RequestOptions.class),
                 Mockito.any(Object[].class))).thenReturn(bulkImportResponse1).thenReturn(bulkImportResponse2);
 
-        CongestionController cc = new CongestionController(listeningExecutorService, paritionKeyRangeId, bi);
+        CongestionController cc = new CongestionController(listeningExecutorService, 10000, paritionKeyRangeId, bi);
         ListenableFuture<Void> listenableFuture = cc.ExecuteAll();
 
         CountDownLatch latch = new CountDownLatch(1);

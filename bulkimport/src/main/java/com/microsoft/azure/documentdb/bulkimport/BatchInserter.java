@@ -123,7 +123,7 @@ class BatchInserter  {
                     int currentDocumentIndex = 0;
 
                     while (currentDocumentIndex < miniBatch.size()) {
-                        String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size() - currentDocumentIndex).toArray(new String[0]);
+                        String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
 
                         // Before c# 6, await not allowed in the catch block, hence the following two local variables.
                         boolean isThrottled = false;
