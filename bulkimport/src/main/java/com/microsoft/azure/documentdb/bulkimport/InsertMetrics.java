@@ -36,8 +36,7 @@ class InsertMetrics {
     /**
      * Initializes a new instance of the InsertMetrics class (default constructor).
      */
-    public InsertMetrics()
-    {
+    public InsertMetrics() {
         this(0, Duration.ZERO, 0, 0);
     }
 
@@ -48,8 +47,7 @@ class InsertMetrics {
      * @param requestUnitsConsumed The request units consumed to insert the documents.
      * @param numberOfThrottles The number of throttles encountered to insert the documents.
      */
-    public InsertMetrics(long numberOfDocumentsInserted, Duration timeTaken, double requestUnitsConsumed, long numberOfThrottles)
-    {
+    public InsertMetrics(long numberOfDocumentsInserted, Duration timeTaken, double requestUnitsConsumed, long numberOfThrottles) {
         Preconditions.checkArgument(numberOfDocumentsInserted >= 0, "numberOfDocumentsInserted must be non negative");
         Preconditions.checkArgument(requestUnitsConsumed >= 0, "requestUnitsConsumed must be non negative");
         Preconditions.checkArgument(numberOfThrottles >= 0, "numberOfThrottles must be non negative");

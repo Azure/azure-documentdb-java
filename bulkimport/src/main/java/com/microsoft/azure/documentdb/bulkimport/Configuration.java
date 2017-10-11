@@ -26,7 +26,7 @@ public class Configuration {
     private int documentDataFieldSize = 1;
 
     @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size")
-    private Integer maxConnectionPoolSize = 1000;
+    private Integer maxConnectionPoolSize = 200;
 
     @Parameter(names = "-consistencyLevel", description = "Consistency Level")
     private ConsistencyLevel consistencyLevel = ConsistencyLevel.Session;
@@ -34,24 +34,27 @@ public class Configuration {
     @Parameter(names = "-connectionMode", description = "Connection Mode")
     private ConnectionMode connectionMode = ConnectionMode.Gateway;
 
-    @Parameter(names = "-concurrency", description = "Degree of Concurrency in Inserting Documents (only applies to blocking client)."
-            + " If this value is not specified, the max connection pool size will be used as the concurrency level.")
-    private Integer concurrency;
+//    @Parameter(names = "-concurrency", description = "Degree of Concurrency in Inserting Documents (only applies to blocking client)."
+//            + " If this value is not specified, the max connection pool size will be used as the concurrency level.")
+//    private Integer concurrency;
 
-    @Parameter(names = "-numberOfDocumentsToInsertInEachSnapshot", description = "Total Number Of Documents To Insert in each Snapshot")
-    private int numberOfDocumentsToInsert = 100000;
+    @Parameter(names = "-numberOfDocumentsForEachCheckpoint", description = "Number of documents in each checkpoint.")
+    private int numberOfDocumentsForEachCheckpoint = 1000000;
 
-    @Parameter(names = "-numberOfSnapshots", description = "Number of snapshots (sends total number of documents in chunks to bulk import api)")
-    private int numberOfSnapshots = 100000;
+    @Parameter(names = "-numberOfCheckpoints", description = "Number of checkpoints.")
+    private int numberOfCheckpoints = 100;
 
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
 
-
-    public int getNumberOfDocumentsToInsert() {
-        return numberOfDocumentsToInsert;
+    public int getNumberOfCheckpoints() {
+        return numberOfCheckpoints;
     }
-
+    
+    public int getNumberOfDocumentsForEachCheckpoint() {
+        return numberOfDocumentsForEachCheckpoint;
+    }
+    
     public String getServiceEndpoint() {
         return serviceEndpoint;
     }
@@ -59,14 +62,6 @@ public class Configuration {
     public String getMasterKey() {
         return masterKey;
     }
-
-    /**
-     * @return the numberOfSnapshots
-     */
-    public int getNumberOfSnapshots() {
-        return numberOfSnapshots;
-    }
-
 
     public boolean isHelp() {
         return help;
@@ -95,13 +90,13 @@ public class Configuration {
         return collectionId;
     }
 
-    public int getConcurrency() {
-        if (this.concurrency != null) {
-            return concurrency;
-        } else {
-            return this.maxConnectionPoolSize;
-        }
-    }
+//    public int getConcurrency() {
+//        if (this.concurrency != null) {
+//            return concurrency;
+//        } else {
+//            return this.maxConnectionPoolSize;
+//        }
+//    }
 
     @Override
     public String toString() {
