@@ -7,7 +7,6 @@ import com.beust.jcommander.Parameter;
 import com.microsoft.azure.documentdb.ConnectionMode;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
-import com.microsoft.azure.documentdb.RetryOptions;
 
 public class Configuration {
 

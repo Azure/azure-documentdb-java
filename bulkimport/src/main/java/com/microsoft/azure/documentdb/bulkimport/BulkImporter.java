@@ -251,7 +251,8 @@ public class BulkImporter {
         }
     }
 
-    private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Iterator<String> documents, boolean enableUpsert) {
+    private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Iterator<String> documents, boolean enableUpsert) {        
+        Stopwatch watch = Stopwatch.createStarted();
 
         BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, enableUpsert);
 
@@ -309,6 +310,8 @@ public class BulkImporter {
             }
         });
 
+        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");
+
         logger.debug("Beginning bulk import within each partition bucket");
         Map<String, BatchInserter> batchInserters = new HashMap<String, BatchInserter>();
         Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
@@ -328,8 +331,8 @@ public class BulkImporter {
                     new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));
         }
 
-        Stopwatch watch = Stopwatch.createStarted();
-
+        System.out.println("total preprocessing took: " + watch.elapsed().toMillis() + " millis");
+        
         List<ListenableFuture<Void>> futures = congestionControllers.values().parallelStream().map(c -> c.ExecuteAll()).collect(Collectors.toList());
         FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
         AsyncCallable<BulkImportResponse> completeAsyncCallback = new AsyncCallable<BulkImportResponse>() {
@@ -338,7 +341,6 @@ public class BulkImporter {
             public ListenableFuture<BulkImportResponse> call() throws Exception {
 
                 // TODO: this can change so aggregation of the result happen at each
-                watch.stop();
 
                 for(String partitionKeyRangeId: partitionKeyRangeIds) {
                     partitionDegreeOfConcurrency.put(partitionKeyRangeId, congestionControllers.get(partitionKeyRangeId).getDegreeOfConcurrency());
@@ -346,6 +348,8 @@ public class BulkImporter {
 
                 int numberOfDocumentsImported = batchInserters.values().stream().mapToInt(b -> b.getNumberOfDocumentsImported()).sum();
                 double totalRequestUnitsConsumed = batchInserters.values().stream().mapToDouble(b -> b.getTotalRequestUnitsConsumed()).sum();
+
+                watch.stop();
 
                 BulkImportResponse bulkImportResponse = new BulkImportResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed());
 
@@ -360,7 +364,6 @@ public class BulkImporter {
         try {
             // NOTE: Java doesn't have internal access modifier
             // This is only invoked once per Bulk Import Initialization. So this is not costly.
-            // TODO: explore other options here (if any)
             Field f = client.getClass().getDeclaredField("partitionKeyRangeCache"); //NoSuchFieldException
             f.setAccessible(true);
             PartitionKeyRangeCache cache = (PartitionKeyRangeCache) f.get(client); //IllegalAccessException

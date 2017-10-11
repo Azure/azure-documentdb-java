@@ -187,17 +187,17 @@ class BatchInserter  {
 
                             } else if (isGone(e)) {
                                 if (isSplit(e)) {
-                                    String errorMessage = String.format("Partition range id {} is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+                                    String errorMessage = String.format("Partition range id %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 } else {
-                                    String errorMessage = String.format("Partition range id {} is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+                                    String errorMessage = String.format("Partition range id %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 }
 
                             } else {
-                                String errorMessage = String.format("Partition range id {} failed to import mini-batch. Exception was {}. Status code was {}",
+                                String errorMessage = String.format("Partition range id %s failed to import mini-batch. Exception was %s. Status code was %s",
                                         partitionKeyRangeId,
                                         e.getMessage(),
                                         e.getStatusCode());
@@ -206,10 +206,10 @@ class BatchInserter  {
                             }
 
                         } catch (Exception e) {
-                            String errorMessage = String.format("Partition range id {} Failed to import mini-batch. Exception was {}", partitionKeyRangeId,
+                            String errorMessage = String.format("Partition range id %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
                                     e.getMessage());
                             logger.error(errorMessage, e);
-                            throw new RuntimeException(e);
+                            throw new RuntimeException(errorMessage, e);
                         }
 
                         if (isThrottled) {
