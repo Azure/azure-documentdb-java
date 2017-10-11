@@ -1,3 +1,9 @@
+## Changes in 1.13.0 : ##
+
+- Fixed an issue in reading single partition key ranges
+- Fixed an issue in ResourceID parsing that affects database with short names
+- Fixed an issue cause by partition key encoding
+
 ## Changes in 1.12.0 : ##
 
 - Critical bug fixes to request processing during partition splits.
