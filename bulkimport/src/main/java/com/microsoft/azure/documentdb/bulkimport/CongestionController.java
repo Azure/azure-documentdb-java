@@ -80,7 +80,7 @@ class CongestionController {
     /**
      * This determines how often the code will sample the InsertMetrics and check to see if the degree of concurrency needs to be changed.
      */
-    private final Duration samplePeriod = Duration.ofSeconds(3);
+    private final Duration samplePeriod = Duration.ofSeconds(1);
 
     /**
      * The {@link BatchInserter} that exposes a stream of {@link Callable} that insert document batches and returns an {@link InsertMetrics}
@@ -157,24 +157,22 @@ class CongestionController {
                         // TODO: FIXME I think semaphore may reach 0 here and if so that will create a deadlock
                         // verify and fix
 
-                        logger.trace("partition key range id {} goes to sleep for {} seconds", partitionKeyRangeId, samplePeriod.getSeconds());
-                        Thread.sleep(samplePeriod.getSeconds() * 1000);
-                        logger.trace("{} wakes up", partitionKeyRangeId);
+                        logger.debug("partition key range id {} goes to sleep for {} seconds", partitionKeyRangeId, samplePeriod.getSeconds());
+                        Thread.sleep(samplePeriod.toMillis());
+                        logger.debug("{} wakes up", partitionKeyRangeId);
 
                         InsertMetrics insertMetricsSample = atomicGetAndReplace(new InsertMetrics());
 
                         if (insertMetricsSample.numberOfThrottles > 0) {
-                            logger.trace("{} encountered {} throttling, reducing parallelism", partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
-
+                            logger.debug("Importing for partition key range id {} encountered {} throttling, reducing parallelism", 
+                                    partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
+                            
                             // We got a throttle so we need to back off on the degree of concurrency.
                             // Get the current degree of concurrency and decrease that (AIMD).
-                            logger.trace("{} encountered {} throttling", partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
 
                             for (int i = 0; i < degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR; i++) {
                                 throttleSemaphore.acquire();
                             }
-
-                            logger.trace("{} encountered {} throttling", partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
 
                             degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
                         }
@@ -184,7 +182,7 @@ class CongestionController {
                             continue;
                         }
 
-                        logger.trace("{} aggregating inserts metrics", partitionKeyRangeId);
+                        logger.debug("{} aggregating inserts metrics", partitionKeyRangeId);
 
                         if (insertMetricsSample.numberOfThrottles == 0) {
                             if ((insertMetricsSample.requestUnitsConsumed < THROUGHPUT_THRESHOLD * partitionThroughput) &&
@@ -198,15 +196,15 @@ class CongestionController {
                         double ruPerSecond = insertMetricsSample.requestUnitsConsumed / samplePeriod.getSeconds();
                         documentsInsertedSoFar += insertMetricsSample.numberOfDocumentsInserted;
 
-                        logger.info("Partition index {} : {} Inserted {} docs in {} seconds at {} RU/s with {} tasks. Faced {} throttles",
+                        logger.debug("Partition key range id {} : Inserted {} docs in {} milli seconds at {} RU/s with {} tasks."
+                                + " Faced {} throttles. Total documents inserterd so far {}.",
                                 partitionKeyRangeId,
-                                insertMetricsSample.numberOfThrottles,
-                                degreeOfConcurrency,
-                                ruPerSecond,
-                                samplePeriod.getSeconds(),
                                 insertMetricsSample.numberOfDocumentsInserted,
-                                documentsInsertedSoFar
-                                );
+                                samplePeriod.toMillis(),
+                                ruPerSecond,
+                                degreeOfConcurrency,
+                                insertMetricsSample.numberOfThrottles,
+                                documentsInsertedSoFar);
 
                     } catch (InterruptedException e) {
                         logger.warn("Interrupted", e);
@@ -268,13 +266,13 @@ class CongestionController {
 
             @Override
             public void onSuccess(List<InsertMetrics> result) {
-                logger.info("Completed");
+                logger.debug("importing for partition key range {} completed", partitionKeyRangeId);
                 getAndSet(State.Completed);
             }
 
             @Override
             public void onFailure(Throwable t) {
-                logger.error("Encountered failure", t);
+                logger.error("importing for partition key range {} failed", partitionKeyRangeId, t);
                 getAndSet(State.Failure);
             }
         };

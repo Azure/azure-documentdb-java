@@ -173,7 +173,7 @@ class BatchInserter  {
 
                         } catch (DocumentClientException e) {
 
-                            logger.debug("Importing minibatch for partition key range id {} failed", partitionKeyRangeId, e);
+                            logger.trace("Importing minibatch for partition key range id {} failed", partitionKeyRangeId, e);
 
                             if (isThrottled(e)) {
                                 logger.debug("Throttled on partition range id {}", partitionKeyRangeId);
@@ -191,7 +191,7 @@ class BatchInserter  {
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 } else {
-                                    String errorMessage = String.format("Partition range id {} is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+                                    String errorMessage = String.format("Partition range id {} is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 }

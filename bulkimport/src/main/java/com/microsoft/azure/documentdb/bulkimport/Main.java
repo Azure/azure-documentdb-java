@@ -22,7 +22,6 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
-import java.nio.charset.Charset;
 import java.util.Iterator;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -32,15 +31,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.JCommander;
+import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.RetryOptions;
 
 public class Main {
 
     public static final Logger LOGGER  = LoggerFactory.getLogger(Main.class);
 
-    
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
 
         Configuration cfg = parseCommandLineArgs(args);
@@ -73,8 +73,8 @@ public class Main {
             System.out.println("Import time for this checkpoint: " + bulkImportResponse.getTotalTimeTaken());
             System.out.println("Total request unit consumed in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed());
 
-            System.out.println("Average RUs/second in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed() / bulkImportResponse.getTotalTimeTaken().getSeconds());
-            System.out.println("Average #Inserts/second in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported() / bulkImportResponse.getTotalTimeTaken().getSeconds());
+            System.out.println("Average RUs/second in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
+            System.out.println("Average #Inserts/second in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
             System.out.println("##########################################################################################");
         }
 
@@ -85,8 +85,8 @@ public class Main {
         System.out.println("Total Import time in seconds: " + totalTimeInMillis / 1000);
         System.out.println("Total request unit consumed: " + totalRequestCharge);
 
-        System.out.println("Average RUs/second:" + totalRequestCharge / (totalTimeInMillis / 1000));
-        System.out.println("Average #Inserts/second: " + totalNumberOfDocumentsImported / (totalTimeInMillis / 1000));
+        System.out.println("Average RUs/second:" + totalRequestCharge / (totalTimeInMillis * 0.001));
+        System.out.println("Average #Inserts/second: " + totalNumberOfDocumentsImported / (totalTimeInMillis * 0.001));
 
         client.close();
     }    
@@ -118,8 +118,14 @@ public class Main {
     }
 
     public static DocumentClient documentClientFrom(Configuration cfg) throws DocumentClientException {
+        
+        ConnectionPolicy policy = cfg.getConnectionPolicy();
+        RetryOptions retryOptions = new RetryOptions();
+        retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
+        policy.setRetryOptions(retryOptions);
+        
         return new DocumentClient(cfg.getServiceEndpoint(), cfg.getMasterKey(),
-                cfg.getConnectionPolicy(), cfg.getConsistencyLevel());
+                policy, cfg.getConsistencyLevel());
     }
 
     private static Configuration parseCommandLineArgs(String[] args) {
@@ -141,6 +147,7 @@ public class Main {
         if (cfg.isHelp()) {
             // prints out the usage help
             jcommander.usage();
+            System.exit(0);
             return null;
         }
         return cfg;
