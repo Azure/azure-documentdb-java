@@ -21,18 +21,21 @@ public class Configuration {
 
     @Parameter(names = "-collectionId", description = "Collection ID", required = true)
     private String collectionId;
-    
+
     @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size, it is a good idea to")
     private Integer maxConnectionPoolSize = 200;
 
     @Parameter(names = "-consistencyLevel", description = "Consistency Level")
-    private ConsistencyLevel consistencyLevel = ConsistencyLevel.Eventual;
+    private ConsistencyLevel consistencyLevel = ConsistencyLevel.Session;
 
     @Parameter(names = "-connectionMode", description = "Connection Mode")
     private ConnectionMode connectionMode = ConnectionMode.Gateway;
 
+    @Parameter(names = "-withPreprocessedPartitionKeyValue", description = "Feed With Preprocessed Partition Key Value")
+    private boolean withPreprocessedPartitionKeyValue = false;
+
     @Parameter(names = "-numberOfDocumentsForEachCheckpoint", description = "Number of documents in each checkpoint.")
-    private int numberOfDocumentsForEachCheckpoint = 100000;
+    private int numberOfDocumentsForEachCheckpoint = 500000;
 
     @Parameter(names = "-numberOfCheckpoints", description = "Number of checkpoints.")
     private int numberOfCheckpoints = 10;
@@ -40,14 +43,22 @@ public class Configuration {
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
 
+
+    /**
+     * @return the withPreprocessedPartitionKeyValue
+     */
+    public boolean isWithPreprocessedPartitionKeyValue() {
+        return withPreprocessedPartitionKeyValue;
+    }
+
     public int getNumberOfCheckpoints() {
         return numberOfCheckpoints;
     }
-    
+
     public int getNumberOfDocumentsForEachCheckpoint() {
         return numberOfDocumentsForEachCheckpoint;
     }
-    
+
     public String getServiceEndpoint() {
         return serviceEndpoint;
     }

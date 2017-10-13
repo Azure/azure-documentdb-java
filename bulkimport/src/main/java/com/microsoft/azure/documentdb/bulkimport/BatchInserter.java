@@ -108,6 +108,7 @@ class BatchInserter  {
 
     public Iterator<Callable<InsertMetrics>> miniBatchInsertExecutionCallableIterator() {
 
+        // TODO: FIXME handle scenario where due to a non-retriable error we should break out of the stream loop
         Stream<Callable<InsertMetrics>> stream = batchesToInsert.stream().map(miniBatch -> {
             return new Callable<InsertMetrics>() {
 

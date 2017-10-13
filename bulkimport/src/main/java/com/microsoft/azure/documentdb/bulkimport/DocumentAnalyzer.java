@@ -56,6 +56,8 @@ class DocumentAnalyzer {
         }catch (Exception e) {
             throw new RuntimeException(e);
         }
+        
+        // TODO FIXME: this works only for string partition key value type. 
         String partitionKeyValueAsString = root.at(partitionKeyPath).asText();
         return PartitionKeyInternal.fromObjectArray(ImmutableList.of(partitionKeyValueAsString), true);
     }
