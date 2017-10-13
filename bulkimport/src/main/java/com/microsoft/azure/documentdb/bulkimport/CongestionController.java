@@ -99,6 +99,8 @@ class CongestionController {
      */
     private InsertMetrics aggregatedInsertMetrics;
 
+    private Object aggregateLock = new Object();
+    
     /**
      * Whether or not all the documents have been inserted.
      */
@@ -108,7 +110,7 @@ class CongestionController {
         Running, Completed, Failure
     }
 
-    private State state = State.Running;
+    private volatile State state = State.Running;
 
     /**
      * The degree of concurrency (maximum number of tasks allowed to execute concurrently).
@@ -142,10 +144,12 @@ class CongestionController {
         this.partitionThroughput = partitionThroughput;        
     }
 
-    private synchronized InsertMetrics atomicGetAndReplace(InsertMetrics metrics) {
-        InsertMetrics old = this.aggregatedInsertMetrics;
-        this.aggregatedInsertMetrics = metrics;
-        return old;
+    private InsertMetrics atomicGetAndReplace(InsertMetrics metrics) {
+        synchronized (aggregateLock) {
+            InsertMetrics old = this.aggregatedInsertMetrics;
+            this.aggregatedInsertMetrics = metrics;
+            return old; 
+        }
     }
 
     private Callable<Void> congestionControlTask() {
@@ -175,7 +179,6 @@ class CongestionController {
                             for (int i = 0; i < degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR; i++) {
                                 throttleSemaphore.acquire();
                             }
-                            
 
                             degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
                         
@@ -259,7 +262,7 @@ class CongestionController {
         Iterator<Callable<InsertMetrics>> batchExecutionIterator = batchInserter.miniBatchInsertExecutionCallableIterator();
 
         List<ListenableFuture<InsertMetrics>> futureList = new ArrayList<>();
-        while(batchExecutionIterator.hasNext()) {
+        while(batchExecutionIterator.hasNext() && isRunning()) {
             Callable<InsertMetrics> task = batchExecutionIterator.next();
 
             // Main thread waits on the throttleSem so no more than MaxDegreeOfParallelism Tasks are run at a time.
@@ -273,6 +276,13 @@ class CongestionController {
                 throw new RuntimeException(e);
             }
 
+            if (failed()) {
+                logger.error("pki {} already failed due to earlier failures. not submitting new tasks", partitionKeyRangeId);
+                // release the already acquired semaphore
+                this.throttleSemaphore.release();
+                break;
+            }
+            
             ListenableFuture<InsertMetrics> insertMetricsFuture = executor.submit(task);
 
             FutureCallback<InsertMetrics> aggregateMetricsReleaseSemaphoreCallback = new FutureCallback<InsertMetrics>() {
@@ -281,7 +291,7 @@ class CongestionController {
                 public void onSuccess(InsertMetrics result) {
                     logger.debug("pki {} accquiring a synchronized lock to update metrics", partitionKeyRangeId);
 
-                    synchronized (CongestionController.this) {
+                    synchronized (aggregateLock) {
                         aggregatedInsertMetrics = InsertMetrics.sum(aggregatedInsertMetrics, result);
                     }
                     logger.debug("pki {} releasing semaphore on completion of task", partitionKeyRangeId);
@@ -290,7 +300,10 @@ class CongestionController {
 
                 @Override
                 public void onFailure(Throwable t) {
-                    logger.trace("pki {} encountered failure {} releasing semaphore", partitionKeyRangeId, t);
+                    logger.error("pki {} encountered failure {} releasing semaphore", partitionKeyRangeId, t);
+                    // if a batch inserter encounters failure which cannot be retried then we have to stop.
+                    setState(State.Failure);
+                    batchInserter.forceStop();
                     throttleSemaphore.release();
                 }
             };
@@ -306,13 +319,13 @@ class CongestionController {
             @Override
             public void onSuccess(List<InsertMetrics> result) {
                 logger.debug("pki {} importing completed", partitionKeyRangeId);
-                getAndSet(State.Completed);
+                setState(State.Completed);
             }
 
             @Override
             public void onFailure(Throwable t) {
                 logger.error("pki {} importing failed", partitionKeyRangeId, t);
-                getAndSet(State.Failure);
+                setState(State.Failure);
             }
         };
 
@@ -320,24 +333,21 @@ class CongestionController {
         return completionFuture;
     }
 
-    public synchronized State getAndSet(State state) {
+    public void setState(State state) {
         logger.debug("pki {} state set to {}", partitionKeyRangeId, state);
-
-        State res = this.state;
         this.state = state;
-        return res;
     }
 
-    public synchronized boolean isRunning() {
-        logger.debug("pki {} in isRunning", partitionKeyRangeId);
+    public boolean isRunning() {
+        logger.trace("pki {} in isRunning", partitionKeyRangeId);
         return state == State.Running;
     }
 
-    public synchronized boolean hasCompletedAsSuccess() {
+    public boolean completed() {
         return state == State.Completed;
     }
 
-    public synchronized boolean hasCompletedAsFailure() {
+    public boolean failed() {
         return state == State.Failure;
     }
 

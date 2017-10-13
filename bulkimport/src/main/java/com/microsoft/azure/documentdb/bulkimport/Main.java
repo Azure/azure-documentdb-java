@@ -23,7 +23,6 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -49,7 +48,7 @@ public class Main {
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
 
         Configuration cfg = parseCommandLineArgs(args);
-        
+
         DocumentClient client = documentClientFrom(cfg);
 
         String collectionLink = String.format("/dbs/%s/colls/%s", cfg.getDatabaseId(), cfg.getCollectionId());
@@ -61,7 +60,7 @@ public class Main {
         BulkImporter bulkImporter = new BulkImporter(client, collection);
 
         Stopwatch totalWatch = Stopwatch.createUnstarted();
-        
+
         double totalRequestCharge = 0;
         long totalTimeInMillis = 0;
         long totalNumberOfDocumentsImported = 0;
@@ -70,29 +69,36 @@ public class Main {
 
             BulkImportResponse bulkImportResponse;
             if (cfg.isWithPreprocessedPartitionKeyValue()) {
-                
-                Collection<Tuple> documentPartitionKeyValueTuples = DataSource.loadDocumentPartitionKeyValueTuples(cfg, collection.getPartitionKey());
+                Collection<Tuple> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentPartitionKeyValueTuples(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
+
                 // NOTE: only sum the bulk import time, 
                 // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                 totalWatch.start();
-                 bulkImportResponse = bulkImporter.bulkImportWithPreprocessedPartitionKey(documentPartitionKeyValueTuples, false);
+                bulkImportResponse = bulkImporter.bulkImportWithPreprocessedPartitionKey(documentPartitionKeyValueTuples, false);
                 totalWatch.stop();
-                
+
             } else {
-                Collection<String> documents = DataSource.loadDocuments(cfg, collection.getPartitionKey());
+                Collection<String> documents = DataMigrationDocumentSource.loadDocuments(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
+
                 // NOTE: only sum the bulk import time, 
                 // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                 totalWatch.start();
-                 bulkImportResponse = bulkImporter.bulkImport(documents, false);
+                bulkImportResponse = bulkImporter.bulkImport(documents, false);
                 totalWatch.stop();
 
             }
+
             System.out.println("##########################################################################################");
 
-            
             totalNumberOfDocumentsImported += bulkImportResponse.getNumberOfDocumentsImported();
             totalTimeInMillis += bulkImportResponse.getTotalTimeTaken().toMillis();
             totalRequestCharge += bulkImportResponse.getTotalRequestUnitsConsumed();
+
+            // check the number of imported documents to ensure everything is successfully imported
+            // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
+            if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfCheckpoints()) {
+                System.err.println("Some documents failed to get inserted in this checkpoint");
+            }
 
             // print stats
             System.out.println("Number of documents inserted in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported());
@@ -103,45 +109,52 @@ public class Main {
             System.out.println("Average #Inserts/second in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
             System.out.println("##########################################################################################");
         }
-        
+
+        // print average stats
         System.out.println("##########################################################################################");
-        
-        System.out.println("Total summed Import time in milli seconds: " + totalTimeInMillis);
+
+        // TODO: remove one of total time values as both are the same
+        System.out.println("Total import time measured by stopWatch" + totalWatch.elapsed().toMillis());
+        System.out.println("Total Summed import time in milli seconds: " + totalTimeInMillis);
         System.out.println("Total Number of documents inserted " + totalNumberOfDocumentsImported);
-        System.out.println("Total Import time measured by stop watch in milli seconds: " + totalWatch.elapsed().toMillis());
         System.out.println("Total request unit consumed: " + totalRequestCharge);
         System.out.println("Average RUs/second:" + totalRequestCharge / (totalWatch.elapsed().toMillis() * 0.001));
         System.out.println("Average #Inserts/second: " + totalNumberOfDocumentsImported / (totalWatch.elapsed().toMillis() * 0.001));
 
         // close bulk importer to release any existing resources
         bulkImporter.close();
-        
+
         // close document client
         client.close();
     }    
 
+    private static class DataMigrationDocumentSource {
 
-
-    private static class DataSource {
-        
-        private static Collection<String> loadDocuments(Configuration cfg, PartitionKeyDefinition partitionKeyDefinition) {
+        /**
+         * Creates a collection of documents.
+         * 
+         * @param numberOfDocuments
+         * @param partitionKeyDefinition
+         * @return collection of documents.
+         */
+        private static Collection<String> loadDocuments(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
-            
+
             Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
             Preconditions.checkArgument(partitionKeyPath.size() == 1, 
                     "the command line benchmark tool only support simple partition key path");
-            
+
             String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
-            
+
             // the size of each document is approximately 1KB
-            
+
             // return documents to be bulk imported
             // if you are reading documents from disk you can change this to read documents from disk
-            return IntStream.range(0, cfg.getNumberOfDocumentsForEachCheckpoint()).mapToObj(i ->
+            return IntStream.range(0, numberOfDocuments).mapToObj(i ->
             {
-                
+
                 StringBuilder sb = new StringBuilder();
                 sb.append("{");
                 sb.append("\"id\":\"").append(UUID.randomUUID().toString()).append("abc\"");
@@ -149,33 +162,40 @@ public class Main {
 
                 String data = UUID.randomUUID().toString();
                 data = data + data + "0123456789012";
-                
+
                 for(int j = 0; j < 10;j++) {
                     sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
                 }
-                
+
                 sb.append("}");
 
                 return sb.toString();
             }).collect(Collectors.toList());
         }
-        
-        private static Collection<Tuple> loadDocumentPartitionKeyValueTuples(Configuration cfg, PartitionKeyDefinition partitionKeyDefinition) {
+
+        /**
+         * Creates a collection of documents.
+         * 
+         * @param numberOfDocuments
+         * @param partitionKeyDefinition
+         * @return collection of documents
+         */
+        private static Collection<Tuple> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
-            
+
             Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
             Preconditions.checkArgument(partitionKeyPath.size() == 1, 
                     "the command line benchmark tool only support simple partition key path");
-            
+
             String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
-            
+
             // the size of each document is approximately 1KB
-            
+
             // return collection of <document, partitionKeyValue> to be bulk imported
             // if you are reading documents from disk you can change this to read documents from disk
-            return IntStream.range(0, cfg.getNumberOfDocumentsForEachCheckpoint()).mapToObj(i ->
+            return IntStream.range(0, numberOfDocuments).mapToObj(i ->
             {
                 StringBuilder sb = new StringBuilder();   
                 String partitionKeyValue = UUID.randomUUID().toString();
@@ -185,26 +205,26 @@ public class Main {
 
                 String data = UUID.randomUUID().toString();
                 data = data + data + "0123456789012";
-                
+
                 for(int j = 0; j < 10;j++) {
                     sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
                 }
-                
+
                 sb.append("}");
 
                 return new Tuple(sb.toString(), partitionKeyValue);
-                
+
             }).collect(Collectors.toList());
         }
     }
-    
+
     public static DocumentClient documentClientFrom(Configuration cfg) throws DocumentClientException {
-        
+
         ConnectionPolicy policy = cfg.getConnectionPolicy();
         RetryOptions retryOptions = new RetryOptions();
         retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
         policy.setRetryOptions(retryOptions);
-        
+
         return new DocumentClient(cfg.getServiceEndpoint(), cfg.getMasterKey(),
                 policy, cfg.getConsistencyLevel());
     }
@@ -212,7 +232,7 @@ public class Main {
     private static Configuration parseCommandLineArgs(String[] args) {
         LOGGER.debug("Parsing the arguments ...");
         Configuration cfg = new Configuration();
-        
+
         JCommander jcommander = null;
         try {
             jcommander = new JCommander(cfg, args);
@@ -224,7 +244,7 @@ public class Main {
             System.exit(-1);
             return null;
         }
-        
+
         if (cfg.isHelp()) {
             // prints out the usage help
             jcommander.usage();

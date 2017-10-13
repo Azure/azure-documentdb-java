@@ -85,6 +85,11 @@ class BatchInserter  {
      * The total request units consumed by this batch inserter.
      */
     public final AtomicDouble totalRequestUnitsConsumed;
+    
+    /**
+     * Provides a means to stop Batch Inserter from doing any more work
+     */
+    private volatile boolean forceToStop = false;
 
     public BatchInserter(String partitionKeyRangeId, List<List<String>> batchesToInsert, DocumentClient client, String bulkImportSprocLink,
             BulkImportStoredProcedureOptions options) {
@@ -105,6 +110,10 @@ class BatchInserter  {
     public double getTotalRequestUnitsConsumed() {
         return totalRequestUnitsConsumed.get();
     }
+    
+    public void forceStop() {
+        forceToStop = true;
+    }
 
     public Iterator<Callable<InsertMetrics>> miniBatchInsertExecutionCallableIterator() {
 
@@ -124,7 +133,7 @@ class BatchInserter  {
 
                     int currentDocumentIndex = 0;
 
-                    while (currentDocumentIndex < miniBatch.size()) {
+                    while (currentDocumentIndex < miniBatch.size() && !forceToStop) {
                         logger.debug("pki {} inside for loop, currentDocumentIndex", partitionKeyRangeId, currentDocumentIndex);
 
                         String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
@@ -184,12 +193,15 @@ class BatchInserter  {
                                 numberOfThrottles++;
                                 isThrottled = true;
                                 retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
-
+                                // will retry again
+                                
                             } else if (isTimedOut(e)) {
                                 logger.debug("pki {} Request timed out", partitionKeyRangeId);
                                 timedOut = true;
-
+                                // will retry again
+                                
                             } else if (isGone(e)) {
+                                // there is no value in retrying
                                 if (isSplit(e)) {
                                     String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
@@ -201,6 +213,7 @@ class BatchInserter  {
                                 }
 
                             } else {
+                                // there is no value in retrying
                                 String errorMessage = String.format("pki %s failed to import mini-batch. Exception was %s. Status code was %s",
                                         partitionKeyRangeId,
                                         e.getMessage(),

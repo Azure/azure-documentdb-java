@@ -110,8 +110,8 @@ public class CongestionControllerTests {
             public void run() {
 
                 try {
-                    assertThat(cc.hasCompletedAsSuccess(), equalTo(true));
-                    assertThat(cc.hasCompletedAsFailure(), equalTo(false));
+                    assertThat(cc.completed(), equalTo(true));
+                    assertThat(cc.failed(), equalTo(false));
                     assertThat(cc.isRunning(), equalTo(false));
 
                     assertThat(cc.isRunning(), equalTo(false));
@@ -179,8 +179,8 @@ public class CongestionControllerTests {
             public void run() {
 
                 try {
-                    assertThat(cc.hasCompletedAsSuccess(), equalTo(true));
-                    assertThat(cc.hasCompletedAsFailure(), equalTo(false));
+                    assertThat(cc.completed(), equalTo(true));
+                    assertThat(cc.failed(), equalTo(false));
                     assertThat(cc.isRunning(), equalTo(false));
 
                     assertThat(cc.isRunning(), equalTo(false));

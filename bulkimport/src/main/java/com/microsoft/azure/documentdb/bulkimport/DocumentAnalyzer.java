@@ -22,14 +22,17 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import org.json.JSONObject;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
+import com.microsoft.azure.documentdb.Undefined;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 
 class DocumentAnalyzer {
-
+    
     /**
      * Extracts effective {@link PartitionKeyInternal} from serialized document.
      * @param documentAsString Serialized document to extract partition key value from.
@@ -56,9 +59,31 @@ class DocumentAnalyzer {
         }catch (Exception e) {
             throw new RuntimeException(e);
         }
+
+        JsonNode node = root.at(partitionKeyPath);
         
-        // TODO FIXME: this works only for string partition key value type. 
-        String partitionKeyValueAsString = root.at(partitionKeyPath).asText();
-        return PartitionKeyInternal.fromObjectArray(ImmutableList.of(partitionKeyValueAsString), true);
+        Object partitionKeyValue = null;
+
+        switch (node.getNodeType()) {
+        case BOOLEAN:
+            partitionKeyValue = node.booleanValue();
+            break;
+        case MISSING:
+            partitionKeyValue = Undefined.Value();
+            break;
+        case NULL:
+            partitionKeyValue = JSONObject.NULL;
+            break;
+        case NUMBER:
+            partitionKeyValue = node.numberValue();
+            break;
+        case STRING:
+            partitionKeyValue = node.textValue();
+            break;
+        default:
+            throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
+        }
+
+        return PartitionKeyInternal.fromObjectArray(ImmutableList.of(partitionKeyValue), true);
     }
 }

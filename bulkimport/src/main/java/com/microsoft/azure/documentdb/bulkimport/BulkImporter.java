@@ -411,13 +411,8 @@ public class BulkImporter implements AutoCloseable {
         List<ListenableFuture<Void>> futures = new ArrayList<>();
 
         for(CongestionController cc: congestionControllers.values()) {
-            ListenableFuture<Void> f = cc.executeAllAsync();
-            futures.add(f);
+            futures.add(cc.executeAllAsync());
         }
-
-        // TODO go with the following
-        //  List<ListenableFuture<Void>> futures = congestionControllers.values().parallelStream().map(c -> c.ExecuteAll()).collect(Collectors.toList());
-
 
         FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
         AsyncCallable<BulkImportResponse> completeAsyncCallback = new AsyncCallable<BulkImportResponse>() {
