@@ -114,6 +114,7 @@ class BatchInserter  {
                 @Override
                 public InsertMetrics call() throws Exception {
 
+                    logger.debug("pki {} importing mini batch started", partitionKeyRangeId);
                     Stopwatch stopwatch = Stopwatch.createStarted();
                     double requestUnitsCounsumed = 0;
                     int numberOfThrottles = 0;
@@ -123,6 +124,8 @@ class BatchInserter  {
                     int currentDocumentIndex = 0;
 
                     while (currentDocumentIndex < miniBatch.size()) {
+                        logger.debug("pki {} inside for loop, currentDocumentIndex", partitionKeyRangeId, currentDocumentIndex);
+
                         String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
 
                         // Before c# 6, await not allowed in the catch block, hence the following two local variables.
@@ -134,7 +137,7 @@ class BatchInserter  {
                             // set partition key range id
                             requestOptions.setPartitionKeyRengeId(partitionKeyRangeId);
 
-                            logger.debug("Partition Key Range Id  {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
+                            logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
 
                             if (!timedOut) {
 
@@ -158,7 +161,7 @@ class BatchInserter  {
 
                             if (bulkImportResponse != null) {
                                 if (bulkImportResponse.errorCode != 0) {
-                                    logger.warn("Partition range id {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
+                                    logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
                                 }
 
                                 double requestCharge = response.getRequestCharge();
@@ -168,36 +171,36 @@ class BatchInserter  {
                                 totalRequestUnitsConsumed.addAndGet(requestCharge);
                             }
                             else {
-                                logger.warn("Partition range id {} Failed to receive response", partitionKeyRangeId);
+                                logger.warn("pki {} Failed to receive response", partitionKeyRangeId);
                             }
 
                         } catch (DocumentClientException e) {
 
-                            logger.trace("Importing minibatch for partition key range id {} failed", partitionKeyRangeId, e);
+                            logger.debug("pki {} Importing minibatch failed", partitionKeyRangeId, e);
 
                             if (isThrottled(e)) {
-                                logger.debug("Throttled on partition range id {}", partitionKeyRangeId);
+                                logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
                                 numberOfThrottles++;
                                 isThrottled = true;
                                 retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
 
                             } else if (isTimedOut(e)) {
-                                logger.debug("Request timed out on partition range id {}", partitionKeyRangeId);
+                                logger.debug("pki {} Request timed out", partitionKeyRangeId);
                                 timedOut = true;
 
                             } else if (isGone(e)) {
                                 if (isSplit(e)) {
-                                    String errorMessage = String.format("Partition range id %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+                                    String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 } else {
-                                    String errorMessage = String.format("Partition range id %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+                                    String errorMessage = String.format("pki %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
                                     logger.error(errorMessage);
                                     throw new RuntimeException(errorMessage);
                                 }
 
                             } else {
-                                String errorMessage = String.format("Partition range id %s failed to import mini-batch. Exception was %s. Status code was %s",
+                                String errorMessage = String.format("pki %s failed to import mini-batch. Exception was %s. Status code was %s",
                                         partitionKeyRangeId,
                                         e.getMessage(),
                                         e.getStatusCode());
@@ -206,7 +209,7 @@ class BatchInserter  {
                             }
 
                         } catch (Exception e) {
-                            String errorMessage = String.format("Partition range id %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
+                            String errorMessage = String.format("pki %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
                                     e.getMessage());
                             logger.error(errorMessage, e);
                             throw new RuntimeException(errorMessage, e);
@@ -214,12 +217,15 @@ class BatchInserter  {
 
                         if (isThrottled) {
                             try {
-                                Thread.sleep(retryAfter.getSeconds() * 1000);
+                                logger.debug("pki {} throttled going to sleep for {} millis ", partitionKeyRangeId, retryAfter.toMillis());
+                                Thread.sleep(retryAfter.toMillis());
                             } catch (InterruptedException e) {
                                 throw new RuntimeException(e);
                             }
                         }
                     }
+
+                    logger.debug("pki {} completed", partitionKeyRangeId);
 
                     stopwatch.stop();
                     InsertMetrics insertMetrics = new InsertMetrics(currentDocumentIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);

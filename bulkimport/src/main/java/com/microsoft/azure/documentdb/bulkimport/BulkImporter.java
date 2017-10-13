@@ -38,6 +38,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -66,7 +67,7 @@ import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyRangeCache;
 import com.microsoft.azure.documentdb.internal.routing.Range;
 
-public class BulkImporter {
+public class BulkImporter implements AutoCloseable {
 
     /**
      * The name of the system stored procedure for bulk import.
@@ -157,7 +158,7 @@ public class BulkImporter {
 
         this.partitionKeyDefinition = collection.getPartitionKey();
 
-        this.listeningExecutorService = MoreExecutors.listeningDecorator(Executors.newWorkStealingPool(client.getConnectionPolicy().getMaxPoolSize()));
+        this.listeningExecutorService = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool());
 
         this.initializationFuture = this.listeningExecutorService.submit(new Callable<Void>() {
 
@@ -169,6 +170,30 @@ public class BulkImporter {
         });
     }
 
+    /**
+     * Releases any internal resources.
+     * It is responsibility of the caller to close {@link DocumentClient}.
+     */
+    @Override
+    public void close() {
+        // disable submission of new tasks
+        listeningExecutorService.shutdown(); 
+        try {
+            // wait for existing tasks to terminate
+            if (!listeningExecutorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                // cancel any currently running executing tasks
+                listeningExecutorService.shutdownNow();
+                // wait for cancelled tasks to terminate
+                if (!listeningExecutorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    logger.error("some tasks did not terminate");
+                }
+            }
+        } catch (InterruptedException e) {
+            listeningExecutorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+    
     /**
      * Initializes {@link BulkImporter}. This happens only once
      * @throws DocumentClientException
@@ -310,7 +335,6 @@ public class BulkImporter {
             }
         });
 
-        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");
 
         logger.debug("Beginning bulk import within each partition bucket");
         Map<String, BatchInserter> batchInserters = new HashMap<String, BatchInserter>();
@@ -331,16 +355,25 @@ public class BulkImporter {
                     new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));
         }
 
+        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");        
         System.out.println("total preprocessing took: " + watch.elapsed().toMillis() + " millis");
         
-        List<ListenableFuture<Void>> futures = congestionControllers.values().parallelStream().map(c -> c.ExecuteAll()).collect(Collectors.toList());
+        List<ListenableFuture<Void>> futures = new ArrayList<>();
+        
+        for(CongestionController cc: congestionControllers.values()) {
+            ListenableFuture<Void> f = cc.executeAllAsync();
+            futures.add(f);
+        }
+
+        // TODO go with the following
+      //  List<ListenableFuture<Void>> futures = congestionControllers.values().parallelStream().map(c -> c.ExecuteAll()).collect(Collectors.toList());
+        
+        
         FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
         AsyncCallable<BulkImportResponse> completeAsyncCallback = new AsyncCallable<BulkImportResponse>() {
 
             @Override
             public ListenableFuture<BulkImportResponse> call() throws Exception {
-
-                // TODO: this can change so aggregation of the result happen at each
 
                 for(String partitionKeyRangeId: partitionKeyRangeIds) {
                     partitionDegreeOfConcurrency.put(partitionKeyRangeId, congestionControllers.get(partitionKeyRangeId).getDegreeOfConcurrency());
@@ -357,7 +390,7 @@ public class BulkImporter {
             }
         };
 
-        return futureContainer.callAsync(completeAsyncCallback,  MoreExecutors.directExecutor());
+        return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
     }
 
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {

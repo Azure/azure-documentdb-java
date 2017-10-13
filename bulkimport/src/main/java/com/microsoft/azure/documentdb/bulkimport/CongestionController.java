@@ -32,6 +32,7 @@ import java.util.concurrent.Semaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.util.concurrent.AsyncFunction;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -45,7 +46,7 @@ class CongestionController {
     /**
      * The degree of concurrency to start at.
      */
-    private static final int STARTING_DEGREE_OF_CONCURRENCY = 2;
+    private static final int STARTING_DEGREE_OF_CONCURRENCY = 3;
 
     /**
      * The maximum degree of concurrency to go upto for a single physical partition.
@@ -138,7 +139,7 @@ class CongestionController {
         this.throttleSemaphore = new Semaphore(this.degreeOfConcurrency);
         this.aggregatedInsertMetrics = new InsertMetrics();
         this.executor = executor;
-        this.partitionThroughput = partitionThroughput;
+        this.partitionThroughput = partitionThroughput;        
     }
 
     private synchronized InsertMetrics atomicGetAndReplace(InsertMetrics metrics) {
@@ -157,15 +158,16 @@ class CongestionController {
                         // TODO: FIXME I think semaphore may reach 0 here and if so that will create a deadlock
                         // verify and fix
 
-                        logger.debug("partition key range id {} goes to sleep for {} seconds", partitionKeyRangeId, samplePeriod.getSeconds());
+                        logger.debug("pki {} goes to sleep for {} seconds. availabel semaphore permits {}, current degree of parallelism {}", 
+                                partitionKeyRangeId, samplePeriod.getSeconds(), throttleSemaphore.availablePermits(), degreeOfConcurrency);
                         Thread.sleep(samplePeriod.toMillis());
-                        logger.debug("{} wakes up", partitionKeyRangeId);
+                        logger.debug("pki {} wakes up", partitionKeyRangeId);
 
                         InsertMetrics insertMetricsSample = atomicGetAndReplace(new InsertMetrics());
 
                         if (insertMetricsSample.numberOfThrottles > 0) {
-                            logger.debug("Importing for partition key range id {} encountered {} throttling, reducing parallelism", 
-                                    partitionKeyRangeId, insertMetricsSample.numberOfThrottles);
+                            logger.debug("pki {} importing encountered {} throttling. current degree of parallelism {}, decreasing amount: {}", 
+                                    partitionKeyRangeId, insertMetricsSample.numberOfThrottles, degreeOfConcurrency, degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
                             
                             // We got a throttle so we need to back off on the degree of concurrency.
                             // Get the current degree of concurrency and decrease that (AIMD).
@@ -173,8 +175,11 @@ class CongestionController {
                             for (int i = 0; i < degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR; i++) {
                                 throttleSemaphore.acquire();
                             }
+                            
 
                             degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
+                        
+                            logger.debug("pki {} degree of parallelism reduced to {}, sem available permits", partitionKeyRangeId, degreeOfConcurrency, throttleSemaphore.availablePermits());
                         }
 
                         if (insertMetricsSample.numberOfDocumentsInserted == 0) {
@@ -182,21 +187,25 @@ class CongestionController {
                             continue;
                         }
 
-                        logger.debug("{} aggregating inserts metrics", partitionKeyRangeId);
+                        logger.debug("pki {} aggregating inserts metrics", partitionKeyRangeId);
 
                         if (insertMetricsSample.numberOfThrottles == 0) {
                             if ((insertMetricsSample.requestUnitsConsumed < THROUGHPUT_THRESHOLD * partitionThroughput) &&
                                     degreeOfConcurrency + ADDITIVE_INCREASE_FACTOR <= MAX_DEGREE_OF_CONCURRENCY) {
                                 // We aren't getting throttles, so we should bump of the degree of concurrency (AIAD).
+                                logger.debug("pki {} increasing degree of prallelism and releasing semaphore", partitionKeyRangeId);
+
                                 throttleSemaphore.release(ADDITIVE_INCREASE_FACTOR);
                                 degreeOfConcurrency += ADDITIVE_INCREASE_FACTOR;
+                                
+                                logger.debug("pki {} degree of parallelism increased to {}. available semaphore permits {}", partitionKeyRangeId, degreeOfConcurrency, throttleSemaphore.availablePermits());
                             }
                         }
 
                         double ruPerSecond = insertMetricsSample.requestUnitsConsumed / samplePeriod.getSeconds();
                         documentsInsertedSoFar += insertMetricsSample.numberOfDocumentsInserted;
 
-                        logger.debug("Partition key range id {} : Inserted {} docs in {} milli seconds at {} RU/s with {} tasks."
+                        logger.debug("pki {} : Inserted {} docs in {} milli seconds at {} RU/s with {} tasks."
                                 + " Faced {} throttles. Total documents inserterd so far {}.",
                                 partitionKeyRangeId,
                                 insertMetricsSample.numberOfDocumentsInserted,
@@ -205,10 +214,13 @@ class CongestionController {
                                 degreeOfConcurrency,
                                 insertMetricsSample.numberOfThrottles,
                                 documentsInsertedSoFar);
-
+                        
                     } catch (InterruptedException e) {
                         logger.warn("Interrupted", e);
                         break;
+                    } catch (Exception e) {
+                        logger.error("pki {} unexpected failure", partitionKeyRangeId, e);
+                        throw e;
                     }
 
                 }
@@ -217,9 +229,33 @@ class CongestionController {
         };
     }
 
-    public ListenableFuture<Void> ExecuteAll()  {
+    public ListenableFuture<Void> executeAllAsync()  {
+        
+        Callable<ListenableFuture<Void>> c = new Callable<ListenableFuture<Void>>() {
 
-        logger.debug("Executing batching in partition {}", partitionKeyRangeId);
+            @Override
+            public ListenableFuture<Void> call() throws Exception {
+                return executeAll();
+            }
+        };
+        
+        ListenableFuture<ListenableFuture<Void>> f = executor.submit(c);
+        AsyncFunction<ListenableFuture<Void>, Void> function = new AsyncFunction<ListenableFuture<Void>, Void>() {
+
+            @Override
+            public ListenableFuture<Void> apply(ListenableFuture<Void> input) throws Exception {
+                return input;
+            }
+        };
+        return Futures.transformAsync(f, function, executor);
+    }
+    
+    public ListenableFuture<Void> executeAll()  {
+
+        logger.debug("pki{} Executing batching", partitionKeyRangeId);
+        
+        ListenableFuture<Void> completionFuture = executor.submit(congestionControlTask());
+        
         Iterator<Callable<InsertMetrics>> batchExecutionIterator = batchInserter.miniBatchInsertExecutionCallableIterator();
 
         List<ListenableFuture<InsertMetrics>> futureList = new ArrayList<>();
@@ -228,11 +264,12 @@ class CongestionController {
 
             // Main thread waits on the throttleSem so no more than MaxDegreeOfParallelism Tasks are run at a time.
             try {
-                logger.trace("trying to accequire semaphore");
+                logger.debug("pki {} trying to accequire semaphore to execute a task. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
                 this.throttleSemaphore.acquire();
-                logger.trace("semaphore accequired");
+                logger.debug("pki {} accquiring semaphore for executing a task succeeded. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
             } catch (InterruptedException e) {
-                logger.error("Interrupted", e);
+                logger.error("pki {} Interrupted, releasing semaphore", partitionKeyRangeId, e);
+                this.throttleSemaphore.release();
                 throw new RuntimeException(e);
             }
 
@@ -242,16 +279,18 @@ class CongestionController {
 
                 @Override
                 public void onSuccess(InsertMetrics result) {
+                    logger.debug("pki {} accquiring a synchronized lock to update metrics", partitionKeyRangeId);
+
                     synchronized (CongestionController.this) {
                         aggregatedInsertMetrics = InsertMetrics.sum(aggregatedInsertMetrics, result);
                     }
-                    logger.trace("releasing semaphore");
+                    logger.debug("pki {} releasing semaphore on completion of task", partitionKeyRangeId);
                     throttleSemaphore.release();
                 }
 
                 @Override
                 public void onFailure(Throwable t) {
-                    logger.trace("encountered failure {} releasing semaphore", t);
+                    logger.trace("pki {} encountered failure {} releasing semaphore", partitionKeyRangeId, t);
                     throttleSemaphore.release();
                 }
             };
@@ -266,28 +305,31 @@ class CongestionController {
 
             @Override
             public void onSuccess(List<InsertMetrics> result) {
-                logger.debug("importing for partition key range {} completed", partitionKeyRangeId);
+                logger.debug("pki {} importing completed", partitionKeyRangeId);
                 getAndSet(State.Completed);
             }
 
             @Override
             public void onFailure(Throwable t) {
-                logger.error("importing for partition key range {} failed", partitionKeyRangeId, t);
+                logger.error("pki {} importing failed", partitionKeyRangeId, t);
                 getAndSet(State.Failure);
             }
         };
 
         Futures.addCallback(allFutureResults, completionCallback, MoreExecutors.directExecutor());
-        return executor.submit(congestionControlTask());
+        return completionFuture;
     }
 
     public synchronized State getAndSet(State state) {
+        logger.debug("pki {} state set to {}", partitionKeyRangeId, state);
+
         State res = this.state;
         this.state = state;
         return res;
     }
 
     public synchronized boolean isRunning() {
+        logger.debug("pki {} in isRunning", partitionKeyRangeId);
         return state == State.Running;
     }
 

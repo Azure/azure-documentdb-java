@@ -21,22 +21,15 @@ public class Configuration {
 
     @Parameter(names = "-collectionId", description = "Collection ID", required = true)
     private String collectionId;
-
-//    @Parameter(names = "-documentDataFieldSize", description = "Length of a document data field in characters (16-bit)")
-//    private int documentDataFieldSize = 1;
-
-    @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size")
+    
+    @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size, it is a good idea to")
     private Integer maxConnectionPoolSize = 200;
 
     @Parameter(names = "-consistencyLevel", description = "Consistency Level")
-    private ConsistencyLevel consistencyLevel = ConsistencyLevel.Session;
+    private ConsistencyLevel consistencyLevel = ConsistencyLevel.Eventual;
 
     @Parameter(names = "-connectionMode", description = "Connection Mode")
     private ConnectionMode connectionMode = ConnectionMode.Gateway;
-
-//    @Parameter(names = "-concurrency", description = "Degree of Concurrency in Inserting Documents (only applies to blocking client)."
-//            + " If this value is not specified, the max connection pool size will be used as the concurrency level.")
-//    private Integer concurrency;
 
     @Parameter(names = "-numberOfDocumentsForEachCheckpoint", description = "Number of documents in each checkpoint.")
     private int numberOfDocumentsForEachCheckpoint = 100000;
@@ -66,10 +59,6 @@ public class Configuration {
     public boolean isHelp() {
         return help;
     }
-//
-//    public int getDocumentDataFieldSize() {
-//        return documentDataFieldSize;
-//    }
 
     public ConnectionPolicy getConnectionPolicy() {
         ConnectionPolicy policy = new ConnectionPolicy();
@@ -89,14 +78,6 @@ public class Configuration {
     public String getCollectionId() {
         return collectionId;
     }
-
-//    public int getConcurrency() {
-//        if (this.concurrency != null) {
-//            return concurrency;
-//        } else {
-//            return this.maxConnectionPoolSize;
-//        }
-//    }
 
     @Override
     public String toString() {

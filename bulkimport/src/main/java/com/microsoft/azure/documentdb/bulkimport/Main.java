@@ -22,6 +22,7 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -31,10 +32,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.JCommander;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RetryOptions;
 
 public class Main {
@@ -49,18 +53,23 @@ public class Main {
 
         String collectionLink = String.format("/dbs/%s/colls/%s", cfg.getDatabaseId(), cfg.getCollectionId());
         // this assumes database and collection already exists
+        // also it is a good idea to set your connection pool size to be equal to the number of partitions serving your collection.
         DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
         // instantiates bulk importer
         BulkImporter bulkImporter = new BulkImporter(client, collection);
 
+        Stopwatch totalWatch = Stopwatch.createStarted();
+        
         double totalRequestCharge = 0;
         long totalTimeInMillis = 0;
         long totalNumberOfDocumentsImported = 0;
 
         for(int i = 0 ; i < cfg.getNumberOfCheckpoints(); i++) {
 
-            Iterator<String> inputDocumentIterator = generatedDocuments(cfg);
+            Iterator<String> inputDocumentIterator = generatedDocuments(cfg, collection);
+            System.out.println("##########################################################################################");
+
             BulkImportResponse bulkImportResponse = bulkImporter.bulkImport(inputDocumentIterator, false);
 
             totalNumberOfDocumentsImported += bulkImportResponse.getNumberOfDocumentsImported();
@@ -68,9 +77,8 @@ public class Main {
             totalRequestCharge += bulkImportResponse.getTotalRequestUnitsConsumed();
 
             // print stats
-            System.out.println("##########################################################################################");
             System.out.println("Number of documents inserted in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported());
-            System.out.println("Import time for this checkpoint: " + bulkImportResponse.getTotalTimeTaken());
+            System.out.println("Import time for this checkpoint in milli seconds " + bulkImportResponse.getTotalTimeTaken().toMillis());
             System.out.println("Total request unit consumed in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed());
 
             System.out.println("Average RUs/second in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
@@ -78,42 +86,58 @@ public class Main {
             System.out.println("##########################################################################################");
         }
 
-        System.out.println("##########################################################################################");
+        totalWatch.stop();
+        
         System.out.println("##########################################################################################");
         
+        System.out.println("Total summed Import time in milli seconds: " + totalTimeInMillis);
         System.out.println("Total Number of documents inserted " + totalNumberOfDocumentsImported);
-        System.out.println("Total Import time in seconds: " + totalTimeInMillis / 1000);
+        System.out.println("Total Import time measured by stop watch in milli seconds: " + totalWatch.elapsed().toMillis());
         System.out.println("Total request unit consumed: " + totalRequestCharge);
+        System.out.println("Average RUs/second:" + totalRequestCharge / (totalWatch.elapsed().toMillis() * 0.001));
+        System.out.println("Average #Inserts/second: " + totalNumberOfDocumentsImported / (totalWatch.elapsed().toMillis() * 0.001));
 
-        System.out.println("Average RUs/second:" + totalRequestCharge / (totalTimeInMillis * 0.001));
-        System.out.println("Average #Inserts/second: " + totalNumberOfDocumentsImported / (totalTimeInMillis * 0.001));
-
+        // close bulk importer to release any existing resources
+        bulkImporter.close();
+        
+        // close document client
         client.close();
     }    
 
-    private static Iterator<String> generatedDocuments(Configuration cfg) {
+    private static Iterator<String> generatedDocuments(Configuration cfg, DocumentCollection collection) {
+
+        PartitionKeyDefinition partitionKeyDefinition = collection.getPartitionKey();
+        Preconditions.checkArgument(partitionKeyDefinition != null &&
+                partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
+        
+        Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
+        Preconditions.checkArgument(partitionKeyPath.size() == 1, 
+                "the command line benchmark tool only support simple partition key path");
+        
+        String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
+        
         // the size of each document is approximately 1KB
         
         // return documents to be bulk imported
         // if you are reading documents from disk you can change this to read documents from disk
         return IntStream.range(0, cfg.getNumberOfDocumentsForEachCheckpoint()).mapToObj(i ->
         {
-            String id = UUID.randomUUID().toString();
-            String mypk = UUID.randomUUID().toString();
-            String v = UUID.randomUUID().toString();
-            String fieldValue = v + "123456789";
-            for(int j = 0; j < 24 ; j++) {
-                fieldValue += v;
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"id\":\"").append(UUID.randomUUID().toString()).append("\"");
+            sb.append(",\"").append(partitionKeyName).append("\":\"").append(UUID.randomUUID().toString()).append("abc\"");
+
+            String data = UUID.randomUUID().toString();
+            data = data + data + "0123456789012";
+            
+            for(int j = 0; j < 10;j++) {
+                sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
             }
-            String doc = String.format("{" +
-                    "  \"dataField\": \"%s\"," +
-                    "  \"mypk\": \"%s\"," +
-                    "  \"id\": \"%s\"" +
-                    "}", fieldValue, mypk, id);
             
-            //System.out.println("number of bytes in document: " + doc.getBytes(Charset.forName("UTF-8")).length);
-            
-            return doc;
+            sb.append("}");
+
+            return sb.toString();
         }).iterator();
     }
 
