@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.AsyncCallable;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Futures.FutureCombiner;
@@ -290,7 +289,7 @@ public class BulkImporter implements AutoCloseable {
             public Void apply(Collection<Tuple> input, ConcurrentHashMap<String, Set<String>> partitionKeyToBucket) throws Exception {
 
                 input.parallelStream().forEach(tuple -> {
-                    PartitionKeyInternal partitionKeyValue = PartitionKeyInternal.fromObjectArray(ImmutableList.of(tuple.partitionKeyValue), true);
+                    PartitionKeyInternal partitionKeyValue = PartitionKeyInternal.fromObjectArray(Collections.singletonList(tuple.partitionKeyValue), true);
                     String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
                     String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
                     partitionKeyToBucket.get(partitionRangeId).add(tuple.document);
@@ -385,7 +384,6 @@ public class BulkImporter implements AutoCloseable {
             }
         });
 
-
         logger.debug("Beginning bulk import within each partition bucket");
         Map<String, BatchInserter> batchInserters = new HashMap<String, BatchInserter>();
         Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
@@ -399,7 +397,6 @@ public class BulkImporter implements AutoCloseable {
                     bulkImportStoredProcLink,
                     options);
             batchInserters.put(partitionKeyRangeId, batchInserter);
-
 
             congestionControllers.put(partitionKeyRangeId,
                     new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));

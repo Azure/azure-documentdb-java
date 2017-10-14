@@ -22,11 +22,12 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import java.util.Collections;
+
 import org.json.JSONObject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.Undefined;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
@@ -84,6 +85,6 @@ class DocumentAnalyzer {
             throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
         }
 
-        return PartitionKeyInternal.fromObjectArray(ImmutableList.of(partitionKeyValue), true);
+        return PartitionKeyInternal.fromObjectArray(Collections.singletonList(partitionKeyValue), true);
     }
 }

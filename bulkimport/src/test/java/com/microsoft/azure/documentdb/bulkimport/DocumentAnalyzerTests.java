@@ -27,13 +27,14 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
+import com.microsoft.azure.documentdb.Undefined;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 
 public class DocumentAnalyzerTests {
@@ -62,7 +63,7 @@ public class DocumentAnalyzerTests {
         String dataAsString = mapper.writeValueAsString(data);
 
         PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
-        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(ImmutableList.of("Seattle"))));
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList("Seattle"))));
     }
 
     @Test
@@ -97,7 +98,7 @@ public class DocumentAnalyzerTests {
         String dataAsString = mapper.writeValueAsString(data);
 
         PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
-        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(ImmutableList.of("Seattle"))));
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList("Seattle"))));
     }
 
     @Test
@@ -121,6 +122,105 @@ public class DocumentAnalyzerTests {
         String dataAsString = mapper.writeValueAsString(data);
 
         PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
-        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(ImmutableList.of(""))));
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList(Collections.EMPTY_MAP))));
+    }
+    
+    @Test
+    public void partitionKeyIntValue() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/zip");
+        partitionKeyDefinition.setPaths(paths);
+
+        @SuppressWarnings("unused")
+        class Pojo {
+            public String state;
+            public int population;
+            public int zip;
+        }
+
+        Pojo data = new Pojo();
+        data.state = "WA";
+        data.zip = 98052;
+        data.population = 200000;
+
+        ObjectMapper mapper = new ObjectMapper();
+        String dataAsString = mapper.writeValueAsString(data);
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList((double) data.zip))));
+    }
+    
+    @Test
+    public void partitionKeyLongValue() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/area");
+        partitionKeyDefinition.setPaths(paths);
+
+        @SuppressWarnings("unused")
+        class Pojo {
+            public String state;
+            public long area;
+        }
+
+        Pojo data = new Pojo();
+        data.state = "WA";
+        data.area = 9223372036854775000l;
+
+        ObjectMapper mapper = new ObjectMapper();
+        String dataAsString = mapper.writeValueAsString(data);
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList((double) data.area))));
+    }
+    
+    @Test
+    public void nullPartitionKeyValue() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/city");
+        partitionKeyDefinition.setPaths(paths);
+
+        @SuppressWarnings("unused")
+        class Pojo {
+            public String state;
+            public String city;
+        }
+
+        Pojo data = new Pojo();
+        data.state = "WA";
+        data.city = null;
+
+        ObjectMapper mapper = new ObjectMapper();
+        String dataAsString = mapper.writeValueAsString(data);
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList(data.city))));
+    }
+    
+    @Test
+    public void booleanPartitionKeyValue() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/isRainy");
+        partitionKeyDefinition.setPaths(paths);
+
+        @SuppressWarnings("unused")
+        class Pojo {
+            public String state;
+            public String city;
+            public boolean isRainy;
+        }
+
+        Pojo data = new Pojo();
+        data.state = "WA";
+        data.isRainy = true;
+
+        ObjectMapper mapper = new ObjectMapper();
+        String dataAsString = mapper.writeValueAsString(data);
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList(data.isRainy))));
     }
 }
