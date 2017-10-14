@@ -370,8 +370,7 @@ public class BulkImporter implements AutoCloseable {
                 do {
                     String currentDocument = it.next();
                     int currentDocumentSize = getSizeInBytes(currentDocument);
-                    if (currentDocumentSize > maxMiniBatchSize)
-                    {
+                    if (currentDocumentSize > maxMiniBatchSize) {
                         logger.error("Document size {} larger than script payload limit. {}", currentDocumentSize, maxMiniBatchSize);
                         throw new UnsupportedOperationException ("Cannot try to import a document whose size is larger than script payload limit.");
                     }
