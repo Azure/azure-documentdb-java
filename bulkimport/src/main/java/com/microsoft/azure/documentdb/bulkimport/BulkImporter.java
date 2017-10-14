@@ -403,7 +403,6 @@ public class BulkImporter implements AutoCloseable {
         }
 
         logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");        
-        System.out.println("total preprocessing took: " + watch.elapsed().toMillis() + " millis");
 
         List<ListenableFuture<Void>> futures = new ArrayList<>();
 

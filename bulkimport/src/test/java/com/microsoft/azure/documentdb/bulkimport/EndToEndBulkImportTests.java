@@ -24,14 +24,11 @@ package com.microsoft.azure.documentdb.bulkimport;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -41,14 +38,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import com.google.common.collect.Iterators;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.PartitionKey;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RequestOptions;
+import com.microsoft.azure.documentdb.Undefined;
 
 @RunWith(Parameterized.class)
 public class EndToEndBulkImportTests extends EndToEndTestBase {
@@ -77,7 +73,7 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
             List<String> documents = new ArrayList<>();
 
-            Object [] partitionKeyValues = new Object[] { "abc", null, "", 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
+            Object [] partitionKeyValues = new Object[] { "abc", null, "", Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 documents.add(DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey()));
@@ -94,7 +90,7 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
             List<Tuple> tuples = new ArrayList<>();
 
-            Object [] partitionKeyValues = new Object[] { "abc", "", null, 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
+            Object [] partitionKeyValues = new Object[] { "abc", "", null, Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());

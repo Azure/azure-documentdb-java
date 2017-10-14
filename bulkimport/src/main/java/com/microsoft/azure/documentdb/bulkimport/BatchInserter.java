@@ -46,7 +46,7 @@ import com.microsoft.azure.documentdb.StoredProcedureResponse;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 
 class BatchInserter  {
-
+    
     private final Logger logger = LoggerFactory.getLogger(BatchInserter.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -71,6 +71,11 @@ class BatchInserter  {
      */
     private final String bulkImportSprocLink;
 
+    /** 
+     * Request options specifying the underlying partition key range id
+     */
+    private final RequestOptions requestOptions;
+    
     /**
      *  The options passed to the system bulk import stored procedure.
      */
@@ -101,6 +106,14 @@ class BatchInserter  {
         this.storedProcOptions = options;
         this.numberOfDocumentsImported = new AtomicInteger();
         this.totalRequestUnitsConsumed = new AtomicDouble();
+        
+        class RequestOptionsInternal extends RequestOptions {
+            RequestOptionsInternal(String partitionKeyRangeId) {
+                setPartitionKeyRengeId(partitionKeyRangeId);
+            }
+        }
+        
+        this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
     }
 
     public int getNumberOfDocumentsImported() {
@@ -143,18 +156,12 @@ class BatchInserter  {
                         Duration retryAfter = Duration.ZERO;
 
                         try {
-                            RequestOptions requestOptions = new RequestOptions();
-                            // set partition key range id
-                            requestOptions.setPartitionKeyRengeId(partitionKeyRangeId);
-
+                            
                             logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
 
                             if (!timedOut) {
-
                                 response = client.executeStoredProcedure(bulkImportSprocLink, requestOptions, new Object[] { docBatch, storedProcOptions,  null });
-
                             } else {
-
                                 BulkImportStoredProcedureOptions modifiedStoredProcOptions = new BulkImportStoredProcedureOptions(
                                         storedProcOptions.disableAutomaticIdGeneration,
                                         storedProcOptions.softStopOnConflict,
