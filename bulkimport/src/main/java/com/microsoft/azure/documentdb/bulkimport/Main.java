@@ -113,9 +113,8 @@ public class Main {
         // print average stats
         System.out.println("##########################################################################################");
 
-        // TODO: remove one of total time values as both are the same
-        System.out.println("Total import time measured by stopWatch" + totalWatch.elapsed().toMillis());
-        System.out.println("Total Summed import time in milli seconds: " + totalTimeInMillis);
+        System.out.println("Total import time in milli seconds measured by stopWatch: " + totalWatch.elapsed().toMillis());
+        System.out.println("Total import time in milli seconds measured by api : " + totalTimeInMillis);
         System.out.println("Total Number of documents inserted " + totalNumberOfDocumentsImported);
         System.out.println("Total request unit consumed: " + totalRequestCharge);
         System.out.println("Average RUs/second:" + totalRequestCharge / (totalWatch.elapsed().toMillis() * 0.001));
