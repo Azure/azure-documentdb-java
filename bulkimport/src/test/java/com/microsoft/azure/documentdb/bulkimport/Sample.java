@@ -59,6 +59,10 @@ public class Sample {
                     System.out.println("Import total time: " + bulkImportResponse.getTotalTimeTaken());
                     System.out.println("Total request unit consumed: " + bulkImportResponse.getTotalRequestUnitsConsumed());
 
+                    // validate that all documents in this checkpoint inserted
+                    if (bulkImportResponse.getNumberOfDocumentsImported() < docs.size()) {
+                        System.err.println("some documents failed to imported");
+                    }
                 }
             }
         }

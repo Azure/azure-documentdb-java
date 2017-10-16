@@ -96,7 +96,7 @@ public class Main {
 
             // check the number of imported documents to ensure everything is successfully imported
             // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
-            if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfCheckpoints()) {
+            if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfDocumentsForEachCheckpoint()) {
                 System.err.println("Some documents failed to get inserted in this checkpoint");
             }
 
