@@ -23,13 +23,17 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
+import com.microsoft.azure.documentdb.ConnectionPolicy;
+import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.bulkimport.Main.DataMigrationDocumentSource;
 
 public class Sample {
 
@@ -37,38 +41,27 @@ public class Sample {
     public static final String HOST = "[YOUR-ENDPOINT]";
 
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
-        DocumentClient client = new DocumentClient(HOST, MASTER_KEY, null, null);
+        try( DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(), 
+                ConsistencyLevel.Session)) {
 
-        String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
-        // this assumes database and collection already exists
-        DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
+            String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
+            // this assumes database and collection already exists
+            DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
-        BulkImporter importer = new BulkImporter(client, collection);
+            try(BulkImporter importer = new BulkImporter(client, collection)) {
 
-        List<String> docs = new ArrayList<String>();
-        for(int i = 0; i < 200000; i++) {
-            String id = UUID.randomUUID().toString();
-            String mypk = "Seattle";
-            String v = UUID.randomUUID().toString();
-            String doc = String.format("{" +
-                    "  \"dataField\": \"%s\"," +
-                    "  \"mypk\": \"%s\"," +
-                    "  \"id\": \"%s\"" +
-                    "}", v, mypk, id);
+                for(int i = 0; i< 10; i++) {
+                    Collection<String> docs = DataMigrationDocumentSource.loadDocuments(1000000, collection.getPartitionKey());
+                    BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
 
-            docs.add(doc);
+                    // returned stats
+                    System.out.println("Number of documents inserted: " + bulkImportResponse.getNumberOfDocumentsImported());
+                    System.out.println("Import total time: " + bulkImportResponse.getTotalTimeTaken());
+                    System.out.println("Total request unit consumed: " + bulkImportResponse.getTotalRequestUnitsConsumed());
+
+                }
+            }
         }
 
-        BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
-
-        // returned stats
-        System.out.println("Number of documents inserted: " + bulkImportResponse.getNumberOfDocumentsImported());
-        System.out.println("Import total time: " + bulkImportResponse.getTotalTimeTaken());
-        System.out.println("Total request unit consumed: " + bulkImportResponse.getTotalRequestUnitsConsumed());
-
-        importer.close();
-        
-        client.close();
     }
-
 }

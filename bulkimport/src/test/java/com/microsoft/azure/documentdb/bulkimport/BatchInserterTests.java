@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -121,6 +122,7 @@ public class BatchInserterTests {
     }
 
     @Test
+    @Ignore
     public void partialProgress() throws Exception {
 
         BulkImportStoredProcedureOptions options = null;

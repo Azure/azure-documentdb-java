@@ -127,7 +127,7 @@ public class Main {
         client.close();
     }    
 
-    private static class DataMigrationDocumentSource {
+    static class DataMigrationDocumentSource {
 
         /**
          * Creates a collection of documents.
@@ -136,7 +136,7 @@ public class Main {
          * @param partitionKeyDefinition
          * @return collection of documents.
          */
-        private static Collection<String> loadDocuments(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
+        public static Collection<String> loadDocuments(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
@@ -179,7 +179,7 @@ public class Main {
          * @param partitionKeyDefinition
          * @return collection of documents
          */
-        private static Collection<Tuple> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
+        public static Collection<Tuple> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
