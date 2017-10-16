@@ -22,6 +22,8 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.extractDeepestDocumentClientException;
+
 import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -59,6 +61,7 @@ import com.microsoft.azure.documentdb.FeedResponse;
 import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
+import com.microsoft.azure.documentdb.internal.HttpConstants;
 import com.microsoft.azure.documentdb.internal.query.funcs.Func2;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
@@ -162,7 +165,21 @@ public class BulkImporter implements AutoCloseable {
 
             @Override
             public Void call() throws Exception {
-                initialize();
+                int count = 0;
+                while(true) {
+                    try {
+                        initialize();
+                    } catch (Exception e) {
+                        count++;
+                        DocumentClientException dce = extractDeepestDocumentClientException(e);
+                        if (count < 3 && dce != null && dce.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS ) {
+                            Thread.sleep(count * dce.getRetryAfterInMilliseconds());
+                            continue;
+                        } 
+                        throw e;
+                    }
+                    break;
+                }
                 return null;
             }
         });
@@ -234,30 +251,23 @@ public class BulkImporter implements AutoCloseable {
      * <code>
      * DocumentClient client = new DocumentClient(HOST, MASTER_KEY, null, null);
      *
-     * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "perf-col");
+     * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
      * DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
      *
      * BulkImporter importer = new BulkImporter(client, collection);
      *
-     * List<String> docs = new ArrayList<String>();
-     * for(int i = 0; i < 200000; i++) {
-     *      String id = UUID.randomUUID().toString();
-     *      String mypk = "Seattle";
-     *      String v = UUID.randomUUID().toString();
-     *      String doc = String.format("{" +
-     *              "  \"dataField\": \"%s\"," +
-     *              "  \"mypk\": \"%s\"," +
-     *              "  \"id\": \"%s\"" +
-     *              "}", v, mypk, id);
+     * for(int i = 0; i < 10; i++) {
+     *   List<String> documents = documentSource.getMoreDocuments();
      *
-     *      docs.add(doc);
+     *   BulkImportResponse bulkImportResponse = importer.bulkImport(documents, false);
+     *   
+     *   //validate that all documents inserted to ensure no failure.
+     *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
      * }
-     *
-     * BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
      *
      * client.close();
      * </code>
-     * @param documentIterator to insert
+     * @param documents to insert
      * @param enableUpsert whether enable upsert (overwrite if it exists)
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
@@ -280,7 +290,34 @@ public class BulkImporter implements AutoCloseable {
         return executeBulkImportInternal(documents, bucketingFunction, enableUpsert);
     }
 
-    public BulkImportResponse bulkImportWithPreprocessedPartitionKey(Collection<Tuple> input, boolean enableUpsert) throws DocumentClientException {
+    /**
+     * Executes a bulk import in the Azure Cosmos DB database service.
+     *
+     * <code>
+     * DocumentClient client = new DocumentClient(HOST, MASTER_KEY, null, null);
+     *
+     * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycold");
+     * DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
+     *
+     * BulkImporter importer = new BulkImporter(client, collection);
+     *
+     * for(int i = 0; i < 10; i++) {
+     *   List<Tuple> tuples = documentSource.getMoreDocumentsPartitionKeyValueTuples();
+     *
+     *   BulkImportResponse bulkImportResponse = importer.bulkImportWithPreprocessedPartitionKey(tuples, false);
+     *   
+     *   // validate that all documents inserted to ensure no failure.
+     *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
+     * }
+     *
+     * client.close();
+     * </code>
+     * @param documentPartitionKeyValueTuples list of {@link Tuple}
+     * @param enableUpsert whether enable upsert (overwrite if it exists)
+     * @return an instance of {@link BulkImportResponse}
+     * @throws DocumentClientException if any failure happens
+     */
+    public BulkImportResponse bulkImportWithPreprocessedPartitionKey(Collection<Tuple> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
 
         Func2<Collection<Tuple>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = 
                 new Func2<Collection<Tuple>, ConcurrentHashMap<String,Set<String>>, Void>() {
@@ -297,7 +334,7 @@ public class BulkImporter implements AutoCloseable {
                 return null;
             };
         };
-        return executeBulkImportInternal(input, bucketingFunction, enableUpsert);
+        return executeBulkImportInternal(documentPartitionKeyValueTuples, bucketingFunction, enableUpsert);
     }
     
     private <T> BulkImportResponse executeBulkImportInternal(Collection<T> input, 
@@ -347,8 +384,7 @@ public class BulkImporter implements AutoCloseable {
             miniBatchesToImportByPartition.put(partitionKeyRangeId, new ArrayList<List<String>>(estimateMiniBatchesToImportByPartitionSize));
         }
 
-        // Sort documents into partition buckets.
-        logger.debug("Sorting documents into partition buckets");
+        logger.debug("Bucketing documents ...");
 
         bucketByPartitionFunc.apply(input, documentsToImportByPartition);
 

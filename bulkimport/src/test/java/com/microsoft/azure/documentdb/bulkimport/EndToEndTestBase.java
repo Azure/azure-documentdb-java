@@ -51,13 +51,11 @@ public class EndToEndTestBase {
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
     
-    private static String DATABASE_ID = "bulkImportTestDatabase";
-    private static String COLLECTION_ID_PARTITIONED = UUID.randomUUID().toString();
-    protected static String COLLECTION_LINK = "dbs/" + DATABASE_ID + "/colls/" + COLLECTION_ID_PARTITIONED;
-    protected static int TOTAL_NUMBER_OF_DOCUMENTS = 500;
+    private String databaseId = "bulkImportTestDatabase";
+    private String collectionId;
+    protected String collectionLink;
     protected DocumentCollection pCollection;
 
-    
     protected static Set<String> SYSTEM_FIELD_NAMES;
     
     static {
@@ -67,6 +65,9 @@ public class EndToEndTestBase {
     
     public EndToEndTestBase() {
         HttpClientFactory.DISABLE_HOST_NAME_VERIFICATION = true;
+        
+        collectionId = UUID.randomUUID().toString();
+        collectionLink = "dbs/" + databaseId + "/colls/" + collectionId;
     }
 
     @Parameters
@@ -93,18 +94,19 @@ public class EndToEndTestBase {
     public void cleanUpDatabase(DocumentClient client) throws DocumentClientException {
         try {
             if (client != null) {
-                client.deleteDatabase("/dbs/" + DATABASE_ID, null);
+                client.deleteDatabase("/dbs/" + databaseId, null);
             }
         } catch (Exception e) {
         }
     }
 
-    public void setup(DocumentClient client) throws DocumentClientException {
+    public void setup(DocumentClient client) throws Exception {
         logger.debug("setting up ...");
         cleanUpDatabase(client);
 
+        Thread.sleep(1000);
         Database d = new Database();
-        d.setId(DATABASE_ID);
+        d.setId(databaseId);
         Database database = client.createDatabase(d, null).getResource();
 
 
@@ -114,7 +116,7 @@ public class EndToEndTestBase {
         partitionKeyDef.setPaths(paths);
 
         pCollection = new DocumentCollection();
-        pCollection.setId(COLLECTION_ID_PARTITIONED);
+        pCollection.setId(collectionId);
         pCollection.setPartitionKey(partitionKeyDef);
 
         RequestOptions options = new RequestOptions();

@@ -23,13 +23,11 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.junit.After;
@@ -41,9 +39,6 @@ import org.junit.runners.Parameterized;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.PartitionKey;
-import com.microsoft.azure.documentdb.PartitionKeyDefinition;
-import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.Undefined;
 
 @RunWith(Parameterized.class)
@@ -83,6 +78,29 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
             validateSuccess(deserialize(documents), response);
         }
     }
+    
+    @Test
+    public void bulkImportAlreadyExists() throws Exception {
+        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+
+            List<String> documents = new ArrayList<>();
+
+            Object [] partitionKeyValues = new Object[] { "abc", null, "", Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
+
+            for(Object partitionKeyValue: partitionKeyValues) {
+                documents.add(DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey()));
+            }
+
+            BulkImportResponse response = importer.bulkImport(documents, false);
+            validateSuccess(deserialize(documents), response);
+            
+            response = importer.bulkImport(documents, false);
+            assertThat(response.getNumberOfDocumentsImported(), equalTo(0));
+            
+            response = importer.bulkImport(documents, true);
+            assertThat(response.getNumberOfDocumentsImported(), equalTo(documents.size()));
+        }
+    }
 
     @Test
     public void bulkImportWithPreknownPartitionKeyValues() throws Exception {
@@ -90,7 +108,25 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
             List<Tuple> tuples = new ArrayList<>();
 
-            Object [] partitionKeyValues = new Object[] { "abc", "", null, Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
+            Object [] partitionKeyValues = new Object[] { "abc", null, "", Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
+
+            for(Object partitionKeyValue: partitionKeyValues) {
+                String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
+                Tuple t = new Tuple(d, partitionKeyValue);
+                tuples.add(t);
+            }
+
+            BulkImportResponse response = importer.bulkImportWithPreprocessedPartitionKey(tuples, false);
+            validateSuccess(deserialize(tuples.stream().map(t -> t.document).collect(Collectors.toList())), response);
+        }
+    }
+
+    public void bulkImportWithMissingParitionKeyField() throws Exception {
+        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+
+            List<Tuple> tuples = new ArrayList<>();
+
+            Object [] partitionKeyValues = new Object[] { "abc", "", null, 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
@@ -107,42 +143,8 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
         return documents.stream().map(d -> new Document(d)).collect(Collectors.toList());
     }
 
-    private Object getPartitionKeyValue(Document d) {
-        PartitionKeyDefinition partitionKeyDef = pCollection.getPartitionKey();
-        String partitionKeyName = partitionKeyDef.getPaths().iterator().next().replaceFirst("^/", "");
-        return d.get(partitionKeyName);
-    }
-
-    private boolean contains(Document d1, Document d2) {        
-        return !d1.getHashMap().keySet().stream()
-                .filter(fieldName -> !SYSTEM_FIELD_NAMES.contains(fieldName))
-                .filter(fieldName ->  !Objects.equals(d1.get(fieldName), d2.get(fieldName))  )
-                .findAny()
-                .isPresent();
-    }
-
-    private void areEqual(Document d1, Document d2) {
-        assertThat(contains(d1, d2), is(true));
-        assertThat(contains(d2, d1), is(true));
-    }
-
     private void validateSuccess(Collection<Document> documents, BulkImportResponse response) throws DocumentClientException, InterruptedException {
 
         assertThat(response.getNumberOfDocumentsImported(), equalTo(documents.size())); 
-        Thread.sleep(5000);
-
-        for(Document d : documents) {
-            String documentLink = COLLECTION_LINK + "/docs/" + d.getId(); 
-
-            RequestOptions options = new RequestOptions();
-            options.setPartitionKey(new PartitionKey(getPartitionKeyValue(d)));
-            try {
-                Document actualDocument = client.readDocument(documentLink, options).getResource();
-                System.out.println("I read : " + actualDocument.toJson());
-                areEqual(actualDocument, d);
-            } catch (Exception e) {
-                logger.error("failure", e);
-            }
-        }
     }
 }

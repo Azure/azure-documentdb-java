@@ -28,6 +28,7 @@ import java.util.UUID;
 import com.google.common.base.Preconditions;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
+import com.microsoft.azure.documentdb.Undefined;
 
 public class DocumentDataSource {
     
@@ -46,7 +47,10 @@ public class DocumentDataSource {
         Document d = new Document();
         
         d.setId(UUID.randomUUID().toString());
-        d.set(partitionKeyName, partitionKeyValue);
+        
+        if (!Undefined.Value().equals(partitionKeyValue)) {
+            d.set(partitionKeyName, partitionKeyValue);
+        }
         
         for(int i = 0; i < 3; i++) {
             d.set(UUID.randomUUID().toString(), UUID.randomUUID().toString());

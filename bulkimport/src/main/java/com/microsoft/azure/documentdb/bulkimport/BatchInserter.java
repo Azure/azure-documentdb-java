@@ -22,6 +22,11 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isGone;
+import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isSplit;
+import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isThrottled;
+import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isTimedOut;
+
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Iterator;
@@ -43,7 +48,6 @@ import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.StoredProcedureResponse;
-import com.microsoft.azure.documentdb.internal.HttpConstants;
 
 class BatchInserter  {
     
@@ -179,6 +183,10 @@ class BatchInserter  {
                             if (bulkImportResponse != null) {
                                 if (bulkImportResponse.errorCode != 0) {
                                     logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
+                                    if (bulkImportResponse.count == 0) {
+                                        throw new RuntimeException(
+                                                String.format("Stored proc returned failure %s", bulkImportResponse.errorCode));
+                                    }
                                 }
 
                                 double requestCharge = response.getRequestCharge();
@@ -259,22 +267,6 @@ class BatchInserter  {
         return stream.iterator();
     }
 
-    private boolean isThrottled(DocumentClientException e) {
-        return e.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS;
-    }
-
-    private boolean isTimedOut(DocumentClientException e) {
-        return e.getStatusCode() == HttpConstants.StatusCodes.TIMEOUT;
-    }
-
-    private boolean isGone(DocumentClientException e) {
-        return e.getStatusCode() == HttpConstants.StatusCodes.GONE;
-    }
-
-    private boolean isSplit(DocumentClientException e) {
-        return e.getStatusCode() == HttpConstants.StatusCodes.GONE
-                && HttpConstants.SubStatusCodes.SPLITTING == e.getSubStatusCode();
-    }
 
     private BulkImportStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
         String res = storedProcResponse.getResponseAsString();
