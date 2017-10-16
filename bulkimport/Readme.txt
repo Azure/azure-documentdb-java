@@ -16,7 +16,7 @@ NOTE: for getting higher throughput:
 an example for how to use the bulk import:
 https://github.com/Azure/azure-documentdb-java/blob/moderakh/bulkimport-implementation/bulkimport/src/test/java/com/microsoft/azure/documentdb/bulkimport/Sample.java
 
-sample invocation of command-line tool for benchmarking bulk-import (doing 5 iterations of bulk import and in each iterations it inserts 1,000,000 documents) 
+sample invocation of command-line tool for benchmarking bulk-import (doing 5 iterations of bulk import and in each iteration it inserts 1,000,000 documents) 
  
 java -Xmx6G  -jar documentdb-bulkimport-1.0.0-SNAPSHOT-jar-with-dependencies.jar -serviceEndpoint ACCOUNT_HOST -masterKey ACCOUNT_MASTER_KEY -databaseId DATABASE_NAME -collectionId COLLECTION_NAME -maxConnectionPoolSize 200 -numberOfDocumentsForEachCheckpoint 1000000 -numberOfCheckpoints 5
 
