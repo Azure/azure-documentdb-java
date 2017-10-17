@@ -69,7 +69,7 @@ public class Main {
 
             BulkImportResponse bulkImportResponse;
             if (cfg.isWithPreprocessedPartitionKeyValue()) {
-                Collection<Tuple> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentPartitionKeyValueTuples(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
+                Collection<DocumentPKValuePair> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentPartitionKeyValueTuples(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
 
                 // NOTE: only sum the bulk import time, 
                 // loading/generating documents is out of the scope of bulk importer and so has to be excluded
@@ -179,7 +179,7 @@ public class Main {
          * @param partitionKeyDefinition
          * @return collection of documents
          */
-        public static Collection<Tuple> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
+        public static Collection<DocumentPKValuePair> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
@@ -211,7 +211,7 @@ public class Main {
 
                 sb.append("}");
 
-                return new Tuple(sb.toString(), partitionKeyValue);
+                return new DocumentPKValuePair(sb.toString(), partitionKeyValue);
 
             }).collect(Collectors.toList());
         }

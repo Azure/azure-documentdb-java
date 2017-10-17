@@ -258,7 +258,7 @@ public class DocumentBulkImporter implements AutoCloseable {
      * for(int i = 0; i < 10; i++) {
      *   List<String> documents = documentSource.getMoreDocuments();
      *
-     *   BulkImportResponse bulkImportResponse = importer.doImport(documents, false);
+     *   BulkImportResponse bulkImportResponse = importer.importAll(documents, false);
      *   
      *   //validate that all documents inserted to ensure no failure.
      *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
@@ -311,18 +311,18 @@ public class DocumentBulkImporter implements AutoCloseable {
      *
      * client.close();
      * </code>
-     * @param documentPartitionKeyValueTuples list of {@link Tuple}
+     * @param documentPartitionKeyValueTuples list of {@link DocumentPKValuePair}
      * @param enableUpsert whether enable upsert (overwrite if it exists)
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse importAllWithPartitionKey(Collection<Tuple> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse importAllWithPartitionKey(Collection<DocumentPKValuePair> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
 
-        Func2<Collection<Tuple>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = 
-                new Func2<Collection<Tuple>, ConcurrentHashMap<String,Set<String>>, Void>() {
+        Func2<Collection<DocumentPKValuePair>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = 
+                new Func2<Collection<DocumentPKValuePair>, ConcurrentHashMap<String,Set<String>>, Void>() {
 
             @Override
-            public Void apply(Collection<Tuple> input, ConcurrentHashMap<String, Set<String>> partitionKeyToBucket) throws Exception {
+            public Void apply(Collection<DocumentPKValuePair> input, ConcurrentHashMap<String, Set<String>> partitionKeyToBucket) throws Exception {
 
                 input.parallelStream().forEach(tuple -> {
                     PartitionKeyInternal partitionKeyValue = PartitionKeyInternal.fromObjectArray(Collections.singletonList(tuple.partitionKeyValue), true);

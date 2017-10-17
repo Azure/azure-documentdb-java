@@ -22,11 +22,11 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
-public class Tuple {
+public class DocumentPKValuePair {
     public final String document;
     public final Object partitionKeyValue;
     
-    public Tuple(String documentAsString, Object partitionKeyValue) {
+    public DocumentPKValuePair(String documentAsString, Object partitionKeyValue) {
         //Preconditions.checkNotNull(documentAsString);
         this.document = documentAsString;
         this.partitionKeyValue = partitionKeyValue;

@@ -106,13 +106,13 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
     public void bulkImportWithPreknownPartitionKeyValues() throws Exception {
         try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
-            List<Tuple> tuples = new ArrayList<>();
+            List<DocumentPKValuePair> tuples = new ArrayList<>();
 
             Object [] partitionKeyValues = new Object[] { "abc", null, "", Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
-                Tuple t = new Tuple(d, partitionKeyValue);
+                DocumentPKValuePair t = new DocumentPKValuePair(d, partitionKeyValue);
                 tuples.add(t);
             }
 
@@ -124,13 +124,13 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
     public void bulkImportWithMissingParitionKeyField() throws Exception {
         try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
-            List<Tuple> tuples = new ArrayList<>();
+            List<DocumentPKValuePair> tuples = new ArrayList<>();
 
             Object [] partitionKeyValues = new Object[] { "abc", "", null, 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
-                Tuple t = new Tuple(d, partitionKeyValue);
+                DocumentPKValuePair t = new DocumentPKValuePair(d, partitionKeyValue);
                 tuples.add(t);
             }
 
