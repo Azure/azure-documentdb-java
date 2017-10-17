@@ -40,14 +40,14 @@ public class Sample {
 
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
         
-        ConnectionPolicy policy = new ConnectionPolicy();
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         RetryOptions retryOptions = new RetryOptions();
         // set to 0 to let bulk importer handles throttling
         retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
-        policy.setRetryOptions(retryOptions);        
-        policy.setMaxPoolSize(200);
+        connectionPolicy.setRetryOptions(retryOptions);        
+        connectionPolicy.setMaxPoolSize(200);
         
-        try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, policy, ConsistencyLevel.Session)) {
+        try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session)) {
 
             String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
             // this assumes database and collection already exists

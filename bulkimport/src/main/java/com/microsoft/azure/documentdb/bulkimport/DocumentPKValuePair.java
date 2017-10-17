@@ -27,7 +27,6 @@ public class DocumentPKValuePair {
     public final Object partitionKeyValue;
     
     public DocumentPKValuePair(String documentAsString, Object partitionKeyValue) {
-        //Preconditions.checkNotNull(documentAsString);
         this.document = documentAsString;
         this.partitionKeyValue = partitionKeyValue;
     }

@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.Iterator;
 
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,7 +36,8 @@ import com.microsoft.azure.documentdb.Undefined;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 
 class DocumentAnalyzer {
-    
+    private final static ObjectMapper objectMapper = new ObjectMapper();
+    private final static Logger LOGGER = LoggerFactory.getLogger(DocumentAnalyzer.class);
     /**
      * Extracts effective {@link PartitionKeyInternal} from serialized document.
      * @param documentAsString Serialized document to extract partition key value from.
@@ -52,43 +55,53 @@ class DocumentAnalyzer {
     }
 
     private static PartitionKeyInternal extractPartitionKeyValueInternal(String documentAsString, PartitionKeyDefinition partitionKeyDefinition) {
-        ObjectMapper objectMapper = new ObjectMapper();
         JsonNode root;
         try {
             root = objectMapper.readTree(documentAsString);
-        }catch (Exception e) {
-            throw new RuntimeException(e);
+
+            Iterator<String> path = partitionKeyDefinition.getPaths().iterator();   
+            JsonNode node =  root.path(path.next().substring(1));
+
+            while(path.hasNext()) {
+                node = node.path(path.next());
+            }
+
+            Object partitionKeyValue = null;
+
+            switch (node.getNodeType()) {
+            case BOOLEAN:
+                partitionKeyValue = node.booleanValue();
+                break;
+            case MISSING:
+                partitionKeyValue = Undefined.Value();
+                break;
+            case NULL:
+                partitionKeyValue = JSONObject.NULL;
+                break;
+            case NUMBER:
+                partitionKeyValue = node.numberValue();
+                break;
+            case STRING:
+                partitionKeyValue = node.textValue();
+                break;
+            default:
+                throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
+            }
+
+            return fromPartitionKeyvalue(partitionKeyValue);
+            
+        } catch (Exception e) {
+            LOGGER.error("Failed to extract partition key value from document {}", documentAsString, e);
+            throw ExceptionUtils.toRuntimeException(e);
         }
+    }
 
-        Iterator<String> path = partitionKeyDefinition.getPaths().iterator();   
-        JsonNode node =  root.path(path.next().substring(1));
-        
-        while(path.hasNext()) {
-            node = node.path(path.next());
+    public static PartitionKeyInternal fromPartitionKeyvalue(Object partitionKeyValue) {
+        try {
+            return PartitionKeyInternal.fromObjectArray(Collections.singletonList(partitionKeyValue), true);
+        } catch (Exception e) {
+            LOGGER.error("Failed to instantiate ParitionKeyInternal from {}", partitionKeyValue, e);
+            throw ExceptionUtils.toRuntimeException(e);
         }
-
-        Object partitionKeyValue = null;
-
-        switch (node.getNodeType()) {
-        case BOOLEAN:
-            partitionKeyValue = node.booleanValue();
-            break;
-        case MISSING:
-            partitionKeyValue = Undefined.Value();
-            break;
-        case NULL:
-            partitionKeyValue = JSONObject.NULL;
-            break;
-        case NUMBER:
-            partitionKeyValue = node.numberValue();
-            break;
-        case STRING:
-            partitionKeyValue = node.textValue();
-            break;
-        default:
-            throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
-        }
-
-        return PartitionKeyInternal.fromObjectArray(Collections.singletonList(partitionKeyValue), true);
     }
 }

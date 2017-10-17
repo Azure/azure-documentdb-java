@@ -58,4 +58,12 @@ class ExceptionUtils {
         }
         return dce;
     }
+    
+    public static RuntimeException toRuntimeException(Exception e) {
+        if (e instanceof RuntimeException) {
+            return (RuntimeException) e;
+        } else {
+            return new RuntimeException(e);
+        }
+    }
 }
