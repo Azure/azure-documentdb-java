@@ -217,7 +217,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         String databaseId = collection.getSelfLink().split("/")[1];
         Database d = client.readDatabase(String.format("/dbs/%s", databaseId), null).getResource();
 
-        bulkImportStoredProcLink = String.format("/dbs/%s/colls/%s/sprocs/%s", d.getId(), collection.getId(), BULK_IMPORT_STORED_PROCECURE_NAME);
+        this.bulkImportStoredProcLink = String.format("/dbs/%s/colls/%s/sprocs/%s", d.getId(), collection.getId(), BULK_IMPORT_STORED_PROCECURE_NAME);
 
         logger.trace("Fetching partition map of collection");
         Range<String> fullRange = new Range<String>(
