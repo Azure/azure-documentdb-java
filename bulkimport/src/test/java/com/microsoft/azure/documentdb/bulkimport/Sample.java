@@ -56,7 +56,9 @@ public class Sample {
             try(DocumentBulkImporter importer = new DocumentBulkImporter(client, collection)) {
 
                 //NOTE: for getting higher throughput please
-                // 1)  Set JVM heap size to a large enough number to avoid any memory issue in handling large number of documents 
+                
+                // 1)  Set JVM heap size to a large enough number to avoid any memory issue in handling large number of documents.  
+                //     Suggested heap size: max(3GB, 3 * sizeof(all documents passed to bulk import in one batch))
                 // 2)  there is a pre-processing and warm up time and due that,
                 //     you will get higher throughput for bulks with larger number of documents. 
                 //     So if you want to import 10,000,000 documents, 

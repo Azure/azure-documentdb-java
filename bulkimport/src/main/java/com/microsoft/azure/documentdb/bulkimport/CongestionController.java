@@ -159,8 +159,6 @@ class CongestionController {
             public Void call() throws Exception {
                 while (isRunning()) {
                     try {
-                        // TODO: FIXME I think semaphore may reach 0 here and if so that will create a deadlock
-                        // verify and fix
 
                         logger.debug("pki {} goes to sleep for {} seconds. availabel semaphore permits {}, current degree of parallelism {}", 
                                 partitionKeyRangeId, samplePeriod.getSeconds(), throttleSemaphore.availablePermits(), degreeOfConcurrency);
