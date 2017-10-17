@@ -267,11 +267,11 @@ public class DocumentBulkImporter implements AutoCloseable {
      * client.close();
      * </code>
      * @param documents to insert
-     * @param enableUpsert whether enable upsert (overwrite if it exists)
+     * @param isUpsert whether enable upsert (overwrite if it exists)
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse importAll(Collection<String> documents, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse importAll(Collection<String> documents, boolean isUpsert) throws DocumentClientException {
         Func2<Collection<String>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = new Func2<Collection<String>, ConcurrentHashMap<String,Set<String>>, Void>() {
 
             @Override
@@ -286,7 +286,7 @@ public class DocumentBulkImporter implements AutoCloseable {
                 return null;
             }
         };
-        return executeBulkImportInternal(documents, bucketingFunction, enableUpsert);
+        return executeBulkImportInternal(documents, bucketingFunction, isUpsert);
     }
 
     /**
@@ -312,11 +312,11 @@ public class DocumentBulkImporter implements AutoCloseable {
      * client.close();
      * </code>
      * @param documentPartitionKeyValueTuples list of {@link DocumentPKValuePair}
-     * @param enableUpsert whether enable upsert (overwrite if it exists)
+     * @param isUpsert whether enable upsert (overwrite if it exists)
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse importAllWithPartitionKey(Collection<DocumentPKValuePair> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse importAllWithPartitionKey(Collection<DocumentPKValuePair> documentPartitionKeyValueTuples, boolean isUpsert) throws DocumentClientException {
 
         Func2<Collection<DocumentPKValuePair>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = 
                 new Func2<Collection<DocumentPKValuePair>, ConcurrentHashMap<String,Set<String>>, Void>() {
@@ -333,16 +333,16 @@ public class DocumentBulkImporter implements AutoCloseable {
                 return null;
             };
         };
-        return executeBulkImportInternal(documentPartitionKeyValueTuples, bucketingFunction, enableUpsert);
+        return executeBulkImportInternal(documentPartitionKeyValueTuples, bucketingFunction, isUpsert);
     }
     
     private <T> BulkImportResponse executeBulkImportInternal(Collection<T> input, 
             Func2<Collection<T>, ConcurrentHashMap<String, Set<String>>, Void> bucketByPartitionFunc,
-            boolean enableUpsert) throws DocumentClientException {
+            boolean isUpsert) throws DocumentClientException {
         Preconditions.checkNotNull(input, "document collection cannot be null");
         try {
             initializationFuture.get();
-            return executeBulkImportAsyncImpl(input, bucketByPartitionFunc, enableUpsert).get();
+            return executeBulkImportAsyncImpl(input, bucketByPartitionFunc, isUpsert).get();
 
         } catch (ExecutionException e) {
             logger.debug("Failed to import documents", e);
@@ -368,10 +368,10 @@ public class DocumentBulkImporter implements AutoCloseable {
 
     private <T> ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Collection<T> input, 
             Func2<Collection<T>, ConcurrentHashMap<String, Set<String>>, Void> bucketByPartitionFunc,
-            boolean enableUpsert) throws Exception {        
+            boolean isUpsert) throws Exception {        
         Stopwatch watch = Stopwatch.createStarted();
 
-        BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, enableUpsert);
+        BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, isUpsert);
 
         ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
         ConcurrentHashMap<String, List<List<String>>> miniBatchesToImportByPartition = new ConcurrentHashMap<String, List<List<String>>>();
