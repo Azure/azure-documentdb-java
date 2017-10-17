@@ -23,6 +23,7 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.util.Collections;
+import java.util.Iterator;
 
 import org.json.JSONObject;
 
@@ -51,8 +52,6 @@ class DocumentAnalyzer {
     }
 
     private static PartitionKeyInternal extractPartitionKeyValueInternal(String documentAsString, PartitionKeyDefinition partitionKeyDefinition) {
-        String partitionKeyPath = String.join("/", partitionKeyDefinition.getPaths());
-
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode root;
         try {
@@ -61,8 +60,13 @@ class DocumentAnalyzer {
             throw new RuntimeException(e);
         }
 
-        JsonNode node = root.at(partitionKeyPath);
+        Iterator<String> path = partitionKeyDefinition.getPaths().iterator();   
+        JsonNode node =  root.path(path.next().substring(1));
         
+        while(path.hasNext()) {
+            node = node.path(path.next());
+        }
+
         Object partitionKeyValue = null;
 
         switch (node.getNodeType()) {

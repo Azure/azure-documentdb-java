@@ -223,4 +223,20 @@ public class DocumentAnalyzerTests {
         PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
         assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList(data.isRainy))));
     }
+    
+    @Test
+    public void messyPartitionKeyName() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/myPKWith/Slash");
+        partitionKeyDefinition.setPaths(paths);
+
+
+        String dataAsString = "{ \"myPKWith/Slash\" : \"pkValue\" , \"xyz\" : 5   }";
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList("pkValue"))));
+    }
 }
