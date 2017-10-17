@@ -45,7 +45,7 @@ public class Sample {
             // this assumes database and collection already exists
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
-            try(BulkImporter importer = new BulkImporter(client, collection)) {
+            try(DocumentBulkImporter importer = new DocumentBulkImporter(client, collection)) {
 
                 //NOTE: for getting higher throughput please
                 // 1)  Set JVM heap size to a large enough number to avoid any memory issue in handling large number of documents 
@@ -57,7 +57,7 @@ public class Sample {
    
                 for(int i = 0; i< 10; i++) {
                     Collection<String> docs = DataMigrationDocumentSource.loadDocuments(1000000, collection.getPartitionKey());
-                    BulkImportResponse bulkImportResponse = importer.bulkImport(docs, false);
+                    BulkImportResponse bulkImportResponse = importer.importAll(docs, false);
 
                     // returned stats
                     System.out.println("Number of documents inserted: " + bulkImportResponse.getNumberOfDocumentsImported());

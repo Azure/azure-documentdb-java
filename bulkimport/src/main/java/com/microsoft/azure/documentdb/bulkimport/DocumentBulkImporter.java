@@ -68,7 +68,7 @@ import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyRangeCache;
 import com.microsoft.azure.documentdb.internal.routing.Range;
 
-public class BulkImporter implements AutoCloseable {
+public class DocumentBulkImporter implements AutoCloseable {
 
     /**
      * The name of the system stored procedure for bulk import.
@@ -80,7 +80,6 @@ public class BulkImporter implements AutoCloseable {
      */
     private final static int MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE = (2202010 * 5) / 10;
 
-
     /**
      * The fraction of maximum sproc payload size upto which documents allowed to be fit in a mini-batch.
      */
@@ -89,12 +88,12 @@ public class BulkImporter implements AutoCloseable {
     /**
      * Logger
      */
-    private final Logger logger = LoggerFactory.getLogger(BulkImporter.class);
+    private final Logger logger = LoggerFactory.getLogger(DocumentBulkImporter.class);
 
     /**
      * Degree of parallelism for each partition
      */
-    private final Map<String, Integer> partitionDegreeOfConcurrency = Collections.synchronizedMap(new HashMap<>());
+    private final Map<String, Integer> partitionDegreeOfConcurrency = new ConcurrentHashMap<>();
 
     /**
      * Executor Service
@@ -112,9 +111,8 @@ public class BulkImporter implements AutoCloseable {
     private final DocumentCollection collection;
 
     /**
-     * The list of degrees of concurrency per partition.
+     * Partition Key Definition of the underlying collection.
      */
-
     private final PartitionKeyDefinition partitionKeyDefinition;
 
     /**
@@ -143,15 +141,15 @@ public class BulkImporter implements AutoCloseable {
     private int collectionThroughput;
 
     /**
-     * Initializes a new instance of {@link BulkImporter}
+     * Initializes a new instance of {@link DocumentBulkImporter}
      *
      * @param client {@link DocumentClient} instance to use
      * @param collection inserts documents to {@link DocumentCollection}
      * @throws DocumentClientException if any failure
      */
-    public BulkImporter(DocumentClient client, DocumentCollection collection) {
+    public DocumentBulkImporter(DocumentClient client, DocumentCollection collection) {
 
-        Preconditions.checkNotNull(client, "DocumentClient cannot be null");
+        Preconditions.checkNotNull(client, "client cannot be null");
         Preconditions.checkNotNull(collection, "collection cannot be null");
 
         this.client = client;
@@ -169,16 +167,17 @@ public class BulkImporter implements AutoCloseable {
                 while(true) {
                     try {
                         initialize();
+                        break;
                     } catch (Exception e) {
                         count++;
                         DocumentClientException dce = extractDeepestDocumentClientException(e);
                         if (count < 3 && dce != null && dce.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS ) {
                             Thread.sleep(count * dce.getRetryAfterInMilliseconds());
                             continue;
-                        } 
-                        throw e;
+                        } else {
+                            throw e;
+                        }
                     }
-                    break;
                 }
                 return null;
             }
@@ -210,7 +209,7 @@ public class BulkImporter implements AutoCloseable {
     }
 
     /**
-     * Initializes {@link BulkImporter}. This happens only once
+     * Initializes {@link DocumentBulkImporter}. This happens only once
      * @throws DocumentClientException
      */
     private void initialize() throws DocumentClientException {
@@ -259,7 +258,7 @@ public class BulkImporter implements AutoCloseable {
      * for(int i = 0; i < 10; i++) {
      *   List<String> documents = documentSource.getMoreDocuments();
      *
-     *   BulkImportResponse bulkImportResponse = importer.bulkImport(documents, false);
+     *   BulkImportResponse bulkImportResponse = importer.doImport(documents, false);
      *   
      *   //validate that all documents inserted to ensure no failure.
      *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
@@ -272,7 +271,7 @@ public class BulkImporter implements AutoCloseable {
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse bulkImport(Collection<String> documents, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse importAll(Collection<String> documents, boolean enableUpsert) throws DocumentClientException {
         Func2<Collection<String>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = new Func2<Collection<String>, ConcurrentHashMap<String,Set<String>>, Void>() {
 
             @Override
@@ -304,7 +303,7 @@ public class BulkImporter implements AutoCloseable {
      * for(int i = 0; i < 10; i++) {
      *   List<Tuple> tuples = documentSource.getMoreDocumentsPartitionKeyValueTuples();
      *
-     *   BulkImportResponse bulkImportResponse = importer.bulkImportWithPreprocessedPartitionKey(tuples, false);
+     *   BulkImportResponse bulkImportResponse = importer.importAllWithPartitionKey(tuples, false);
      *   
      *   // validate that all documents inserted to ensure no failure.
      *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
@@ -317,7 +316,7 @@ public class BulkImporter implements AutoCloseable {
      * @return an instance of {@link BulkImportResponse}
      * @throws DocumentClientException if any failure happens
      */
-    public BulkImportResponse bulkImportWithPreprocessedPartitionKey(Collection<Tuple> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
+    public BulkImportResponse importAllWithPartitionKey(Collection<Tuple> documentPartitionKeyValueTuples, boolean enableUpsert) throws DocumentClientException {
 
         Func2<Collection<Tuple>, ConcurrentHashMap<String, Set<String>>, Void> bucketingFunction = 
                 new Func2<Collection<Tuple>, ConcurrentHashMap<String,Set<String>>, Void>() {

@@ -57,7 +57,7 @@ public class Main {
         DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
         // instantiates bulk importer
-        BulkImporter bulkImporter = new BulkImporter(client, collection);
+        DocumentBulkImporter bulkImporter = new DocumentBulkImporter(client, collection);
 
         Stopwatch totalWatch = Stopwatch.createUnstarted();
 
@@ -74,7 +74,7 @@ public class Main {
                 // NOTE: only sum the bulk import time, 
                 // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                 totalWatch.start();
-                bulkImportResponse = bulkImporter.bulkImportWithPreprocessedPartitionKey(documentPartitionKeyValueTuples, false);
+                bulkImportResponse = bulkImporter.importAllWithPartitionKey(documentPartitionKeyValueTuples, false);
                 totalWatch.stop();
 
             } else {
@@ -83,7 +83,7 @@ public class Main {
                 // NOTE: only sum the bulk import time, 
                 // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                 totalWatch.start();
-                bulkImportResponse = bulkImporter.bulkImport(documents, false);
+                bulkImportResponse = bulkImporter.importAll(documents, false);
                 totalWatch.stop();
 
             }

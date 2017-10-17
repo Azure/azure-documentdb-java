@@ -195,7 +195,7 @@ class CongestionController {
                         if (insertMetricsSample.numberOfThrottles == 0) {
                             if ((insertMetricsSample.requestUnitsConsumed < THROUGHPUT_THRESHOLD * partitionThroughput) &&
                                     degreeOfConcurrency + ADDITIVE_INCREASE_FACTOR <= MAX_DEGREE_OF_CONCURRENCY) {
-                                // We aren't getting throttles, so we should bump of the degree of concurrency (AIAD).
+                                // We aren't getting throttles, so we should bump of the degree of concurrency (AIMD).
                                 logger.debug("pki {} increasing degree of prallelism and releasing semaphore", partitionKeyRangeId);
 
                                 throttleSemaphore.release(ADDITIVE_INCREASE_FACTOR);

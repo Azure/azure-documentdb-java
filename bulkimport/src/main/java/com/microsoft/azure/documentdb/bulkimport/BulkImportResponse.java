@@ -28,17 +28,17 @@ public class BulkImportResponse {
     /**
      * Total number of documents imported.
      */
-    private int numberOfDocumentsImported;
+    final private int numberOfDocumentsImported;
 
     /**
      * Total request units consumed.
      */
-    private double totalRequestUnitsConsumed;
+    final private double totalRequestUnitsConsumed;
 
     /**
      * Total bulk import time.
      */
-    private Duration totalTimeTaken;
+    final private Duration totalTimeTaken;
 
     public BulkImportResponse(int numberOfDocumentsImported, double totalRequestUnitsConsumed, Duration totalTimeTaken) {
         this.numberOfDocumentsImported = numberOfDocumentsImported;

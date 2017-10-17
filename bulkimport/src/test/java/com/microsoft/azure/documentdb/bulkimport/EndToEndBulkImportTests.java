@@ -64,7 +64,7 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
     @Test
     public void bulkImport() throws Exception {
-        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
             List<String> documents = new ArrayList<>();
 
@@ -74,14 +74,14 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
                 documents.add(DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey()));
             }
 
-            BulkImportResponse response = importer.bulkImport(documents, false);
+            BulkImportResponse response = importer.importAll(documents, false);
             validateSuccess(deserialize(documents), response);
         }
     }
     
     @Test
     public void bulkImportAlreadyExists() throws Exception {
-        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
             List<String> documents = new ArrayList<>();
 
@@ -91,20 +91,20 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
                 documents.add(DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey()));
             }
 
-            BulkImportResponse response = importer.bulkImport(documents, false);
+            BulkImportResponse response = importer.importAll(documents, false);
             validateSuccess(deserialize(documents), response);
             
-            response = importer.bulkImport(documents, false);
+            response = importer.importAll(documents, false);
             assertThat(response.getNumberOfDocumentsImported(), equalTo(0));
             
-            response = importer.bulkImport(documents, true);
+            response = importer.importAll(documents, true);
             assertThat(response.getNumberOfDocumentsImported(), equalTo(documents.size()));
         }
     }
 
     @Test
     public void bulkImportWithPreknownPartitionKeyValues() throws Exception {
-        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
             List<Tuple> tuples = new ArrayList<>();
 
@@ -116,13 +116,13 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
                 tuples.add(t);
             }
 
-            BulkImportResponse response = importer.bulkImportWithPreprocessedPartitionKey(tuples, false);
+            BulkImportResponse response = importer.importAllWithPartitionKey(tuples, false);
             validateSuccess(deserialize(tuples.stream().map(t -> t.document).collect(Collectors.toList())), response);
         }
     }
 
     public void bulkImportWithMissingParitionKeyField() throws Exception {
-        try (BulkImporter importer = new BulkImporter(client, this.pCollection)) {
+        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
 
             List<Tuple> tuples = new ArrayList<>();
 
@@ -134,7 +134,7 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
                 tuples.add(t);
             }
 
-            BulkImportResponse response = importer.bulkImportWithPreprocessedPartitionKey(tuples, false);
+            BulkImportResponse response = importer.importAllWithPartitionKey(tuples, false);
             validateSuccess(deserialize(tuples.stream().map(t -> t.document).collect(Collectors.toList())), response);
         }
     }
