@@ -30,6 +30,7 @@ import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.RetryOptions;
 import com.microsoft.azure.documentdb.bulkimport.Main.DataMigrationDocumentSource;
 
 public class Sample {
@@ -38,8 +39,15 @@ public class Sample {
     public static final String HOST = "[YOUR-ENDPOINT]";
 
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
-        try( DocumentClient client = new DocumentClient(HOST, MASTER_KEY, ConnectionPolicy.GetDefault(), 
-                ConsistencyLevel.Session)) {
+        
+        ConnectionPolicy policy = new ConnectionPolicy();
+        RetryOptions retryOptions = new RetryOptions();
+        // set to 0 to let bulk importer handles throttling
+        retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
+        policy.setRetryOptions(retryOptions);        
+        policy.setMaxPoolSize(200);
+        
+        try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, policy, ConsistencyLevel.Session)) {
 
             String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
             // this assumes database and collection already exists

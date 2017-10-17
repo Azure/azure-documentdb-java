@@ -47,7 +47,7 @@ public class Main {
 
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
 
-        Configuration cfg = parseCommandLineArgs(args);
+        CmdLineConfiguration cfg = parseCommandLineArgs(args);
 
         DocumentClient client = documentClientFrom(cfg);
 
@@ -217,20 +217,22 @@ public class Main {
         }
     }
 
-    public static DocumentClient documentClientFrom(Configuration cfg) throws DocumentClientException {
+    public static DocumentClient documentClientFrom(CmdLineConfiguration cfg) throws DocumentClientException {
 
-        ConnectionPolicy policy = cfg.getConnectionPolicy();
+        ConnectionPolicy policy = new ConnectionPolicy();
         RetryOptions retryOptions = new RetryOptions();
         retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
         policy.setRetryOptions(retryOptions);
-
+        policy.setConnectionMode(cfg.getConnectionMode());
+        policy.setMaxPoolSize(cfg.getMaxConnectionPoolSize());
+        
         return new DocumentClient(cfg.getServiceEndpoint(), cfg.getMasterKey(),
                 policy, cfg.getConsistencyLevel());
     }
 
-    private static Configuration parseCommandLineArgs(String[] args) {
+    private static CmdLineConfiguration parseCommandLineArgs(String[] args) {
         LOGGER.debug("Parsing the arguments ...");
-        Configuration cfg = new Configuration();
+        CmdLineConfiguration cfg = new CmdLineConfiguration();
 
         JCommander jcommander = null;
         try {

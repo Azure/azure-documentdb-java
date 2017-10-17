@@ -5,10 +5,9 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 
 import com.beust.jcommander.Parameter;
 import com.microsoft.azure.documentdb.ConnectionMode;
-import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 
-public class Configuration {
+class CmdLineConfiguration {
 
     @Parameter(names = "-serviceEndpoint", description = "Service Endpoint", required = true)
     private String serviceEndpoint;
@@ -22,9 +21,9 @@ public class Configuration {
     @Parameter(names = "-collectionId", description = "Collection ID", required = true)
     private String collectionId;
 
-    @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size, it is a good idea to")
-    private Integer maxConnectionPoolSize = 200;
-
+    @Parameter(names = "-maxConnectionPoolSize", description = "Max Connection Pool Size")
+    private int maxConnectionPoolSize = 200;
+    
     @Parameter(names = "-consistencyLevel", description = "Consistency Level")
     private ConsistencyLevel consistencyLevel = ConsistencyLevel.Session;
 
@@ -43,10 +42,6 @@ public class Configuration {
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
 
-
-    /**
-     * @return the withPreprocessedPartitionKeyValue
-     */
     public boolean isWithPreprocessedPartitionKeyValue() {
         return withPreprocessedPartitionKeyValue;
     }
@@ -71,11 +66,12 @@ public class Configuration {
         return help;
     }
 
-    public ConnectionPolicy getConnectionPolicy() {
-        ConnectionPolicy policy = new ConnectionPolicy();
-        policy.setConnectionMode(connectionMode);
-        policy.setMaxPoolSize(maxConnectionPoolSize);
-        return policy;
+    public Integer getMaxConnectionPoolSize() {
+        return maxConnectionPoolSize;
+    }
+
+    public ConnectionMode getConnectionMode() {
+        return connectionMode;
     }
 
     public ConsistencyLevel getConsistencyLevel() {
