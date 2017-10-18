@@ -62,34 +62,39 @@ class DocumentAnalyzer {
             Iterator<String> path = partitionKeyDefinition.getPaths().iterator();   
             JsonNode node =  root.path(path.next().substring(1));
 
-            while(path.hasNext()) {
+            while(path.hasNext() && node != null) {
                 node = node.path(path.next());
             }
 
             Object partitionKeyValue = null;
 
-            switch (node.getNodeType()) {
-            case BOOLEAN:
-                partitionKeyValue = node.booleanValue();
-                break;
-            case MISSING:
+            if (node != null) {
+
+                switch (node.getNodeType()) {
+                case BOOLEAN:
+                    partitionKeyValue = node.booleanValue();
+                    break;
+                case MISSING:
+                    partitionKeyValue = Undefined.Value();
+                    break;
+                case NULL:
+                    partitionKeyValue = JSONObject.NULL;
+                    break;
+                case NUMBER:
+                    partitionKeyValue = node.numberValue();
+                    break;
+                case STRING:
+                    partitionKeyValue = node.textValue();
+                    break;
+                default:
+                    throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
+                }
+            } else {
                 partitionKeyValue = Undefined.Value();
-                break;
-            case NULL:
-                partitionKeyValue = JSONObject.NULL;
-                break;
-            case NUMBER:
-                partitionKeyValue = node.numberValue();
-                break;
-            case STRING:
-                partitionKeyValue = node.textValue();
-                break;
-            default:
-                throw new RuntimeException(String.format("undefined json type %s", node.getNodeType()));
             }
 
             return fromPartitionKeyvalue(partitionKeyValue);
-            
+
         } catch (Exception e) {
             LOGGER.error("Failed to extract partition key value from document {}", documentAsString, e);
             throw ExceptionUtils.toRuntimeException(e);

@@ -34,7 +34,6 @@ import org.junit.Test;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
-import com.microsoft.azure.documentdb.Undefined;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 
 public class DocumentAnalyzerTests {
@@ -225,12 +224,45 @@ public class DocumentAnalyzerTests {
     }
     
     @Test
+    public void compositePathMissing() throws JsonProcessingException {
+        PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
+        Collection<String> paths = new ArrayList<>();
+        paths.add("/city");
+        paths.add("name");
+
+        partitionKeyDefinition.setPaths(paths);
+
+        @SuppressWarnings("unused")
+        class City {
+            public String name;
+            public String zip;
+        }
+
+        @SuppressWarnings("unused")
+        class Pojo {
+            public City city;
+            public String state;
+            public int population;
+        }
+
+        Pojo data = new Pojo();
+        data.city = null;
+        data.state = "WA";
+        data.population = 700000;
+
+        ObjectMapper mapper = new ObjectMapper();
+        String dataAsString = mapper.writeValueAsString(data);
+
+        PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(dataAsString, partitionKeyDefinition);
+        assertThat(partitionKeyValue.toJson(), equalTo(mapper.writeValueAsString(Collections.singletonList(Collections.EMPTY_MAP))));
+    }
+    
+    @Test
     public void messyPartitionKeyName() throws JsonProcessingException {
         PartitionKeyDefinition partitionKeyDefinition = new PartitionKeyDefinition();
         Collection<String> paths = new ArrayList<>();
         paths.add("/myPKWith/Slash");
         partitionKeyDefinition.setPaths(paths);
-
 
         String dataAsString = "{ \"myPKWith/Slash\" : \"pkValue\" , \"xyz\" : 5   }";
 
