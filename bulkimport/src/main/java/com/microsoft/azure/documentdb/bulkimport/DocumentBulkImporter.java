@@ -24,11 +24,9 @@ package com.microsoft.azure.documentdb.bulkimport;
 
 import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.extractDeepestDocumentClientException;
 
-import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -42,12 +40,15 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.Iterators;
 import com.google.common.util.concurrent.AsyncCallable;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Futures.FutureCombiner;
@@ -64,8 +65,8 @@ import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
+import com.microsoft.azure.documentdb.internal.routing.InMemoryCollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
-import com.microsoft.azure.documentdb.internal.routing.PartitionKeyRangeCache;
 import com.microsoft.azure.documentdb.internal.routing.Range;
 
 public class DocumentBulkImporter implements AutoCloseable {
@@ -470,18 +471,23 @@ public class DocumentBulkImporter implements AutoCloseable {
     }
 
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {
-        try {
-            // NOTE: Java doesn't have internal access modifier
-            // This is only invoked once per Bulk Import Initialization. So this is not costly.
-            Field f = client.getClass().getDeclaredField("partitionKeyRangeCache"); //NoSuchFieldException
-            f.setAccessible(true);
-            PartitionKeyRangeCache cache = (PartitionKeyRangeCache) f.get(client); //IllegalAccessException
+        Iterator<PartitionKeyRange> rangeIterator = client.readPartitionKeyRanges(this.collection, null).getQueryIterator();
+        List<PartitionKeyRange> partitionKeyRanges = new ArrayList<>();
+        Iterators.addAll(partitionKeyRanges, rangeIterator);
+        
+        List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
+        for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable()) {
+            ranges.add(new ImmutablePair<>(range, true));
+        }
 
-            return cache.tryLookUp(collection.getSelfLink(), null);
+        CollectionRoutingMap routingMap = InMemoryCollectionRoutingMap.tryCreateCompleteRoutingMap(ranges,
+                StringUtils.EMPTY);
+
+        if (routingMap == null) {
+            throw new IllegalStateException("Cannot create complete routing map");
         }
-        catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        
+        return routingMap;
     }
 
     private int getSizeInBytes(String document) {
