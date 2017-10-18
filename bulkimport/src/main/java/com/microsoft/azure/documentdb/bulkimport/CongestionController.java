@@ -24,6 +24,7 @@ package com.microsoft.azure.documentdb.bulkimport;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -100,7 +101,7 @@ class CongestionController {
     private InsertMetrics aggregatedInsertMetrics;
 
     private Object aggregateLock = new Object();
-    
+
     /**
      * Whether or not all the documents have been inserted.
      */
@@ -127,11 +128,18 @@ class CongestionController {
      */
     private int partitionThroughput;
 
-    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId, BatchInserter batchInserter) {
+    /**
+     * captures failures which surface out
+     */
+    private final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
+
+    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId,
+            BatchInserter batchInserter) {
         this(executor, partitionThroughput, partitionKeyRangeId, batchInserter, null);
     }
 
-    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId, BatchInserter batchInserter, Integer startingDegreeOfConcurrency) {
+    public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId,
+            BatchInserter batchInserter, Integer startingDegreeOfConcurrency) {
         this.partitionKeyRangeId = partitionKeyRangeId;
         this.batchInserter = batchInserter;
 
@@ -142,6 +150,14 @@ class CongestionController {
         this.aggregatedInsertMetrics = new InsertMetrics();
         this.executor = executor;
         this.partitionThroughput = partitionThroughput;        
+    }
+
+    private void addFailure(Exception e) {
+        failures.add(e);
+    }
+
+    public List<Exception> getFailures() {
+        return Collections.unmodifiableList(this.failures);
     }
 
     private InsertMetrics atomicGetAndReplace(InsertMetrics metrics) {
@@ -170,7 +186,7 @@ class CongestionController {
                         if (insertMetricsSample.numberOfThrottles > 0) {
                             logger.debug("pki {} importing encountered {} throttling. current degree of parallelism {}, decreasing amount: {}", 
                                     partitionKeyRangeId, insertMetricsSample.numberOfThrottles, degreeOfConcurrency, degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
-                            
+
                             // We got a throttle so we need to back off on the degree of concurrency.
                             // Get the current degree of concurrency and decrease that (AIMD).
 
@@ -179,7 +195,7 @@ class CongestionController {
                             }
 
                             degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
-                        
+
                             logger.debug("pki {} degree of parallelism reduced to {}, sem available permits", partitionKeyRangeId, degreeOfConcurrency, throttleSemaphore.availablePermits());
                         }
 
@@ -198,7 +214,7 @@ class CongestionController {
 
                                 throttleSemaphore.release(ADDITIVE_INCREASE_FACTOR);
                                 degreeOfConcurrency += ADDITIVE_INCREASE_FACTOR;
-                                
+
                                 logger.debug("pki {} degree of parallelism increased to {}. available semaphore permits {}", partitionKeyRangeId, degreeOfConcurrency, throttleSemaphore.availablePermits());
                             }
                         }
@@ -215,7 +231,7 @@ class CongestionController {
                                 degreeOfConcurrency,
                                 insertMetricsSample.numberOfThrottles,
                                 documentsInsertedSoFar);
-                        
+
                     } catch (InterruptedException e) {
                         logger.warn("Interrupted", e);
                         break;
@@ -231,7 +247,7 @@ class CongestionController {
     }
 
     public ListenableFuture<Void> executeAllAsync()  {
-        
+
         Callable<ListenableFuture<Void>> c = new Callable<ListenableFuture<Void>>() {
 
             @Override
@@ -239,7 +255,7 @@ class CongestionController {
                 return executeAll();
             }
         };
-        
+
         ListenableFuture<ListenableFuture<Void>> f = executor.submit(c);
         AsyncFunction<ListenableFuture<Void>, Void> function = new AsyncFunction<ListenableFuture<Void>, Void>() {
 
@@ -250,13 +266,13 @@ class CongestionController {
         };
         return Futures.transformAsync(f, function, executor);
     }
-    
+
     public ListenableFuture<Void> executeAll()  {
 
         logger.debug("pki{} Executing batching", partitionKeyRangeId);
-        
+
         ListenableFuture<Void> completionFuture = executor.submit(congestionControlTask());
-        
+
         Iterator<Callable<InsertMetrics>> batchExecutionIterator = batchInserter.miniBatchInsertExecutionCallableIterator();
 
         List<ListenableFuture<InsertMetrics>> futureList = new ArrayList<>();
@@ -280,7 +296,7 @@ class CongestionController {
                 this.throttleSemaphore.release();
                 break;
             }
-            
+
             ListenableFuture<InsertMetrics> insertMetricsFuture = executor.submit(task);
 
             FutureCallback<InsertMetrics> aggregateMetricsReleaseSemaphoreCallback = new FutureCallback<InsertMetrics>() {
@@ -323,6 +339,7 @@ class CongestionController {
             @Override
             public void onFailure(Throwable t) {
                 logger.error("pki {} importing failed", partitionKeyRangeId, t);
+                addFailure(ExceptionUtils.toException(t));
                 setState(State.Failure);
             }
         };

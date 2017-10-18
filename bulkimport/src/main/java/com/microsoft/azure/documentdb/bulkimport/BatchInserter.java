@@ -29,6 +29,8 @@ import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isTimedOu
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -43,6 +45,7 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.AtomicDouble;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
@@ -50,7 +53,7 @@ import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.StoredProcedureResponse;
 
 class BatchInserter  {
-    
+
     private final Logger logger = LoggerFactory.getLogger(BatchInserter.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -79,7 +82,7 @@ class BatchInserter  {
      * Request options specifying the underlying partition key range id
      */
     private final RequestOptions requestOptions;
-    
+
     /**
      *  The options passed to the system bulk import stored procedure.
      */
@@ -94,7 +97,7 @@ class BatchInserter  {
      * The total request units consumed by this batch inserter.
      */
     public final AtomicDouble totalRequestUnitsConsumed;
-    
+
     /**
      * Provides a means to stop Batch Inserter from doing any more work
      */
@@ -110,13 +113,13 @@ class BatchInserter  {
         this.storedProcOptions = options;
         this.numberOfDocumentsImported = new AtomicInteger();
         this.totalRequestUnitsConsumed = new AtomicDouble();
-        
+
         class RequestOptionsInternal extends RequestOptions {
             RequestOptionsInternal(String partitionKeyRangeId) {
                 setPartitionKeyRengeId(partitionKeyRangeId);
             }
         }
-        
+
         this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
     }
 
@@ -127,7 +130,7 @@ class BatchInserter  {
     public double getTotalRequestUnitsConsumed() {
         return totalRequestUnitsConsumed.get();
     }
-    
+
     public void forceStop() {
         forceToStop = true;
     }
@@ -158,7 +161,7 @@ class BatchInserter  {
                         Duration retryAfter = Duration.ZERO;
 
                         try {
-                            
+
                             logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
 
                             if (!timedOut) {
@@ -207,12 +210,12 @@ class BatchInserter  {
                                 isThrottled = true;
                                 retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
                                 // will retry again
-                                
+
                             } else if (isTimedOut(e)) {
                                 logger.debug("pki {} Request timed out", partitionKeyRangeId);
                                 timedOut = true;
                                 // will retry again
-                                
+
                             } else if (isGone(e)) {
                                 // there is no value in retrying
                                 if (isSplit(e)) {
@@ -264,7 +267,6 @@ class BatchInserter  {
 
         return stream.iterator();
     }
-
 
     private BulkImportStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
         String res = storedProcResponse.getResponseAsString();

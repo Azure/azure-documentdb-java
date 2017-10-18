@@ -142,9 +142,9 @@ public class DocumentBulkImporter implements AutoCloseable {
     private final Logger logger = LoggerFactory.getLogger(DocumentBulkImporter.class);
 
     /**
-     * Degree of parallelism for each partition
+     * Degree of parallelism for each partition which was inferred from previous batch execution.
      */
-    private final Map<String, Integer> partitionDegreeOfConcurrency = new ConcurrentHashMap<>();
+    private final Map<String, Integer> partitionKeyRangeIdToInferredDegreeOfParallelism = new ConcurrentHashMap<>();
 
     /**
      * Executor Service
@@ -505,7 +505,12 @@ public class DocumentBulkImporter implements AutoCloseable {
                     options);
             batchInserters.put(partitionKeyRangeId, batchInserter);
 
-            CongestionController cc = new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId));
+            CongestionController cc = new CongestionController(listeningExecutorService, 
+                    collectionThroughput / partitionKeyRangeIds.size(), 
+                    partitionKeyRangeId, 
+                    batchInserter, 
+                    partitionKeyRangeIdToInferredDegreeOfParallelism.get(partitionKeyRangeId));
+            
             congestionControllers.put(partitionKeyRangeId,cc);
 
             // starting 
@@ -518,8 +523,12 @@ public class DocumentBulkImporter implements AutoCloseable {
             @Override
             public ListenableFuture<BulkImportResponse> call() throws Exception {
 
+                List<Exception> failures = new ArrayList<>();
+                
                 for(String partitionKeyRangeId: partitionKeyRangeIds) {
-                    partitionDegreeOfConcurrency.put(partitionKeyRangeId, congestionControllers.get(partitionKeyRangeId).getDegreeOfConcurrency());
+                    CongestionController cc = congestionControllers.get(partitionKeyRangeId);
+                    failures.addAll(cc.getFailures());
+                    partitionKeyRangeIdToInferredDegreeOfParallelism.put(partitionKeyRangeId, cc.getDegreeOfConcurrency());
                 }
 
                 int numberOfDocumentsImported = batchInserters.values().stream().mapToInt(b -> b.getNumberOfDocumentsImported()).sum();
@@ -527,7 +536,8 @@ public class DocumentBulkImporter implements AutoCloseable {
 
                 watch.stop();
 
-                BulkImportResponse bulkImportResponse = new BulkImportResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed());
+                BulkImportResponse bulkImportResponse = new
+                        BulkImportResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed(), failures);
 
                 return Futures.immediateFuture(bulkImportResponse);
             }

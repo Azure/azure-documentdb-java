@@ -66,4 +66,12 @@ class ExceptionUtils {
             return new RuntimeException(e);
         }
     }
+    
+    public static Exception toException(Throwable t) {
+        if (t instanceof Exception) {
+            return (Exception) t;
+        } else {
+            return new RuntimeException(t);
+        }
+    }
 }

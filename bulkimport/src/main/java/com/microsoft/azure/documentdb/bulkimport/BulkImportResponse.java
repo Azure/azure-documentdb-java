@@ -23,6 +23,8 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
 
 public class BulkImportResponse {
     /**
@@ -40,13 +42,31 @@ public class BulkImportResponse {
      */
     final private Duration totalTimeTaken;
 
-    public BulkImportResponse(int numberOfDocumentsImported, double totalRequestUnitsConsumed, Duration totalTimeTaken) {
+    /**
+     * keeps failures which surfaced out
+     */
+    final private List<Exception> failures;
+
+    BulkImportResponse(int numberOfDocumentsImported, double totalRequestUnitsConsumed, Duration totalTimeTaken, List<Exception> failures) {
         this.numberOfDocumentsImported = numberOfDocumentsImported;
         this.totalRequestUnitsConsumed = totalRequestUnitsConsumed;
         this.totalTimeTaken = totalTimeTaken;
+        this.failures = failures;
     }
 
     /**
+     * Gets failure list if some documents failed to get inserted.
+     * @return
+     */
+    public List<Exception> getFailuresIfAny() {
+        return Collections.unmodifiableList(failures);
+    }
+
+    /**
+     * Gets number of documents successfully inserted.
+     * 
+     * <p> If this number is less than actual batch size (meaning some documents failed to get inserted),
+     * use {@link #getFailuresIfAny()} to get the failure cause.
      * @return the numberOfDocumentsImported
      */
     public int getNumberOfDocumentsImported() {
