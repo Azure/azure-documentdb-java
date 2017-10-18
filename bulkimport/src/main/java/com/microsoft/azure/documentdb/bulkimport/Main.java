@@ -71,7 +71,7 @@ public class Main {
                 for(int i = 0 ; i < cfg.getNumberOfCheckpoints(); i++) {
 
                     BulkImportResponse bulkImportResponse;
-                    if (cfg.isWithPreprocessedPartitionKeyValue()) {
+                    if (cfg.isImportAllWithPartitionKey()) {
                         Collection<DocumentPKValuePair> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentPartitionKeyValueTuples(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
 
                         // NOTE: only sum the bulk import time, 

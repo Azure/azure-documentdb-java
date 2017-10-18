@@ -30,8 +30,8 @@ class CmdLineConfiguration {
     @Parameter(names = "-connectionMode", description = "Connection Mode")
     private ConnectionMode connectionMode = ConnectionMode.Gateway;
 
-    @Parameter(names = "-withPreprocessedPartitionKeyValue", description = "Feed With Preprocessed Partition Key Value")
-    private boolean withPreprocessedPartitionKeyValue = false;
+    @Parameter(names = "-importAllWithPartitionKey", description = "Feed With Preprocessed Partition Key Value")
+    private boolean importAllWithPartitionKey = false;
 
     @Parameter(names = "-numberOfDocumentsForEachCheckpoint", description = "Number of documents in each checkpoint.")
     private int numberOfDocumentsForEachCheckpoint = 500000;
@@ -42,8 +42,8 @@ class CmdLineConfiguration {
     @Parameter(names = {"-h", "-help", "--help"}, description = "Help", help = true)
     private boolean help = false;
 
-    public boolean isWithPreprocessedPartitionKeyValue() {
-        return withPreprocessedPartitionKeyValue;
+    public boolean isImportAllWithPartitionKey() {
+        return importAllWithPartitionKey;
     }
 
     public int getNumberOfCheckpoints() {

@@ -72,11 +72,11 @@ import com.microsoft.azure.documentdb.internal.routing.Range;
 public class DocumentBulkImporter implements AutoCloseable {
 
     public static class Builder {
-        
+
         private DocumentClient client;
         private DocumentCollection collection;
         private int miniBatchSize = (int)Math.floor(MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE * FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED);
-        
+
         /**
          * Use the instance of {@link DocumentClient} to bulk import to the given instance of {@link DocumentCollection}
          * @param client
@@ -88,7 +88,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             this.collection = collection;
             return this;
         }
-        
+
         /**
          * use the given size to configure max mini batch size.
          * 
@@ -100,7 +100,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             this.miniBatchSize = size;
             return this;
         }
-        
+
         /**
          * Instantiates {@link DocumentBulkImporter} given the configured {@link Builder}.
          * 
@@ -109,10 +109,10 @@ public class DocumentBulkImporter implements AutoCloseable {
         public DocumentBulkImporter build() {
             return new DocumentBulkImporter(client, collection, miniBatchSize);
         }
-        
+
         private Builder() {}
     }
-    
+
     /**
      * Creates a new {@link DocumentBulkImporter.Builder} instance
      * @return
@@ -120,7 +120,7 @@ public class DocumentBulkImporter implements AutoCloseable {
     public static DocumentBulkImporter.Builder builder() {
         return new DocumentBulkImporter.Builder();
     }
-    
+
     /**
      * The name of the system stored procedure for bulk import.
      */
@@ -418,6 +418,15 @@ public class DocumentBulkImporter implements AutoCloseable {
         }
     }
 
+    private int getDocumentSizeOrThrow(String document) {
+        int documentSize = document.getBytes(Charset.forName("UTF-8")).length;
+        if (documentSize > maxMiniBatchSize) {
+            logger.error("Document size {} larger than script payload limit. {}", documentSize, maxMiniBatchSize);
+            throw new UnsupportedOperationException ("Cannot import a document whose size is larger than script payload limit.");
+        }
+        return documentSize;
+    }
+
     private <T> ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Collection<T> input, 
             Function<T, String> getDocument,
             Function<T, PartitionKeyInternal> getPartitionKey,
@@ -454,23 +463,27 @@ public class DocumentBulkImporter implements AutoCloseable {
             Set<String> documentsToImportInPartition =  entry.getValue();
 
             Iterator<String> it = documentsToImportInPartition.iterator();
+            List<String> currentMiniBatch = new ArrayList<String>();
+            int currentMiniBatchSize = 0;
 
-            while (it.hasNext())
-            {
-                List<String> currentMiniBatch = new ArrayList<String>();
-                int currentMiniBatchSize = 0;
-                do {
-                    String currentDocument = it.next();
-                    int currentDocumentSize = getSizeInBytes(currentDocument);
-                    if (currentDocumentSize > maxMiniBatchSize) {
-                        logger.error("Document size {} larger than script payload limit. {}", currentDocumentSize, maxMiniBatchSize);
-                        throw new UnsupportedOperationException ("Cannot import a document whose size is larger than script payload limit.");
-                    }
+            while (it.hasNext()) {
+                String currentDocument = it.next();
+                int currentDocumentSize = getDocumentSizeOrThrow(currentDocument);
 
+                if ((currentMiniBatchSize + currentDocumentSize <= maxMiniBatchSize)) {
+                    // add the document to current batch
                     currentMiniBatch.add(currentDocument);
                     currentMiniBatchSize += currentDocumentSize;
-                } while ((currentMiniBatchSize < maxMiniBatchSize) && (it.hasNext()));
+                } else {
+                    // this batch has reached its max size
+                    miniBatchesToImportByPartition.get(partitionRangeId).add(currentMiniBatch);
+                    currentMiniBatch = new ArrayList<String>();
+                    currentMiniBatchSize = 0;
+                }
+            }
 
+            if (currentMiniBatch.size() > 0) {
+                // add mini batch
                 miniBatchesToImportByPartition.get(partitionRangeId).add(currentMiniBatch);
             }
         });
@@ -478,6 +491,9 @@ public class DocumentBulkImporter implements AutoCloseable {
         logger.debug("Beginning bulk import within each partition bucket");
         Map<String, BatchInserter> batchInserters = new HashMap<String, BatchInserter>();
         Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
+
+        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");        
+        List<ListenableFuture<Void>> futures = new ArrayList<>();
 
         for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
 
@@ -489,15 +505,10 @@ public class DocumentBulkImporter implements AutoCloseable {
                     options);
             batchInserters.put(partitionKeyRangeId, batchInserter);
 
-            congestionControllers.put(partitionKeyRangeId,
-                    new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId)));
-        }
+            CongestionController cc = new CongestionController(listeningExecutorService, collectionThroughput / partitionKeyRangeIds.size(), partitionKeyRangeId, batchInserter, this.partitionDegreeOfConcurrency.get(partitionKeyRangeId));
+            congestionControllers.put(partitionKeyRangeId,cc);
 
-        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");        
-
-        List<ListenableFuture<Void>> futures = new ArrayList<>();
-
-        for(CongestionController cc: congestionControllers.values()) {
+            // starting 
             futures.add(cc.executeAllAsync());
         }
 
@@ -529,7 +540,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         Iterator<PartitionKeyRange> rangeIterator = client.readPartitionKeyRanges(this.collection, null).getQueryIterator();
         List<PartitionKeyRange> partitionKeyRanges = new ArrayList<>();
         Iterators.addAll(partitionKeyRanges, rangeIterator);
-        
+
         List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
         for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable()) {
             ranges.add(new ImmutablePair<>(range, true));
@@ -541,11 +552,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         if (routingMap == null) {
             throw new IllegalStateException("Cannot create complete routing map");
         }
-        
-        return routingMap;
-    }
 
-    private int getSizeInBytes(String document) {
-        return document.getBytes(Charset.forName("UTF-8")).length;
+        return routingMap;
     }
 }
