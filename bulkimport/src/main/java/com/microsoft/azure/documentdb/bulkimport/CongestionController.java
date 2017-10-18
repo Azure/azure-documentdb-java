@@ -66,7 +66,7 @@ class CongestionController {
      * If we receive a throttle in the sample period, then we decrease the degree of concurrency by this amount.
      * For example if this is set to 2 and we need to decrease the degree of concurrency then "degreeOfConcurrency /= 2".
      */
-    private static final int MULTIPLICATIVE_DECREASE_FACTOR = 2;
+    private static final int DIVISIVE_DECREASE_FACTOR = 2;
 
     /**
      * The threshold to grow to.
@@ -185,16 +185,16 @@ class CongestionController {
 
                         if (insertMetricsSample.numberOfThrottles > 0) {
                             logger.debug("pki {} importing encountered {} throttling. current degree of parallelism {}, decreasing amount: {}", 
-                                    partitionKeyRangeId, insertMetricsSample.numberOfThrottles, degreeOfConcurrency, degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
+                                    partitionKeyRangeId, insertMetricsSample.numberOfThrottles, degreeOfConcurrency, degreeOfConcurrency / DIVISIVE_DECREASE_FACTOR);
 
                             // We got a throttle so we need to back off on the degree of concurrency.
                             // Get the current degree of concurrency and decrease that (AIMD).
 
-                            for (int i = 0; i < degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR; i++) {
+                            for (int i = 0; i < degreeOfConcurrency / DIVISIVE_DECREASE_FACTOR; i++) {
                                 throttleSemaphore.acquire();
                             }
 
-                            degreeOfConcurrency -= (degreeOfConcurrency / MULTIPLICATIVE_DECREASE_FACTOR);
+                            degreeOfConcurrency -= (degreeOfConcurrency / DIVISIVE_DECREASE_FACTOR);
 
                             logger.debug("pki {} degree of parallelism reduced to {}, sem available permits", partitionKeyRangeId, degreeOfConcurrency, throttleSemaphore.availablePermits());
                         }
@@ -317,7 +317,6 @@ class CongestionController {
                     logger.error("pki {} encountered failure {} releasing semaphore", partitionKeyRangeId, t);
                     // if a batch inserter encounters failure which cannot be retried then we have to stop.
                     setState(State.Failure);
-                    batchInserter.forceStop();
                     throttleSemaphore.release();
                 }
             };
