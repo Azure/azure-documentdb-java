@@ -40,6 +40,7 @@ import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.Undefined;
+import com.microsoft.azure.documentdb.bulkimport.DocumentBulkImporter.Builder;
 
 @RunWith(Parameterized.class)
 public class EndToEndBulkImportTests extends EndToEndTestBase {
@@ -64,7 +65,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
     @Test
     public void bulkImport() throws Exception {
-        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+
+        try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
             List<String> documents = new ArrayList<>();
 
@@ -81,7 +84,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
     
     @Test
     public void bulkImportAlreadyExists() throws Exception {
-        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+        
+        try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
             List<String> documents = new ArrayList<>();
 
@@ -104,7 +109,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
     @Test
     public void bulkImportWithPreknownPartitionKeyValues() throws Exception {
-        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+        
+        try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
             List<DocumentPKValuePair> tuples = new ArrayList<>();
 
@@ -122,7 +129,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
     }
 
     public void bulkImportWithMissingParitionKeyField() throws Exception {
-        try (DocumentBulkImporter importer = new DocumentBulkImporter(client, this.pCollection)) {
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+        
+        try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
             List<DocumentPKValuePair> tuples = new ArrayList<>();
 

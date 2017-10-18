@@ -31,6 +31,7 @@ import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.RetryOptions;
+import com.microsoft.azure.documentdb.bulkimport.DocumentBulkImporter.Builder;
 import com.microsoft.azure.documentdb.bulkimport.Main.DataMigrationDocumentSource;
 
 public class Sample {
@@ -53,7 +54,9 @@ public class Sample {
             // this assumes database and collection already exists
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
-            try(DocumentBulkImporter importer = new DocumentBulkImporter(client, collection)) {
+            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, collection);
+
+            try(DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
                 //NOTE: for getting higher throughput please
                 

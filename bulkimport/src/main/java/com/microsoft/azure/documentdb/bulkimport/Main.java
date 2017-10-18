@@ -40,6 +40,7 @@ import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RetryOptions;
+import com.microsoft.azure.documentdb.bulkimport.DocumentBulkImporter.Builder;
 
 public class Main {
 
@@ -56,8 +57,10 @@ public class Main {
             // also it is a good idea to set your connection pool size to be equal to the number of partitions serving your collection.
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
+            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, collection);
+            
             // instantiates bulk importer
-            try(DocumentBulkImporter bulkImporter = new DocumentBulkImporter(client, collection)) {
+            try(DocumentBulkImporter bulkImporter = bulkImporterBuilder.build()) {
 
                 Stopwatch totalWatch = Stopwatch.createUnstarted();
 
