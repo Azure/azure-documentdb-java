@@ -27,6 +27,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -113,18 +114,17 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
         
         try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
-            List<DocumentPKValuePair> tuples = new ArrayList<>();
+            HashMap<String, Object> documentToPartitionKeyValue = new HashMap<>();
 
             Object [] partitionKeyValues = new Object[] { "abc", null, "", Undefined.Value(), 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
-                DocumentPKValuePair t = new DocumentPKValuePair(d, partitionKeyValue);
-                tuples.add(t);
+                documentToPartitionKeyValue.put(d, partitionKeyValue);
             }
 
-            BulkImportResponse response = importer.importAllWithPartitionKey(tuples, false);
-            validateSuccess(deserialize(tuples.stream().map(t -> t.document).collect(Collectors.toList())), response);
+            BulkImportResponse response = importer.importAllWithPartitionKey(documentToPartitionKeyValue, false);
+            validateSuccess(deserialize(documentToPartitionKeyValue.keySet().stream().collect(Collectors.toList())), response);
         }
     }
 
@@ -133,18 +133,17 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
         
         try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
-            List<DocumentPKValuePair> tuples = new ArrayList<>();
+            HashMap<String, Object> documentToPartitionKeyValue = new HashMap<>();
 
             Object [] partitionKeyValues = new Object[] { "abc", "", null, 123, 0, -10, 9,223,372,036,854,775,000, 0.5, true, false };
 
             for(Object partitionKeyValue: partitionKeyValues) {
                 String d = DocumentDataSource.randomDocument(partitionKeyValue, pCollection.getPartitionKey());
-                DocumentPKValuePair t = new DocumentPKValuePair(d, partitionKeyValue);
-                tuples.add(t);
+                documentToPartitionKeyValue.put(d, partitionKeyValue);
             }
 
-            BulkImportResponse response = importer.importAllWithPartitionKey(tuples, false);
-            validateSuccess(deserialize(tuples.stream().map(t -> t.document).collect(Collectors.toList())), response);
+            BulkImportResponse response = importer.importAllWithPartitionKey(documentToPartitionKeyValue, false);
+            validateSuccess(deserialize(documentToPartitionKeyValue.keySet().stream().collect(Collectors.toList())), response);
         }
     }
 

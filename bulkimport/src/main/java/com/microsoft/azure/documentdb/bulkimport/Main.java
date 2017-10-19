@@ -22,7 +22,9 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
+import java.util.AbstractMap;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -72,7 +74,7 @@ public class Main {
 
                     BulkImportResponse bulkImportResponse;
                     if (cfg.isImportAllWithPartitionKey()) {
-                        Collection<DocumentPKValuePair> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentPartitionKeyValueTuples(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
+                        HashMap<String, Object> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentToPartitionKeyValueMap(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
 
                         // NOTE: only sum the bulk import time, 
                         // loading/generating documents is out of the scope of bulk importer and so has to be excluded
@@ -179,7 +181,7 @@ public class Main {
          * @param partitionKeyDefinition
          * @return collection of documents
          */
-        public static Collection<DocumentPKValuePair> loadDocumentPartitionKeyValueTuples(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
+        public static HashMap<String, Object> loadDocumentToPartitionKeyValueMap(int numberOfDocuments, PartitionKeyDefinition partitionKeyDefinition) {
 
             Preconditions.checkArgument(partitionKeyDefinition != null &&
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
@@ -190,11 +192,13 @@ public class Main {
 
             String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
 
+            HashMap<String, Object> documentsToPartitionKeyValue = new HashMap<String, Object>(numberOfDocuments);
+            
             // the size of each document is approximately 1KB
 
             // return collection of <document, partitionKeyValue> to be bulk imported
             // if you are reading documents from disk you can change this to read documents from disk
-            return IntStream.range(0, numberOfDocuments).mapToObj(i ->
+            IntStream.range(0, numberOfDocuments).mapToObj(i ->
             {
                 StringBuilder sb = new StringBuilder();   
                 String partitionKeyValue = UUID.randomUUID().toString();
@@ -210,10 +214,12 @@ public class Main {
                 }
 
                 sb.append("}");
+                
+                return new AbstractMap.SimpleEntry<String, Object>(sb.toString(), partitionKeyValue);
 
-                return new DocumentPKValuePair(sb.toString(), partitionKeyValue);
-
-            }).collect(Collectors.toList());
+            }).forEach(entry -> documentsToPartitionKeyValue.put(entry.getKey(), entry.getValue()));
+            
+            return documentsToPartitionKeyValue;
         }
     }
 
