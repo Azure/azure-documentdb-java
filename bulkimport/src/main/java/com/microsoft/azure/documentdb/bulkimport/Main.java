@@ -76,31 +76,18 @@ public class Main {
                 for(int i = 0 ; i < cfg.getNumberOfCheckpoints(); i++) {
 
                     BulkImportResponse bulkImportResponse;
-                    if (cfg.isImportAllWithPartitionKey()) {
-                        HashMap<String, Object> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentToPartitionKeyValueMap(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
-                        if (documentPartitionKeyValueTuples.size() !=  cfg.getNumberOfDocumentsForEachCheckpoint()) {
-                            throw new RuntimeException("not enough documents generated");
-                        }
-                        // NOTE: only sum the bulk import time,
-                        // loading/generating documents is out of the scope of bulk importer and so has to be excluded
-                        totalWatch.start();
-                        bulkImportResponse = bulkImporter.importAllWithPartitionKey(documentPartitionKeyValueTuples, false);
-                        totalWatch.stop();
 
-                    } else {
-                        Collection<String> documents = DataMigrationDocumentSource.loadDocuments(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
+                    Collection<String> documents = DataMigrationDocumentSource.loadDocuments(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
 
-                        if (documents.size() !=  cfg.getNumberOfDocumentsForEachCheckpoint()) {
-                            throw new RuntimeException("not enough documents generated");
-                        }
-
-                        // NOTE: only sum the bulk import time,
-                        // loading/generating documents is out of the scope of bulk importer and so has to be excluded
-                        totalWatch.start();
-                        bulkImportResponse = bulkImporter.importAll(documents, false);
-                        totalWatch.stop();
-
+                    if (documents.size() !=  cfg.getNumberOfDocumentsForEachCheckpoint()) {
+                        throw new RuntimeException("not enough documents generated");
                     }
+
+                    // NOTE: only sum the bulk import time,
+                    // loading/generating documents is out of the scope of bulk importer and so has to be excluded
+                    totalWatch.start();
+                    bulkImportResponse = bulkImporter.importAll(documents, false);
+                    totalWatch.stop();
 
                     System.out.println("##########################################################################################");
 
@@ -121,9 +108,9 @@ public class Main {
                     // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
                     if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfDocumentsForEachCheckpoint()) {
                         System.err.println("Some documents failed to get inserted in this checkpoint. This checkpoint has to get retried with upsert enabled");
-                        System.err.println("Number of surfaced failures: " + bulkImportResponse.getFailuresIfAny().size());
-                        for(int j = 0; j < bulkImportResponse.getFailuresIfAny().size(); j++) {
-                            bulkImportResponse.getFailuresIfAny().get(j).printStackTrace();
+                        System.err.println("Number of surfaced failures: " + bulkImportResponse.getErrors().size());
+                        for(int j = 0; j < bulkImportResponse.getErrors().size(); j++) {
+                            bulkImportResponse.getErrors().get(j).printStackTrace();
                         }
                         break;
                     }

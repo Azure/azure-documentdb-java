@@ -63,7 +63,6 @@ import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
-import com.microsoft.azure.documentdb.internal.query.funcs.Func1;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.InMemoryCollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
@@ -347,117 +346,16 @@ public class DocumentBulkImporter implements AutoCloseable {
      * @throws DocumentClientException if any failure happens
      */
     public BulkImportResponse importAll(Collection<String> documents, boolean isUpsert) throws DocumentClientException {
-
-        Func1<Collection<String>, ConcurrentHashMap<String, Set<String>>> bucketingFunction = new Func1<Collection<String>, ConcurrentHashMap<String, Set<String>>>() {
-
-            @Override
-            public ConcurrentHashMap<String, Set<String>> apply(Collection<String> input) {
-                logger.debug("Bucketing documents ...");
-
-                ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
-
-                for (String partitionKeyRangeId: partitionKeyRangeIds) {
-                    documentsToImportByPartition.put(partitionKeyRangeId,  ConcurrentHashMap.newKeySet());
-                }
-
-                input.parallelStream().forEach(documentAsString -> {
-                    PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(documentAsString, partitionKeyDefinition);
-                    String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
-                    String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
-                    documentsToImportByPartition.get(partitionRangeId).add(documentAsString);
-                });
-
-                return documentsToImportByPartition;
-            }
-        };
-
         return executeBulkImportInternal(documents,
-                bucketingFunction,
                 isUpsert);
     }
 
-    /**
-     * Executes a bulk import in the Azure Cosmos DB database service.
-     *
-     * <code>
-     * ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-     * RetryOptions retryOptions = new RetryOptions();
-     * // set to 0 to let bulk importer handles throttling
-     * retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
-     * connectionPolicy.setRetryOptions(retryOptions);
-     * connectionPolicy.setMaxPoolSize(200);
-     *
-     * DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, null);
-     *
-     * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycold");
-     * DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
-     *
-     * DocumentBulkImporter importer = DocumentBulkImporter.builder().from(client, collection).build();
-     *
-     * for(int i = 0; i < 10; i++) {
-     *   HashMap<String, Object> documentToPartitionKeyValue = documentSource.loadDocumentToPartitionKeyValueMap();
-     *
-     *   BulkImportResponse bulkImportResponse = importer.importAllWithPartitionKey(documentToPartitionKeyValue, false);
-     *
-     *   //validate that all documents inserted to ensure no failure.
-     *   // bulkImportResponse.getNumberOfDocumentsImported() == documentToPartitionKeyValue.size()
-     *   if (bulkImportResponse.getNumberOfDocumentsImported() < documentToPartitionKeyValue.size()) {
-     *          // validate why there were some failures
-     *          // in case if you decide to re-import these batch of documents (as some of them may already have inserted)
-     *          // you should import them with upsert enable option
-     *      for(Exception e: bulkImportResponse.getFailuresIfAny()) {
-     *          e.printStackTrace();
-     *      }
-     *      break;
-     *   }
-     * }
-     *
-     * importer.close();
-     * client.close();
-     *
-     * </code>
-     * @param documentPartitionKeyValueTuples list of {@link DocumentPKValuePair}
-     * @param isUpsert whether enable upsert (overwrite if it exists)
-     * @return an instance of {@link BulkImportResponse}
-     * @throws DocumentClientException if any failure happens
-     */
-    public BulkImportResponse importAllWithPartitionKey(HashMap<String, Object> documentPartitionKeyValueTuples, boolean isUpsert) throws DocumentClientException {
-
-        Func1<HashMap<String, Object>, ConcurrentHashMap<String, Set<String>>> bucketingFunction = new Func1<HashMap<String,Object>, ConcurrentHashMap<String, Set<String>>>() {
-
-            @Override
-            public ConcurrentHashMap<String, Set<String>> apply(HashMap<String, Object> input) {
-                logger.debug("Bucketing documents ...");
-
-                ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
-
-                for (String partitionKeyRangeId: partitionKeyRangeIds) {
-                    documentsToImportByPartition.put(partitionKeyRangeId,  ConcurrentHashMap.newKeySet());
-                }
-
-                input.entrySet().parallelStream().forEach(entry -> {
-                    PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.fromPartitionKeyvalue(entry.getValue());
-                    String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
-                    String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
-                    documentsToImportByPartition.get(partitionRangeId).add(entry.getKey());
-                });
-
-                return documentsToImportByPartition;
-            }
-        };
-
-        return executeBulkImportInternal(documentPartitionKeyValueTuples,
-                bucketingFunction,
-                isUpsert);
-    }
-
-    private <T> BulkImportResponse executeBulkImportInternal(T input,
-            Func1<T, ConcurrentHashMap<String, Set<String>>> bucketingFunction,
+    private BulkImportResponse executeBulkImportInternal(Collection<String> input,
             boolean isUpsert) throws DocumentClientException {
         Preconditions.checkNotNull(input, "document collection cannot be null");
         try {
             initializationFuture.get();
-            return executeBulkImportAsyncImpl(input, bucketingFunction, isUpsert).get();
+            return executeBulkImportAsyncImpl(input, isUpsert).get();
 
         } catch (ExecutionException e) {
             logger.debug("Failed to import documents", e);
@@ -490,8 +388,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         return documentSize;
     }
 
-    private <T> ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(T input,
-            Func1<T, ConcurrentHashMap<String, Set<String>>> bucketingFunction,
+    private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Collection<String> documents,
             boolean isUpsert) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
 
@@ -499,14 +396,25 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         logger.debug("Bucketing documents ...");
 
-        ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = bucketingFunction.apply(input);
 
-        logger.trace("Creating mini batches within each partition bucket");
+        logger.debug("Bucketing documents ...");
 
+        ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
         ConcurrentHashMap<String, List<List<String>>> miniBatchesToImportByPartition = new ConcurrentHashMap<String, List<List<String>>>();
-        for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
+
+        for (String partitionKeyRangeId: partitionKeyRangeIds) {
+            documentsToImportByPartition.put(partitionKeyRangeId,  ConcurrentHashMap.newKeySet(documents.size() / partitionKeyRangeIds.size()));
             miniBatchesToImportByPartition.put(partitionKeyRangeId, new ArrayList<List<String>>(1000));
         }
+
+        documents.parallelStream().forEach(documentAsString -> {
+            PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.extractPartitionKeyValue(documentAsString, partitionKeyDefinition);
+            String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
+            String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
+            documentsToImportByPartition.get(partitionRangeId).add(documentAsString);
+        });
+
+        logger.trace("Creating mini batches within each partition bucket");
 
         documentsToImportByPartition.entrySet().parallelStream().forEach(entry -> {
 

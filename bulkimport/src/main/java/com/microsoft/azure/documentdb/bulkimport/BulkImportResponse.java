@@ -56,17 +56,18 @@ public class BulkImportResponse {
 
     /**
      * Gets failure list if some documents failed to get inserted.
+     *
      * @return
      */
-    public List<Exception> getFailuresIfAny() {
+    public List<Exception> getErrors() {
         return Collections.unmodifiableList(failures);
     }
 
     /**
      * Gets number of documents successfully inserted.
-     * 
+     *
      * <p> If this number is less than actual batch size (meaning some documents failed to get inserted),
-     * use {@link #getFailuresIfAny()} to get the failure cause.
+     * use {@link #getErrors()} to get the failure cause.
      * @return the numberOfDocumentsImported
      */
     public int getNumberOfDocumentsImported() {
