@@ -91,7 +91,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         /**
          * use the given size to configure max mini batch size.
-         * 
+         *
          * If not specified will use the default.
          * @param size
          * @return {@link Builder}
@@ -103,7 +103,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         /**
          * Instantiates {@link DocumentBulkImporter} given the configured {@link Builder}.
-         * 
+         *
          * @return the new builder
          */
         public DocumentBulkImporter build() {
@@ -249,7 +249,7 @@ public class DocumentBulkImporter implements AutoCloseable {
     @Override
     public void close() {
         // disable submission of new tasks
-        listeningExecutorService.shutdown(); 
+        listeningExecutorService.shutdown();
         try {
             // wait for existing tasks to terminate
             if (!listeningExecutorService.awaitTermination(60, TimeUnit.SECONDS)) {
@@ -310,27 +310,31 @@ public class DocumentBulkImporter implements AutoCloseable {
      * RetryOptions retryOptions = new RetryOptions();
      * // set to 0 to let bulk importer handles throttling
      * retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
-     * connectionPolicy.setRetryOptions(retryOptions);        
+     * connectionPolicy.setRetryOptions(retryOptions);
      * connectionPolicy.setMaxPoolSize(200);
-     * 
+     *
      * DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, null);
      *
      * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
      * DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
      *
      * DocumentBulkImporter importer = DocumentBulkImporter.builder().from(client, collection).build();
-     * 
+     *
      * for(int i = 0; i < 10; i++) {
      *   List<String> documents = documentSource.getMoreDocuments();
      *
      *   BulkImportResponse bulkImportResponse = importer.importAll(documents, false);
-     *   
+     *
      *   //validate that all documents inserted to ensure no failure.
      *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
      *   if (bulkImportResponse.getNumberOfDocumentsImported() < documents.size()) {
      *      for(Exception e: bulkImportResponse.getFailuresIfAny()) {
+     *          // validate why there were some failures
+     *          // in case if you decide to re-import these batch of documents (as some of them may already have inserted)
+     *          // you should import them with upsert enable option
      *          e.printStackTrace();
      *      }
+     *      break;
      *   }
      * }
      *
@@ -349,7 +353,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             @Override
             public ConcurrentHashMap<String, Set<String>> apply(Collection<String> input) {
                 logger.debug("Bucketing documents ...");
-                
+
                 ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
 
                 for (String partitionKeyRangeId: partitionKeyRangeIds) {
@@ -362,12 +366,12 @@ public class DocumentBulkImporter implements AutoCloseable {
                     String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
                     documentsToImportByPartition.get(partitionRangeId).add(documentAsString);
                 });
-                
+
                 return documentsToImportByPartition;
             }
         };
 
-        return executeBulkImportInternal(documents, 
+        return executeBulkImportInternal(documents,
                 bucketingFunction,
                 isUpsert);
     }
@@ -380,33 +384,37 @@ public class DocumentBulkImporter implements AutoCloseable {
      * RetryOptions retryOptions = new RetryOptions();
      * // set to 0 to let bulk importer handles throttling
      * retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
-     * connectionPolicy.setRetryOptions(retryOptions);        
+     * connectionPolicy.setRetryOptions(retryOptions);
      * connectionPolicy.setMaxPoolSize(200);
-     * 
+     *
      * DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, null);
      *
      * String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycold");
      * DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
      *
      * DocumentBulkImporter importer = DocumentBulkImporter.builder().from(client, collection).build();
-     * 
-     * for(int i = 0; i < 10; i++) {
-     *   HashMap<String, Object> tuples = documentSource.loadDocumentToPartitionKeyValueMap();
      *
-     *   BulkImportResponse bulkImportResponse = importer.importAllWithPartitionKey(tuples, false);
-     *   
+     * for(int i = 0; i < 10; i++) {
+     *   HashMap<String, Object> documentToPartitionKeyValue = documentSource.loadDocumentToPartitionKeyValueMap();
+     *
+     *   BulkImportResponse bulkImportResponse = importer.importAllWithPartitionKey(documentToPartitionKeyValue, false);
+     *
      *   //validate that all documents inserted to ensure no failure.
-     *   // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
-     *   if (bulkImportResponse.getNumberOfDocumentsImported() < documents.size()) {
+     *   // bulkImportResponse.getNumberOfDocumentsImported() == documentToPartitionKeyValue.size()
+     *   if (bulkImportResponse.getNumberOfDocumentsImported() < documentToPartitionKeyValue.size()) {
+     *          // validate why there were some failures
+     *          // in case if you decide to re-import these batch of documents (as some of them may already have inserted)
+     *          // you should import them with upsert enable option
      *      for(Exception e: bulkImportResponse.getFailuresIfAny()) {
      *          e.printStackTrace();
      *      }
+     *      break;
      *   }
      * }
      *
      * importer.close();
      * client.close();
-     * 
+     *
      * </code>
      * @param documentPartitionKeyValueTuples list of {@link DocumentPKValuePair}
      * @param isUpsert whether enable upsert (overwrite if it exists)
@@ -420,7 +428,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             @Override
             public ConcurrentHashMap<String, Set<String>> apply(HashMap<String, Object> input) {
                 logger.debug("Bucketing documents ...");
-                
+
                 ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = new ConcurrentHashMap<String, Set<String>>();
 
                 for (String partitionKeyRangeId: partitionKeyRangeIds) {
@@ -433,17 +441,17 @@ public class DocumentBulkImporter implements AutoCloseable {
                     String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
                     documentsToImportByPartition.get(partitionRangeId).add(entry.getKey());
                 });
-                
+
                 return documentsToImportByPartition;
             }
         };
 
-        return executeBulkImportInternal(documentPartitionKeyValueTuples, 
-                bucketingFunction, 
+        return executeBulkImportInternal(documentPartitionKeyValueTuples,
+                bucketingFunction,
                 isUpsert);
     }
 
-    private <T> BulkImportResponse executeBulkImportInternal(T input, 
+    private <T> BulkImportResponse executeBulkImportInternal(T input,
             Func1<T, ConcurrentHashMap<String, Set<String>>> bucketingFunction,
             boolean isUpsert) throws DocumentClientException {
         Preconditions.checkNotNull(input, "document collection cannot be null");
@@ -462,7 +470,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         } catch(Exception e) {
             logger.error("Failed to import documents", e);
             throw toDocumentClientException(e);
-        } 
+        }
     }
 
     private DocumentClientException toDocumentClientException(Exception e) {
@@ -482,9 +490,9 @@ public class DocumentBulkImporter implements AutoCloseable {
         return documentSize;
     }
 
-    private <T> ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(T input, 
+    private <T> ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(T input,
             Func1<T, ConcurrentHashMap<String, Set<String>>> bucketingFunction,
-            boolean isUpsert) throws Exception {        
+            boolean isUpsert) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
 
         BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, isUpsert);
@@ -492,18 +500,14 @@ public class DocumentBulkImporter implements AutoCloseable {
         logger.debug("Bucketing documents ...");
 
         ConcurrentHashMap<String, Set<String>> documentsToImportByPartition = bucketingFunction.apply(input);
-        int estimateMiniBatchesToImportByPartitionSize = documentsToImportByPartition
-                .entrySet().stream()
-                .mapToInt(e -> e.getValue().size())
-                .sum() / partitionKeyRangeIds.size();
 
         logger.trace("Creating mini batches within each partition bucket");
 
         ConcurrentHashMap<String, List<List<String>>> miniBatchesToImportByPartition = new ConcurrentHashMap<String, List<List<String>>>();
         for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
-            miniBatchesToImportByPartition.put(partitionKeyRangeId, new ArrayList<List<String>>(estimateMiniBatchesToImportByPartitionSize));
+            miniBatchesToImportByPartition.put(partitionKeyRangeId, new ArrayList<List<String>>(1000));
         }
-        
+
         documentsToImportByPartition.entrySet().parallelStream().forEach(entry -> {
 
             String partitionRangeId = entry.getKey();
@@ -511,7 +515,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             Set<String> documentsToImportInPartition =  entry.getValue();
 
             Iterator<String> it = documentsToImportInPartition.iterator();
-            List<String> currentMiniBatch = new ArrayList<String>();
+            ArrayList<String> currentMiniBatch = new ArrayList<String>(500);
             int currentMiniBatchSize = 0;
 
             while (it.hasNext()) {
@@ -525,8 +529,9 @@ public class DocumentBulkImporter implements AutoCloseable {
                 } else {
                     // this batch has reached its max size
                     miniBatchesToImportByPartition.get(partitionRangeId).add(currentMiniBatch);
-                    currentMiniBatch = new ArrayList<String>();
-                    currentMiniBatchSize = 0;
+                    currentMiniBatch = new ArrayList<String>(500);
+                    currentMiniBatch.add(currentDocument);
+                    currentMiniBatchSize = currentDocumentSize;
                 }
             }
 
@@ -540,7 +545,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         Map<String, BatchInserter> batchInserters = new HashMap<String, BatchInserter>();
         Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
 
-        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");        
+        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");
         List<ListenableFuture<Void>> futures = new ArrayList<>();
 
         for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
@@ -553,15 +558,15 @@ public class DocumentBulkImporter implements AutoCloseable {
                     options);
             batchInserters.put(partitionKeyRangeId, batchInserter);
 
-            CongestionController cc = new CongestionController(listeningExecutorService, 
-                    collectionThroughput / partitionKeyRangeIds.size(), 
-                    partitionKeyRangeId, 
-                    batchInserter, 
+            CongestionController cc = new CongestionController(listeningExecutorService,
+                    collectionThroughput / partitionKeyRangeIds.size(),
+                    partitionKeyRangeId,
+                    batchInserter,
                     partitionKeyRangeIdToInferredDegreeOfParallelism.get(partitionKeyRangeId));
 
             congestionControllers.put(partitionKeyRangeId,cc);
 
-            // starting 
+            // starting
             futures.add(cc.executeAllAsync());
         }
 

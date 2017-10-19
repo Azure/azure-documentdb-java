@@ -75,7 +75,7 @@ class BatchInserter  {
      */
     private final String bulkImportSprocLink;
 
-    /** 
+    /**
      * Request options specifying the underlying partition key range id
      */
     private final RequestOptions requestOptions;

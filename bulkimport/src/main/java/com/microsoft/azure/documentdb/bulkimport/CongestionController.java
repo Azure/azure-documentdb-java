@@ -149,7 +149,7 @@ class CongestionController {
         this.throttleSemaphore = new Semaphore(this.degreeOfConcurrency);
         this.aggregatedInsertMetrics = new InsertMetrics();
         this.executor = executor;
-        this.partitionThroughput = partitionThroughput;        
+        this.partitionThroughput = partitionThroughput;
     }
 
     private void addFailure(Exception e) {
@@ -164,7 +164,7 @@ class CongestionController {
         synchronized (aggregateLock) {
             InsertMetrics old = this.aggregatedInsertMetrics;
             this.aggregatedInsertMetrics = metrics;
-            return old; 
+            return old;
         }
     }
 
@@ -176,7 +176,7 @@ class CongestionController {
                 while (isRunning()) {
                     try {
 
-                        logger.debug("pki {} goes to sleep for {} seconds. availabel semaphore permits {}, current degree of parallelism {}", 
+                        logger.debug("pki {} goes to sleep for {} seconds. availabel semaphore permits {}, current degree of parallelism {}",
                                 partitionKeyRangeId, samplePeriod.getSeconds(), throttleSemaphore.availablePermits(), degreeOfConcurrency);
                         Thread.sleep(samplePeriod.toMillis());
                         logger.debug("pki {} wakes up", partitionKeyRangeId);
@@ -184,7 +184,7 @@ class CongestionController {
                         InsertMetrics insertMetricsSample = atomicGetAndReplace(new InsertMetrics());
 
                         if (insertMetricsSample.numberOfThrottles > 0) {
-                            logger.debug("pki {} importing encountered {} throttling. current degree of parallelism {}, decreasing amount: {}", 
+                            logger.debug("pki {} importing encountered {} throttling. current degree of parallelism {}, decreasing amount: {}",
                                     partitionKeyRangeId, insertMetricsSample.numberOfThrottles, degreeOfConcurrency, degreeOfConcurrency / DIVISIVE_DECREASE_FACTOR);
 
                             // We got a throttle so we need to back off on the degree of concurrency.
@@ -317,6 +317,7 @@ class CongestionController {
                     logger.error("pki {} encountered failure {} releasing semaphore", partitionKeyRangeId, t);
                     // if a batch inserter encounters failure which cannot be retried then we have to stop.
                     setState(State.Failure);
+                    addFailure(ExceptionUtils.toException(t));
                     throttleSemaphore.release();
                 }
             };
@@ -338,7 +339,6 @@ class CongestionController {
             @Override
             public void onFailure(Throwable t) {
                 logger.error("pki {} importing failed", partitionKeyRangeId, t);
-                addFailure(ExceptionUtils.toException(t));
                 setState(State.Failure);
             }
         };

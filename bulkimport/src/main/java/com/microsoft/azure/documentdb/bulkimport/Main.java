@@ -23,6 +23,7 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.UUID;
@@ -60,9 +61,11 @@ public class Main {
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
             Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, collection);
-            
+
             // instantiates bulk importer
             try(DocumentBulkImporter bulkImporter = bulkImporterBuilder.build()) {
+
+                Stopwatch fromStartToEnd = Stopwatch.createStarted();
 
                 Stopwatch totalWatch = Stopwatch.createUnstarted();
 
@@ -75,8 +78,10 @@ public class Main {
                     BulkImportResponse bulkImportResponse;
                     if (cfg.isImportAllWithPartitionKey()) {
                         HashMap<String, Object> documentPartitionKeyValueTuples = DataMigrationDocumentSource.loadDocumentToPartitionKeyValueMap(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
-
-                        // NOTE: only sum the bulk import time, 
+                        if (documentPartitionKeyValueTuples.size() !=  cfg.getNumberOfDocumentsForEachCheckpoint()) {
+                            throw new RuntimeException("not enough documents generated");
+                        }
+                        // NOTE: only sum the bulk import time,
                         // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                         totalWatch.start();
                         bulkImportResponse = bulkImporter.importAllWithPartitionKey(documentPartitionKeyValueTuples, false);
@@ -85,7 +90,11 @@ public class Main {
                     } else {
                         Collection<String> documents = DataMigrationDocumentSource.loadDocuments(cfg.getNumberOfDocumentsForEachCheckpoint(), collection.getPartitionKey());
 
-                        // NOTE: only sum the bulk import time, 
+                        if (documents.size() !=  cfg.getNumberOfDocumentsForEachCheckpoint()) {
+                            throw new RuntimeException("not enough documents generated");
+                        }
+
+                        // NOTE: only sum the bulk import time,
                         // loading/generating documents is out of the scope of bulk importer and so has to be excluded
                         totalWatch.start();
                         bulkImportResponse = bulkImporter.importAll(documents, false);
@@ -99,12 +108,6 @@ public class Main {
                     totalTimeInMillis += bulkImportResponse.getTotalTimeTaken().toMillis();
                     totalRequestCharge += bulkImportResponse.getTotalRequestUnitsConsumed();
 
-                    // check the number of imported documents to ensure everything is successfully imported
-                    // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
-                    if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfDocumentsForEachCheckpoint()) {
-                        System.err.println("Some documents failed to get inserted in this checkpoint");
-                    }
-
                     // print stats
                     System.out.println("Number of documents inserted in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported());
                     System.out.println("Import time for this checkpoint in milli seconds " + bulkImportResponse.getTotalTimeTaken().toMillis());
@@ -113,11 +116,24 @@ public class Main {
                     System.out.println("Average RUs/second in this checkpoint: " + bulkImportResponse.getTotalRequestUnitsConsumed() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
                     System.out.println("Average #Inserts/second in this checkpoint: " + bulkImportResponse.getNumberOfDocumentsImported() / (0.001 * bulkImportResponse.getTotalTimeTaken().toMillis()));
                     System.out.println("##########################################################################################");
+
+                    // check the number of imported documents to ensure everything is successfully imported
+                    // bulkImportResponse.getNumberOfDocumentsImported() == documents.size()
+                    if (bulkImportResponse.getNumberOfDocumentsImported() != cfg.getNumberOfDocumentsForEachCheckpoint()) {
+                        System.err.println("Some documents failed to get inserted in this checkpoint. This checkpoint has to get retried with upsert enabled");
+                        System.err.println("Number of surfaced failures: " + bulkImportResponse.getFailuresIfAny().size());
+                        for(int j = 0; j < bulkImportResponse.getFailuresIfAny().size(); j++) {
+                            bulkImportResponse.getFailuresIfAny().get(j).printStackTrace();
+                        }
+                        break;
+                    }
                 }
+
+                fromStartToEnd.stop();
 
                 // print average stats
                 System.out.println("##########################################################################################");
-
+                System.out.println("Total import time including data generation: " + fromStartToEnd.elapsed().toMillis());
                 System.out.println("Total import time in milli seconds measured by stopWatch: " + totalWatch.elapsed().toMillis());
                 System.out.println("Total import time in milli seconds measured by api : " + totalTimeInMillis);
                 System.out.println("Total Number of documents inserted " + totalNumberOfDocumentsImported);
@@ -131,9 +147,29 @@ public class Main {
 
     static class DataMigrationDocumentSource {
 
+        private static String generateDocument(String partitionKeyName, String partitionKeyValue) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"id\":\"").append(UUID.randomUUID().toString()).append("abc\"");
+
+            String data = UUID.randomUUID().toString();
+            data = data + data + "0123456789012";
+
+            for(int j = 0; j < 10;j++) {
+                sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
+            }
+
+            // partition key
+            sb.append(",\"").append(partitionKeyName).append("\":\"").append(partitionKeyValue).append("\"");
+
+            sb.append("}");
+
+            return sb.toString();
+        }
+
         /**
          * Creates a collection of documents.
-         * 
+         *
          * @param numberOfDocuments
          * @param partitionKeyDefinition
          * @return collection of documents.
@@ -144,39 +180,27 @@ public class Main {
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
 
             Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
-            Preconditions.checkArgument(partitionKeyPath.size() == 1, 
+            Preconditions.checkArgument(partitionKeyPath.size() == 1,
                     "the command line benchmark tool only support simple partition key path");
 
             String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
 
             // the size of each document is approximately 1KB
 
+            ArrayList<String> allDocs = new ArrayList<>(numberOfDocuments);
+
             // return documents to be bulk imported
             // if you are reading documents from disk you can change this to read documents from disk
             return IntStream.range(0, numberOfDocuments).mapToObj(i ->
             {
-
-                StringBuilder sb = new StringBuilder();
-                sb.append("{");
-                sb.append("\"id\":\"").append(UUID.randomUUID().toString()).append("abc\"");
-                sb.append(",\"").append(partitionKeyName).append("\":\"").append(UUID.randomUUID().toString()).append("\"");
-
-                String data = UUID.randomUUID().toString();
-                data = data + data + "0123456789012";
-
-                for(int j = 0; j < 10;j++) {
-                    sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
-                }
-
-                sb.append("}");
-
-                return sb.toString();
-            }).collect(Collectors.toList());
+                String partitionKeyValue = UUID.randomUUID().toString();
+                return generateDocument(partitionKeyName, partitionKeyValue);
+            }).collect(Collectors.toCollection(() -> allDocs));
         }
 
         /**
-         * Creates a collection of documents.
-         * 
+         * Creates a map of documents to partition key value
+         *
          * @param numberOfDocuments
          * @param partitionKeyDefinition
          * @return collection of documents
@@ -187,38 +211,24 @@ public class Main {
                     partitionKeyDefinition.getPaths().size() > 0, "there is no partition key definition");
 
             Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
-            Preconditions.checkArgument(partitionKeyPath.size() == 1, 
+            Preconditions.checkArgument(partitionKeyPath.size() == 1,
                     "the command line benchmark tool only support simple partition key path");
 
             String partitionKeyName = partitionKeyPath.iterator().next().replaceFirst("^/", "");
 
             HashMap<String, Object> documentsToPartitionKeyValue = new HashMap<String, Object>(numberOfDocuments);
-            
+
             // the size of each document is approximately 1KB
 
             // return collection of <document, partitionKeyValue> to be bulk imported
             // if you are reading documents from disk you can change this to read documents from disk
             IntStream.range(0, numberOfDocuments).mapToObj(i ->
             {
-                StringBuilder sb = new StringBuilder();   
                 String partitionKeyValue = UUID.randomUUID().toString();
-                sb.append("{");
-                sb.append("\"id\":\"").append(UUID.randomUUID().toString()).append("abc\"");
-                sb.append(",\"").append(partitionKeyName).append("\":\"").append(partitionKeyValue).append("\"");
-
-                String data = UUID.randomUUID().toString();
-                data = data + data + "0123456789012";
-
-                for(int j = 0; j < 10;j++) {
-                    sb.append(",").append("\"f").append(j).append("\":\"").append(data).append("\"");
-                }
-
-                sb.append("}");
-                
-                return new AbstractMap.SimpleEntry<String, Object>(sb.toString(), partitionKeyValue);
+                String doc = generateDocument(partitionKeyName, partitionKeyValue);
+                return new AbstractMap.SimpleEntry<String, Object>(doc, partitionKeyValue);
 
             }).forEach(entry -> documentsToPartitionKeyValue.put(entry.getKey(), entry.getValue()));
-            
             return documentsToPartitionKeyValue;
         }
     }
