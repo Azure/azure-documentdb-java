@@ -47,7 +47,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import com.google.common.collect.Iterators;
 import com.google.common.util.concurrent.AsyncCallable;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.Futures.FutureCombiner;
@@ -508,10 +507,6 @@ public class DocumentBulkImporter implements AutoCloseable {
     }
 
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {
-        Iterator<PartitionKeyRange> rangeIterator = client.readPartitionKeyRanges(this.collection, null).getQueryIterator();
-        List<PartitionKeyRange> partitionKeyRanges = new ArrayList<>();
-        Iterators.addAll(partitionKeyRanges, rangeIterator);
-
         List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
         for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable()) {
             ranges.add(new ImmutablePair<>(range, true));
