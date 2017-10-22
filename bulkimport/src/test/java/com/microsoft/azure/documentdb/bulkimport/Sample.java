@@ -40,14 +40,14 @@ public class Sample {
     public static final String HOST = "[YOUR-ENDPOINT]";
 
     public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
-        
+
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         RetryOptions retryOptions = new RetryOptions();
         // set to 0 to let bulk importer handles throttling
         retryOptions.setMaxRetryAttemptsOnThrottledRequests(0);
         connectionPolicy.setRetryOptions(retryOptions);        
         connectionPolicy.setMaxPoolSize(200);
-        
+
         try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session)) {
 
             String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
@@ -59,7 +59,7 @@ public class Sample {
             try(DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
                 //NOTE: for getting higher throughput please
-                
+
                 // 1)  Set JVM heap size to a large enough number to avoid any memory issue in handling large number of documents.  
                 //     Suggested heap size: max(3GB, 3 * sizeof(all documents passed to bulk import in one batch))
                 // 2)  there is a pre-processing and warm up time and due that,
@@ -67,7 +67,7 @@ public class Sample {
                 //     So if you want to import 10,000,000 documents, 
                 //     running bulk import 10 times on 10 bulk of documents each of size 1,000,000 is more preferable
                 //     than running bulk import 100 times on 100 bulk of documents each of size 100,000 documents. 
-   
+
                 for(int i = 0; i< 10; i++) {
                     Collection<String> docs = DataMigrationDocumentSource.loadDocuments(1000000, collection.getPartitionKey());
                     BulkImportResponse bulkImportResponse = importer.importAll(docs, false);
@@ -79,7 +79,12 @@ public class Sample {
 
                     // validate that all documents in this checkpoint inserted
                     if (bulkImportResponse.getNumberOfDocumentsImported() < docs.size()) {
-                        System.err.println("some documents failed to imported");
+                        System.err.println("Some documents failed to get inserted in this checkpoint."
+                                + " This checkpoint has to get retried with upsert enabled");
+                        for(int j = 0; j < bulkImportResponse.getErrors().size(); j++) {
+                            bulkImportResponse.getErrors().get(j).printStackTrace();
+                        }
+                        break;
                     }
                 }
             }
