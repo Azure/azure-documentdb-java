@@ -57,7 +57,7 @@ public class BulkImportResponse {
     /**
      * Gets failure list if some documents failed to get inserted.
      *
-     * @return
+     * @return list of errors or empty list if no error.
      */
     public List<Exception> getErrors() {
         return Collections.unmodifiableList(failures);

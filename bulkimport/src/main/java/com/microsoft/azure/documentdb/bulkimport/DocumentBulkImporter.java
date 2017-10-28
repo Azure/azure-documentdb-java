@@ -77,8 +77,8 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         /**
          * Use the instance of {@link DocumentClient} to bulk import to the given instance of {@link DocumentCollection}
-         * @param client
-         * @param collection
+         * @param client an instance of {@link DocumentClient} to use.
+         * @param collection specifies the target {@link DocumentCollection}.
          * @return {@link Builder}
          */
         public Builder from(DocumentClient client, DocumentCollection collection) {
@@ -91,7 +91,7 @@ public class DocumentBulkImporter implements AutoCloseable {
          * use the given size to configure max mini batch size.
          *
          * If not specified will use the default.
-         * @param size
+         * @param size specifies the size of mini batch.
          * @return {@link Builder}
          */
         public Builder withMaxMiniBatchSize(int size) {
@@ -113,7 +113,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 
     /**
      * Creates a new {@link DocumentBulkImporter.Builder} instance
-     * @return
+     * @return an instance of {@link DocumentBulkImporter.Builder}
      */
     public static DocumentBulkImporter.Builder builder() {
         return new DocumentBulkImporter.Builder();
@@ -302,8 +302,9 @@ public class DocumentBulkImporter implements AutoCloseable {
 
     /**
      * Executes a bulk import in the Azure Cosmos DB database service.
-     *
-     * <code>
+     * <blockquote>
+     * <pre>
+     * {@code
      * ConnectionPolicy connectionPolicy = new ConnectionPolicy();
      * RetryOptions retryOptions = new RetryOptions();
      * // set to 0 to let bulk importer handles throttling
@@ -328,7 +329,8 @@ public class DocumentBulkImporter implements AutoCloseable {
      *   if (bulkImportResponse.getNumberOfDocumentsImported() < documents.size()) {
      *      for(Exception e: bulkImportResponse.getFailuresIfAny()) {
      *          // validate why there were some failures
-     *          // in case if you decide to re-import these batch of documents (as some of them may already have inserted)
+     *          // in case if you decide to re-import these batch of documents 
+     *          // (as some of them may already have inserted)
      *          // you should import them with upsert enable option
      *          e.printStackTrace();
      *      }
@@ -338,7 +340,10 @@ public class DocumentBulkImporter implements AutoCloseable {
      *
      * importer.close();
      * client.close();
-     * </code>
+     * }
+     * </pre>
+     * </blockquote>
+     * 
      * @param documents to insert
      * @param isUpsert whether enable upsert (overwrite if it exists)
      * @return an instance of {@link BulkImportResponse}
