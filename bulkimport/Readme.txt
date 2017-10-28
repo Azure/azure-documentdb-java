@@ -15,7 +15,7 @@ NOTE: for getting higher throughput:
 2) there is a preprocessing and warm up time; due that you will get higher throughput for bulks with larger number of documents. So, if you want to import 10,000,000 documents, running bulk import 10 times on 10 bulk of documents each of size 1,000,000 is more preferable than running bulk import 100 times on 100 bulk of documents each of size 100,000 documents. 
 
 an example for how to use the bulk import:
-https://github.com/Azure/azure-documentdb-java/blob/moderakh/bulkimport-implementation/bulkimport/src/test/java/com/microsoft/azure/documentdb/bulkimport/Sample.java
+https://github.com/Azure/azure-documentdb-java/blob/master/bulkimport/src/test/java/com/microsoft/azure/documentdb/bulkimport/Sample.java
 
 sample invocation of command-line tool for benchmarking bulk-import (doing 5 iterations of bulk import and in each iteration it inserts 1,000,000 documents) 
  
