@@ -1,3 +1,11 @@
+Document Bulk Import Library can be used to bulk import large number of documents through DocumentDB API of Azure Cosmos DB Service. 
+
+How to Build bulk import library:
+ mvn clean package
+
+############################################################
+############################################################
+
 The following numbers are measured when inserting 1,000,000 Documents each of size 1KB against a collection with 1000K throughput with 100 partitions. Bulk import tool ran in Gateway mode on an Ubuntu Linux with 16 CPU cores in azure portal.
 
 Number of documents inserted in this checkpoint: 1,000,000
