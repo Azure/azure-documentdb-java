@@ -1,6 +1,15 @@
 Document Bulk Import Library can be used to bulk import large number of documents through DocumentDB API of Azure Cosmos DB Service. 
 
-How to Build bulk import library:
+How to use:
+add the following dependency to your maven pom file:
+<dependency>
+  <groupId>com.microsoft.azure</groupId>
+  <artifactId>documentdb-bulkimport</artifactId>
+  <version>1.0.0</version>
+</dependency>
+
+
+How to Build bulk import library from source:
  mvn clean package
 
 ############################################################
