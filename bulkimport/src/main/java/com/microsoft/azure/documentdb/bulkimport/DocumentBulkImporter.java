@@ -289,12 +289,12 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
 
-        Iterator<Offer> offerIterator = offers.getQueryIterator();
-        if (!offerIterator.hasNext()) {
+        List<Offer> offerAsList = offers.getQueryIterable().toList();
+        if (offerAsList.isEmpty()) {
             throw new IllegalStateException("Cannot find Collection's corresponding offer");
         }
 
-        Offer offer = offerIterator.next();
+        Offer offer = offerAsList.get(0);
         this.collectionThroughput = offer.getContent().getInt("offerThroughput");
 
         logger.debug("Initialization completed");
@@ -513,7 +513,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {
         List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
-        for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable()) {
+        for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable().toList()) {
             ranges.add(new ImmutablePair<>(range, true));
         }
 
