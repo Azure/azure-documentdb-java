@@ -43,11 +43,14 @@ class ExceptionUtils {
                 && HttpConstants.SubStatusCodes.SPLITTING == e.getSubStatusCode();
     }
     
-    public static DocumentClientException extractDeepestDocumentClientException(Exception e) {
+    public static DocumentClientException getThrottelingException(Exception e) {
         DocumentClientException dce = null;
         while(e != null) {
             if (e instanceof DocumentClientException) {
                 dce = (DocumentClientException) e;
+                if (isThrottled(dce)) {
+                    return dce;
+                }
             }
             
             if (e.getCause() instanceof Exception) {
@@ -56,7 +59,7 @@ class ExceptionUtils {
                 break;
             }
         }
-        return dce;
+        return null;
     }
     
     public static RuntimeException toRuntimeException(Exception e) {

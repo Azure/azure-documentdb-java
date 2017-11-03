@@ -43,6 +43,8 @@ import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.internal.directconnectivity.HttpClientFactory;
@@ -51,8 +53,8 @@ public class EndToEndTestBase {
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
     
-    private String databaseId = "bulkImportTestDatabase";
-    private String collectionId;
+    protected String databaseId = "bulkImportTestDatabase";
+    protected String collectionId;
     protected String collectionLink;
     protected DocumentCollection pCollection;
 
@@ -104,7 +106,7 @@ public class EndToEndTestBase {
         logger.debug("setting up ...");
         cleanUpDatabase(client);
 
-        Thread.sleep(1000);
+        Thread.sleep(5000);
         Database d = new Database();
         d.setId(databaseId);
         Database database = client.createDatabase(d, null).getResource();
@@ -123,6 +125,18 @@ public class EndToEndTestBase {
         options.setOfferThroughput(10100);
         pCollection = client.createCollection(database.getSelfLink(), pCollection, options).getResource();
         logger.debug("setting up done.");
+    }
+    
+    protected static int getOfferThroughput(DocumentClient client, DocumentCollection collection) {
+        FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
+
+        List<Offer> offerAsList = offers.getQueryIterable().toList();
+        if (offerAsList.isEmpty()) {
+            throw new IllegalStateException("Cannot find Collection's corresponding offer");
+        }
+
+        Offer offer = offerAsList.get(0);
+        return offer.getContent().getInt("offerThroughput");
     }
 
 }

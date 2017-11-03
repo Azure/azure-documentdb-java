@@ -22,7 +22,6 @@
  */
 package com.microsoft.azure.documentdb.bulkimport;
 
-import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.extractDeepestDocumentClientException;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -32,11 +31,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -53,14 +50,13 @@ import com.google.common.util.concurrent.Futures.FutureCombiner;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
-import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.Offer;
+import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
+import com.microsoft.azure.documentdb.RetryOptions;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.InMemoryCollectionRoutingMap;
@@ -72,18 +68,44 @@ public class DocumentBulkImporter implements AutoCloseable {
     public static class Builder {
 
         private DocumentClient client;
-        private DocumentCollection collection;
-        private int miniBatchSize = (int)Math.floor(MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE * FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED);
+        private String collectionLink;
+        private int maxMiniBatchSize = (int) Math.floor(MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE * FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED);
+        private final static int DEFAULT_RETRY_ATTEMPT_ON_THROTTLING_FOR_INIT = 200;
+        private final static int DEFAULT_WAIT_TIME_ON_THROTTLING_FOR_INIT_IN_SECONDS = 60;
+
+        private PartitionKeyDefinition partitionKeyDef;
+        private int offerThroughput;
+
+        private static RetryOptions DEFAULT_INIT_RETRY_OPTIONS;
+
+        static {
+            DEFAULT_INIT_RETRY_OPTIONS = new RetryOptions();
+            DEFAULT_INIT_RETRY_OPTIONS.setMaxRetryAttemptsOnThrottledRequests(DEFAULT_RETRY_ATTEMPT_ON_THROTTLING_FOR_INIT);
+            DEFAULT_INIT_RETRY_OPTIONS.setMaxRetryWaitTimeInSeconds(DEFAULT_WAIT_TIME_ON_THROTTLING_FOR_INIT_IN_SECONDS);
+        }
+
+        private RetryOptions retryOptions = DEFAULT_INIT_RETRY_OPTIONS; 
 
         /**
          * Use the instance of {@link DocumentClient} to bulk import to the given instance of {@link DocumentCollection}
-         * @param client an instance of {@link DocumentClient} to use.
-         * @param collection specifies the target {@link DocumentCollection}.
-         * @return {@link Builder}
+         * @param client an instance of {@link DocumentClient}
+         * @param partitionKeyDef specifies the {@link PartitionKeyDefinition} of the collection
+         * @param databaseName name of the database
+         * @param collectionName name of the collection
+         * @param offerThroughput specifies the collection throughput
+         * @return an instance of {@link Builder}
          */
-        public Builder from(DocumentClient client, DocumentCollection collection) {
+        public Builder from(DocumentClient client,
+                String databaseName, 
+                String collectionName,
+                PartitionKeyDefinition partitionKeyDef,
+                int offerThroughput) {
+
+            // TODO: validate the retry options for the client
             this.client = client;
-            this.collection = collection;
+            this.collectionLink = String.format("/dbs/%s/colls/%s", databaseName, collectionName);
+            this.partitionKeyDef = partitionKeyDef;
+            this.offerThroughput = offerThroughput;
             return this;
         }
 
@@ -95,7 +117,21 @@ public class DocumentBulkImporter implements AutoCloseable {
          * @return {@link Builder}
          */
         public Builder withMaxMiniBatchSize(int size) {
-            this.miniBatchSize = size;
+            Preconditions.checkArgument(size > 0, "maxMiniBatchSize cannot be negative");
+            Preconditions.checkArgument(size <= MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE, "maxMiniBatchSize cannot be negative");
+
+            this.maxMiniBatchSize = size;
+            return this;
+        }
+
+        /**
+         * use the given retry option for initialization 
+         * 
+         * @param options an instance of {@link RetryOptions}
+         * @return {@link Builder}
+         */
+        public Builder withInitializationRetryOptions(RetryOptions options) {
+            this.retryOptions = options;
             return this;
         }
 
@@ -103,9 +139,21 @@ public class DocumentBulkImporter implements AutoCloseable {
          * Instantiates {@link DocumentBulkImporter} given the configured {@link Builder}.
          *
          * @return the new builder
+         * @throws Exception if there is any failure
          */
-        public DocumentBulkImporter build() {
-            return new DocumentBulkImporter(client, collection, miniBatchSize);
+        public DocumentBulkImporter build() throws Exception {
+            DocumentBulkImporter importer = new DocumentBulkImporter(client, collectionLink, partitionKeyDef, offerThroughput);
+            try {
+                importer.setInitializationRetryOptions(retryOptions);
+                importer.setMaxMiniBatchSize(maxMiniBatchSize);
+
+                importer.safeInit();
+
+            } catch (Exception e) {
+                importer.close();
+                throw e;
+            }
+            return importer;
         }
 
         private Builder() {}
@@ -132,7 +180,12 @@ public class DocumentBulkImporter implements AutoCloseable {
     /**
      * The fraction of maximum sproc payload size upto which documents allowed to be fit in a mini-batch.
      */
-    private final static double FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED = 0.5;
+    private final static double FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED = 0.20;
+
+    /**
+     * Initialization sleep time on 
+     */
+    private final static int INITIALIZATION_SLEEP_TIME_ON_THROTTLING = 500;
 
     /**
      * Logger
@@ -157,7 +210,7 @@ public class DocumentBulkImporter implements AutoCloseable {
     /**
      * The document collection to which documents are to be bulk imported.
      */
-    private final DocumentCollection collection;
+    private final String collectionLink;
 
     /**
      * Partition Key Definition of the underlying collection.
@@ -180,11 +233,6 @@ public class DocumentBulkImporter implements AutoCloseable {
     private String bulkImportStoredProcLink;
 
     /**
-     * Initialization Future
-     */
-    private final Future<Void> initializationFuture;
-
-    /**
      * Collection offer throughput
      */
     private int collectionThroughput;
@@ -194,50 +242,62 @@ public class DocumentBulkImporter implements AutoCloseable {
      */
     private int maxMiniBatchSize;
 
+    private RetryOptions retryOptions;
+
+    private void setMaxMiniBatchSize(int size) {
+        this.maxMiniBatchSize = size;
+    }
+
+    private void setInitializationRetryOptions(RetryOptions options) {
+        this.retryOptions = options;
+    }
+
     /**
      * Initializes a new instance of {@link DocumentBulkImporter}
      *
      * @param client {@link DocumentClient} instance to use
-     * @param collection inserts documents to {@link DocumentCollection}
+     * @param collectionLink inserts documents to the specified collection
      * @param maxMiniBatchSize
      * @throws DocumentClientException if any failure
      */
-    private DocumentBulkImporter(DocumentClient client, DocumentCollection collection, int maxMiniBatchSize) {
+    private DocumentBulkImporter(DocumentClient client, 
+            String collectionLink,
+            PartitionKeyDefinition partitionKeyDefinition,
+            int collectionOfferThroughput) {
         Preconditions.checkNotNull(client, "client cannot be null");
-        Preconditions.checkNotNull(collection, "collection cannot be null");
-        Preconditions.checkArgument(maxMiniBatchSize > 0, "maxMiniBatchSize cannot be negative");
+        Preconditions.checkNotNull(partitionKeyDefinition, "partitionKeyDefinition cannot be null");
+        Preconditions.checkNotNull(collectionLink, "collectionLink cannot be null");
+        Preconditions.checkArgument(collectionOfferThroughput > 0, "collection throughput is less than 10,000");
 
         this.client = client;
-        this.collection = collection;
-        this.maxMiniBatchSize = maxMiniBatchSize;
-
-        this.partitionKeyDefinition = collection.getPartitionKey();
-
+        this.collectionLink = collectionLink;
+        this.collectionThroughput =  collectionOfferThroughput;
+        this.partitionKeyDefinition = partitionKeyDefinition;
         this.listeningExecutorService = MoreExecutors.listeningDecorator(Executors.newCachedThreadPool());
+    }
 
-        this.initializationFuture = this.listeningExecutorService.submit(new Callable<Void>() {
-
-            @Override
-            public Void call() throws Exception {
-                int count = 0;
-                while(true) {
-                    try {
-                        initialize();
-                        break;
-                    } catch (Exception e) {
-                        count++;
-                        DocumentClientException dce = extractDeepestDocumentClientException(e);
-                        if (count < 3 && dce != null && dce.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS ) {
-                            Thread.sleep(count * dce.getRetryAfterInMilliseconds());
-                            continue;
-                        } else {
-                            throw e;
-                        }
-                    }
+    private void safeInit() throws Exception {
+        int count = 0;
+        long startTime = System.currentTimeMillis();
+        while(true) {
+            try {
+                initialize();
+                break;
+            } catch (Exception e) {
+                count++;
+                DocumentClientException dce = ExceptionUtils.getThrottelingException(e);
+                long now = System.currentTimeMillis();
+                if (count < retryOptions.getMaxRetryAttemptsOnThrottledRequests() 
+                        && now - startTime < (retryOptions.getMaxRetryWaitTimeInSeconds() * 1000)
+                        && dce != null
+                        && dce.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS ) {
+                    Thread.sleep(count * dce.getRetryAfterInMilliseconds() + INITIALIZATION_SLEEP_TIME_ON_THROTTLING);
+                    continue;
+                } else {
+                    throw e;
                 }
-                return null;
             }
-        });
+        }
     }
 
     /**
@@ -270,10 +330,8 @@ public class DocumentBulkImporter implements AutoCloseable {
      */
     private void initialize() throws DocumentClientException {
         logger.debug("Initializing ...");
-        String databaseId = collection.getSelfLink().split("/")[1];
-        Database d = client.readDatabase(String.format("/dbs/%s", databaseId), null).getResource();
 
-        this.bulkImportStoredProcLink = String.format("/dbs/%s/colls/%s/sprocs/%s", d.getId(), collection.getId(), BULK_IMPORT_STORED_PROCECURE_NAME);
+        this.bulkImportStoredProcLink = String.format("%s/sprocs/%s", collectionLink, BULK_IMPORT_STORED_PROCECURE_NAME);
 
         logger.trace("Fetching partition map of collection");
         Range<String> fullRange = new Range<String>(
@@ -286,16 +344,6 @@ public class DocumentBulkImporter implements AutoCloseable {
         Collection<PartitionKeyRange> partitionKeyRanges = this.collectionRoutingMap.getOverlappingRanges(fullRange);
 
         this.partitionKeyRangeIds = partitionKeyRanges.stream().map(partitionKeyRange -> partitionKeyRange.getId()).collect(Collectors.toList());
-
-        FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
-
-        List<Offer> offerAsList = offers.getQueryIterable().toList();
-        if (offerAsList.isEmpty()) {
-            throw new IllegalStateException("Cannot find Collection's corresponding offer");
-        }
-
-        Offer offer = offerAsList.get(0);
-        this.collectionThroughput = offer.getContent().getInt("offerThroughput");
 
         logger.debug("Initialization completed");
     }
@@ -358,7 +406,6 @@ public class DocumentBulkImporter implements AutoCloseable {
             boolean isUpsert) throws DocumentClientException {
         Preconditions.checkNotNull(input, "document collection cannot be null");
         try {
-            initializationFuture.get();
             return executeBulkImportAsyncImpl(input, isUpsert).get();
 
         } catch (ExecutionException e) {
@@ -387,7 +434,7 @@ public class DocumentBulkImporter implements AutoCloseable {
         int documentSize = document.getBytes(Charset.forName("UTF-8")).length;
         if (documentSize > maxMiniBatchSize) {
             logger.error("Document size {} larger than script payload limit. {}", documentSize, maxMiniBatchSize);
-            throw new UnsupportedOperationException ("Cannot import a document whose size is larger than script payload limit.");
+            throw new UnsupportedOperationException("Cannot import a document whose size is larger than script payload limit.");
         }
         return documentSize;
     }
@@ -397,9 +444,6 @@ public class DocumentBulkImporter implements AutoCloseable {
         Stopwatch watch = Stopwatch.createStarted();
 
         BulkImportStoredProcedureOptions options = new BulkImportStoredProcedureOptions(true, true, null, false, isUpsert);
-
-        logger.debug("Bucketing documents ...");
-
 
         logger.debug("Bucketing documents ...");
 
@@ -513,7 +557,8 @@ public class DocumentBulkImporter implements AutoCloseable {
 
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {
         List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
-        for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collection, null).getQueryIterable().toList()) {
+
+        for (PartitionKeyRange range : client.readPartitionKeyRanges(this.collectionLink, (FeedOptions) null).getQueryIterable().toList()) {
             ranges.add(new ImmutablePair<>(range, true));
         }
 

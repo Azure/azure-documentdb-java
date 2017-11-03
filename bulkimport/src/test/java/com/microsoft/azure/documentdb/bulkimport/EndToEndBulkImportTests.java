@@ -65,7 +65,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
     @Test
     public void bulkImport() throws Exception {
-        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().
+                from(client, databaseId, collectionId, this.pCollection.getPartitionKey(),
+                        getOfferThroughput(client, pCollection));
 
         try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
@@ -84,7 +86,9 @@ public class EndToEndBulkImportTests extends EndToEndTestBase {
 
     @Test
     public void bulkImportAlreadyExists() throws Exception {
-        Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, this.pCollection);
+        Builder bulkImporterBuilder = DocumentBulkImporter.builder().
+                from(client, databaseId, collectionId, this.pCollection.getPartitionKey(),
+                        getOfferThroughput(client, pCollection));
 
         try (DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 

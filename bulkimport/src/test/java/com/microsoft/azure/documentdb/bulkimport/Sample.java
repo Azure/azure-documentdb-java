@@ -23,13 +23,14 @@
 package com.microsoft.azure.documentdb.bulkimport;
 
 import java.util.Collection;
-import java.util.concurrent.ExecutionException;
+import java.util.List;
 
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.ConsistencyLevel;
 import com.microsoft.azure.documentdb.DocumentClient;
-import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.RetryOptions;
 import com.microsoft.azure.documentdb.bulkimport.DocumentBulkImporter.Builder;
 import com.microsoft.azure.documentdb.bulkimport.Main.DataMigrationDocumentSource;
@@ -39,7 +40,7 @@ public class Sample {
     public static final String MASTER_KEY = "[YOUR-MASTERKEY]";
     public static final String HOST = "[YOUR-ENDPOINT]";
 
-    public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
+    public static void main(String[] args) throws Exception {
 
         ConnectionPolicy connectionPolicy = new ConnectionPolicy();
         RetryOptions retryOptions = new RetryOptions();
@@ -48,13 +49,19 @@ public class Sample {
         connectionPolicy.setRetryOptions(retryOptions);        
         connectionPolicy.setMaxPoolSize(200);
 
-        try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, connectionPolicy, ConsistencyLevel.Session)) {
+        try(DocumentClient client = new DocumentClient(HOST, MASTER_KEY, 
+                connectionPolicy, ConsistencyLevel.Session)) {
 
             String collectionLink = String.format("/dbs/%s/colls/%s", "mydb", "mycol");
             // this assumes database and collection already exists
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
-
-            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, collection);
+            int collectionOfferThroughput = getOfferThroughput(client, collection);
+            
+            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(
+                    client, 
+                    "mydb", "mycol",
+                    collection.getPartitionKey(),
+                    collectionOfferThroughput);
 
             try(DocumentBulkImporter importer = bulkImporterBuilder.build()) {
 
@@ -90,5 +97,17 @@ public class Sample {
             }
         }
 
+    }
+
+    private static int getOfferThroughput(DocumentClient client, DocumentCollection collection) {
+        FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
+
+        List<Offer> offerAsList = offers.getQueryIterable().toList();
+        if (offerAsList.isEmpty()) {
+            throw new IllegalStateException("Cannot find Collection's corresponding offer");
+        }
+
+        Offer offer = offerAsList.get(0);
+        return offer.getContent().getInt("offerThroughput");
     }
 }

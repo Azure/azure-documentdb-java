@@ -26,8 +26,8 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -41,6 +41,8 @@ import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
+import com.microsoft.azure.documentdb.FeedResponse;
+import com.microsoft.azure.documentdb.Offer;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.RetryOptions;
 import com.microsoft.azure.documentdb.bulkimport.DocumentBulkImporter.Builder;
@@ -49,21 +51,45 @@ public class Main {
 
     public static final Logger LOGGER  = LoggerFactory.getLogger(Main.class);
 
-    public static void main(String[] args) throws DocumentClientException, InterruptedException, ExecutionException {
+    private static int getOfferThroughput(DocumentClient client, DocumentCollection collection) {
+        FeedResponse<Offer> offers = client.queryOffers(String.format("SELECT * FROM c where c.offerResourceId = '%s'", collection.getResourceId()), null);
+
+        List<Offer> offerAsList = offers.getQueryIterable().toList();
+        if (offerAsList.isEmpty()) {
+            throw new IllegalStateException("Cannot find Collection's corresponding offer");
+        }
+
+        Offer offer = offerAsList.get(0);
+        return offer.getContent().getInt("offerThroughput");
+    }
+    
+    public static void main(String[] args) throws Exception {
 
         CmdLineConfiguration cfg = parseCommandLineArgs(args);
 
         try(DocumentClient client = documentClientFrom(cfg)) {
+
+            // set retry options high for initialization
+            client.getConnectionPolicy().getRetryOptions().setMaxRetryWaitTimeInSeconds(120);
+            client.getConnectionPolicy().getRetryOptions().setMaxRetryAttemptsOnThrottledRequests(100);
 
             String collectionLink = String.format("/dbs/%s/colls/%s", cfg.getDatabaseId(), cfg.getCollectionId());
             // this assumes database and collection already exists
             // also it is a good idea to set your connection pool size to be equal to the number of partitions serving your collection.
             DocumentCollection collection = client.readCollection(collectionLink, null).getResource();
 
-            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, collection);
+            int offerThroughput = getOfferThroughput(client, collection);
+            
+            Builder bulkImporterBuilder = DocumentBulkImporter.builder().from(client, 
+                    cfg.getDatabaseId(), cfg.getCollectionId(), collection.getPartitionKey(),
+                    offerThroughput);
 
             // instantiates bulk importer
             try(DocumentBulkImporter bulkImporter = bulkImporterBuilder.build()) {
+                
+                // then set retries to 0 to pass control to bulk importer
+                client.getConnectionPolicy().getRetryOptions().setMaxRetryWaitTimeInSeconds(0);
+                client.getConnectionPolicy().getRetryOptions().setMaxRetryAttemptsOnThrottledRequests(0);
 
                 Stopwatch fromStartToEnd = Stopwatch.createStarted();
 
