@@ -5,7 +5,7 @@ add the following dependency to your maven pom file:
 <dependency>
   <groupId>com.microsoft.azure</groupId>
   <artifactId>documentdb-bulkimport</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.2</version>
 </dependency>
 
 
@@ -36,5 +36,5 @@ https://github.com/Azure/azure-documentdb-java/blob/master/bulkimport/src/test/j
 
 sample invocation of command-line tool for benchmarking bulk-import (doing 5 iterations of bulk import and in each iteration it inserts 1,000,000 documents) 
  
-java -Xmx6G  -jar documentdb-bulkimport-1.0.0-SNAPSHOT-jar-with-dependencies.jar -serviceEndpoint ACCOUNT_HOST -masterKey ACCOUNT_MASTER_KEY -databaseId DATABASE_NAME -collectionId COLLECTION_NAME -maxConnectionPoolSize 200 -numberOfDocumentsForEachCheckpoint 1000000 -numberOfCheckpoints 5
+java -Xmx6G  -jar documentdb-bulkimport-1.0.2-jar-with-dependencies.jar -serviceEndpoint ACCOUNT_HOST -masterKey ACCOUNT_MASTER_KEY -databaseId DATABASE_NAME -collectionId COLLECTION_NAME -maxConnectionPoolSize 200 -numberOfDocumentsForEachCheckpoint 1000000 -numberOfCheckpoints 5
 
