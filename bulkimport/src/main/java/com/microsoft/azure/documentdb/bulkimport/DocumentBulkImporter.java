@@ -617,7 +617,7 @@ public class DocumentBulkImporter implements AutoCloseable {
             while (it.hasNext()) {
                 UpdateItem currentUpdateItem = it.next();
 
-                if ((currentMiniBatchIndex + 1 <= 1000)) {
+                if ((currentMiniBatchIndex + 1 <= 10000)) {
                     // add the update item to current batch
                     currentMiniBatch.add(currentUpdateItem);
                 } else {

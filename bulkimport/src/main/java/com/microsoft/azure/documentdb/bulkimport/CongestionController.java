@@ -281,9 +281,9 @@ class CongestionController {
 
             // Main thread waits on the throttleSem so no more than MaxDegreeOfParallelism Tasks are run at a time.
             try {
-                logger.debug("pki {} trying to accequire semaphore to execute a task. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
+                logger.debug("pki {} trying to acquire semaphore to execute a task. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
                 this.throttleSemaphore.acquire();
-                logger.debug("pki {} accquiring semaphore for executing a task succeeded. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
+                logger.debug("pki {} acquiring semaphore for executing a task succeeded. available permits {}", partitionKeyRangeId, this.throttleSemaphore.availablePermits());
             } catch (InterruptedException e) {
                 logger.error("pki {} Interrupted, releasing semaphore", partitionKeyRangeId, e);
                 this.throttleSemaphore.release();
