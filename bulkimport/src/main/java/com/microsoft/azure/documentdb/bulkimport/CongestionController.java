@@ -85,12 +85,12 @@ class CongestionController {
     private final Duration samplePeriod = Duration.ofSeconds(1);
 
     /**
-     * The {@link BatchInserter} that exposes a stream of {@link Callable} that insert document batches and returns an {@link InsertMetrics}
+     * The {@link BatchOperator} that exposes a stream of {@link Callable} that insert document batches and returns an {@link InsertMetrics}
      */
-    private final BatchInserter batchInserter;
+    private final BatchOperator batchOperator;
 
     /**
-     * The semaphore that throttles the BatchInserter tasks by only allowing at most 'degreeOfConcurrency' to run at a time.
+     * The semaphore that throttles the BatchOperator tasks by only allowing at most 'degreeOfConcurrency' to run at a time.
      */
     private final Semaphore throttleSemaphore;
 
@@ -103,9 +103,9 @@ class CongestionController {
     private Object aggregateLock = new Object();
 
     /**
-     * Whether or not all the documents have been inserted.
+     * Whether or not all the documents have been operated on.
      */
-    private long documentsInsertedSoFar;
+    private long documentsOperatedSoFar;
 
     static enum State {
         Running, Completed, Failure
@@ -134,14 +134,14 @@ class CongestionController {
     private final List<Exception> failures = Collections.synchronizedList(new ArrayList<>());
 
     public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId,
-            BatchInserter batchInserter) {
-        this(executor, partitionThroughput, partitionKeyRangeId, batchInserter, null);
+            BatchOperator batchOperator) {
+        this(executor, partitionThroughput, partitionKeyRangeId, batchOperator, null);
     }
 
     public CongestionController(ListeningExecutorService executor, int partitionThroughput, String partitionKeyRangeId,
-            BatchInserter batchInserter, Integer startingDegreeOfConcurrency) {
+            BatchOperator batchOperator, Integer startingDegreeOfConcurrency) {
         this.partitionKeyRangeId = partitionKeyRangeId;
-        this.batchInserter = batchInserter;
+        this.batchOperator = batchOperator;
 
         // Starting the semaphore with 'StartingDegreeOfConcurrency' count and will release when no throttles are received
         // and decrease when we get throttled.
@@ -220,7 +220,7 @@ class CongestionController {
                         }
 
                         double ruPerSecond = insertMetricsSample.requestUnitsConsumed / samplePeriod.getSeconds();
-                        documentsInsertedSoFar += insertMetricsSample.numberOfDocumentsInserted;
+                        documentsOperatedSoFar += insertMetricsSample.numberOfDocumentsInserted;
 
                         logger.debug("pki {} : Inserted {} docs in {} milli seconds at {} RU/s with {} tasks."
                                 + " Faced {} throttles. Total documents inserterd so far {}.",
@@ -230,7 +230,7 @@ class CongestionController {
                                 ruPerSecond,
                                 degreeOfConcurrency,
                                 insertMetricsSample.numberOfThrottles,
-                                documentsInsertedSoFar);
+                                documentsOperatedSoFar);
 
                     } catch (InterruptedException e) {
                         logger.warn("Interrupted", e);
@@ -273,7 +273,7 @@ class CongestionController {
 
         ListenableFuture<Void> completionFuture = executor.submit(congestionControlTask());
 
-        Iterator<Callable<InsertMetrics>> batchExecutionIterator = batchInserter.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> batchExecutionIterator = batchOperator.miniBatchExecutionCallableIterator();
 
         List<ListenableFuture<InsertMetrics>> futureList = new ArrayList<>();
         while(batchExecutionIterator.hasNext() && isRunning()) {

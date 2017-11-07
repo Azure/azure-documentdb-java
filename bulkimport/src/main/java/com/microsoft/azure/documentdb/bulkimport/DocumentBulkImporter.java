@@ -57,6 +57,9 @@ import com.microsoft.azure.documentdb.FeedOptions;
 import com.microsoft.azure.documentdb.PartitionKeyDefinition;
 import com.microsoft.azure.documentdb.PartitionKeyRange;
 import com.microsoft.azure.documentdb.RetryOptions;
+import com.microsoft.azure.documentdb.bulkimport.bulkupdate.BatchUpdater;
+import com.microsoft.azure.documentdb.bulkimport.bulkupdate.BulkUpdateResponse;
+import com.microsoft.azure.documentdb.bulkimport.bulkupdate.UpdateItem;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.InMemoryCollectionRoutingMap;
@@ -171,6 +174,11 @@ public class DocumentBulkImporter implements AutoCloseable {
      * The name of the system stored procedure for bulk import.
      */
     private final static String BULK_IMPORT_STORED_PROCECURE_NAME = "__.sys.commonBulkInsert";
+    
+    /**
+     * The name of the stored procedure for bulk update.
+     */
+    private final static String BULK_UPDATE_STORED_PROCECURE_NAME = "__bulkPatch";
 
     /**
      * The maximal sproc payload size sent (as a fraction of 2MB).
@@ -178,7 +186,7 @@ public class DocumentBulkImporter implements AutoCloseable {
     private final static int MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE = (2202010 * 5) / 10;
 
     /**
-     * The fraction of maximum sproc payload size upto which documents allowed to be fit in a mini-batch.
+     * The fraction of maximum sproc payload size up to which documents allowed to be fit in a mini-batch.
      */
     private final static double FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED = 0.20;
 
@@ -231,6 +239,11 @@ public class DocumentBulkImporter implements AutoCloseable {
      * Bulk Import Stored Procedure Link relevant to the given collection
      */
     private String bulkImportStoredProcLink;
+    
+    /**
+     * Bulk Update Stored Procedure Link relevant to the given collection
+     */
+    private String bulkUpdateStoredProcLink;
 
     /**
      * Collection offer throughput
@@ -332,7 +345,8 @@ public class DocumentBulkImporter implements AutoCloseable {
         logger.debug("Initializing ...");
 
         this.bulkImportStoredProcLink = String.format("%s/sprocs/%s", collectionLink, BULK_IMPORT_STORED_PROCECURE_NAME);
-
+        this.bulkUpdateStoredProcLink = String.format("%s/sprocs/%s", collectionLink, BULK_UPDATE_STORED_PROCECURE_NAME);
+        		
         logger.trace("Fetching partition map of collection");
         Range<String> fullRange = new Range<String>(
                 PartitionKeyInternal.MinimumInclusiveEffectivePartitionKey,
@@ -402,7 +416,18 @@ public class DocumentBulkImporter implements AutoCloseable {
                 isUpsert);
     }
 
-    private BulkImportResponse executeBulkImportInternal(Collection<String> input,
+    /**
+     * Executes a bulk update in the Azure Cosmos DB database service.
+     * 
+     * @param updateItems which comprise of id, partition key and list of update operations
+     * @return an instance of {@link BulkImportResponse}
+     * @throws DocumentClientException if any failure happens
+     */
+    public BulkUpdateResponse updateAll(Collection<UpdateItem> updateItems) throws DocumentClientException {
+        return executeBulkUpdateInternal(updateItems);
+    }
+
+	private BulkImportResponse executeBulkImportInternal(Collection<String> input,
             boolean isUpsert) throws DocumentClientException {
         Preconditions.checkNotNull(input, "document collection cannot be null");
         try {
@@ -421,23 +446,26 @@ public class DocumentBulkImporter implements AutoCloseable {
             throw toDocumentClientException(e);
         }
     }
+	
+    private BulkUpdateResponse executeBulkUpdateInternal(Collection<UpdateItem> updateItems)
+    	throws DocumentClientException {
+    	Preconditions.checkNotNull(updateItems, "update items cannot be null");
+        try {
+            return executeBulkUpdateAsyncImpl(updateItems).get();
 
-    private DocumentClientException toDocumentClientException(Exception e) {
-        if (e instanceof DocumentClientException) {
-            return (DocumentClientException) e;
-        } else {
-            return new DocumentClientException(500, e);
+        } catch (ExecutionException e) {
+            logger.debug("Failed to update documents", e);
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw toDocumentClientException((Exception) cause);
+            } else {
+                throw toDocumentClientException(e);
+            }
+        } catch(Exception e) {
+            logger.error("Failed to update documents", e);
+            throw toDocumentClientException(e);
         }
-    }
-
-    private int getDocumentSizeOrThrow(String document) {
-        int documentSize = document.getBytes(Charset.forName("UTF-8")).length;
-        if (documentSize > maxMiniBatchSize) {
-            logger.error("Document size {} larger than script payload limit. {}", documentSize, maxMiniBatchSize);
-            throw new UnsupportedOperationException("Cannot import a document whose size is larger than script payload limit.");
-        }
-        return documentSize;
-    }
+	}
 
     private ListenableFuture<BulkImportResponse> executeBulkImportAsyncImpl(Collection<String> documents,
             boolean isUpsert) throws Exception {
@@ -554,7 +582,138 @@ public class DocumentBulkImporter implements AutoCloseable {
 
         return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
     }
+    
+    private ListenableFuture<BulkUpdateResponse> executeBulkUpdateAsyncImpl(Collection<UpdateItem> updateItems) {
+        Stopwatch watch = Stopwatch.createStarted();
 
+        logger.debug("Bucketing update items ...");
+
+        ConcurrentHashMap<String, Set<UpdateItem>> updateItemsByPartition = new ConcurrentHashMap<String, Set<UpdateItem>>();
+        ConcurrentHashMap<String, List<List<UpdateItem>>> miniBatchesToUpdateByPartition = new ConcurrentHashMap<String, List<List<UpdateItem>>>();
+
+        for (String partitionKeyRangeId: partitionKeyRangeIds) {
+        	updateItemsByPartition.put(partitionKeyRangeId,  ConcurrentHashMap.newKeySet(updateItems.size() / partitionKeyRangeIds.size()));
+        	miniBatchesToUpdateByPartition.put(partitionKeyRangeId, new ArrayList<List<UpdateItem>>(1000));
+        }
+
+        updateItems.parallelStream().forEach(updateItem -> {
+            PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.fromPartitionKeyvalue(updateItem.getPartitionKeyValue());
+            String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
+            String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
+            updateItemsByPartition.get(partitionRangeId).add(updateItem);
+        });
+
+        logger.trace("Creating mini batches within each partition bucket");
+
+        updateItemsByPartition.entrySet().parallelStream().forEach(entry -> {
+
+            String partitionRangeId = entry.getKey();
+            Set<UpdateItem> updateItemsInPartition =  entry.getValue();
+
+            Iterator<UpdateItem> it = updateItemsInPartition.iterator();
+            ArrayList<UpdateItem> currentMiniBatch = new ArrayList<UpdateItem>(500);
+            int currentMiniBatchIndex = 0;
+
+            while (it.hasNext()) {
+                UpdateItem currentUpdateItem = it.next();
+
+                if ((currentMiniBatchIndex + 1 <= 1000)) {
+                    // add the update item to current batch
+                    currentMiniBatch.add(currentUpdateItem);
+                } else {
+                    // this batch has reached its max size
+                	miniBatchesToUpdateByPartition.get(partitionRangeId).add(currentMiniBatch);
+                    currentMiniBatch = new ArrayList<UpdateItem>(500);
+                    currentMiniBatch.add(currentUpdateItem);
+                    currentMiniBatchIndex = 1;
+                }
+            }
+
+            if (currentMiniBatch.size() > 0) {
+                // add mini batch
+            	miniBatchesToUpdateByPartition.get(partitionRangeId).add(currentMiniBatch);
+            }
+        });
+
+        logger.debug("Beginning bulk update within each partition bucket");
+        Map<String, BatchUpdater> batchUpdaters = new HashMap<String, BatchUpdater>();
+        Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
+
+        logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");
+        List<ListenableFuture<Void>> futures = new ArrayList<>();
+
+        // Note: we handle only simple partition key path at the moment.
+        Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
+        String partitionKeyProperty = partitionKeyPath.iterator().next().replaceFirst("^/", "");
+        
+        for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
+
+            BatchUpdater batchUpdater = new BatchUpdater(
+                    partitionKeyRangeId,
+                    miniBatchesToUpdateByPartition.get(partitionKeyRangeId),
+                    this.client,
+                    bulkUpdateStoredProcLink,
+                    partitionKeyProperty);
+            batchUpdaters.put(partitionKeyRangeId, batchUpdater);
+
+            CongestionController cc = new CongestionController(listeningExecutorService,
+                    collectionThroughput / partitionKeyRangeIds.size(),
+                    partitionKeyRangeId,
+                    batchUpdater,
+                    partitionKeyRangeIdToInferredDegreeOfParallelism.get(partitionKeyRangeId));
+
+            congestionControllers.put(partitionKeyRangeId,cc);
+
+            // starting
+            futures.add(cc.executeAllAsync());
+        }
+
+        FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
+        AsyncCallable<BulkUpdateResponse> completeAsyncCallback = new AsyncCallable<BulkUpdateResponse>() {
+
+            @Override
+            public ListenableFuture<BulkUpdateResponse> call() throws Exception {
+
+                List<Exception> failures = new ArrayList<>();
+
+                for(String partitionKeyRangeId: partitionKeyRangeIds) {
+                    CongestionController cc = congestionControllers.get(partitionKeyRangeId);
+                    failures.addAll(cc.getFailures());
+                    partitionKeyRangeIdToInferredDegreeOfParallelism.put(partitionKeyRangeId, cc.getDegreeOfConcurrency());
+                }
+
+                int numberOfDocumentsImported = batchUpdaters.values().stream().mapToInt(b -> b.getNumberOfDocumentsUpdated()).sum();
+                double totalRequestUnitsConsumed = batchUpdaters.values().stream().mapToDouble(b -> b.getTotalRequestUnitsConsumed()).sum();
+
+                watch.stop();
+
+                BulkUpdateResponse bulkUpdateResponse = new
+                		BulkUpdateResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed(), failures);
+
+                return Futures.immediateFuture(bulkUpdateResponse);
+            }
+        };
+
+        return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
+	}
+
+	private DocumentClientException toDocumentClientException(Exception e) {
+        if (e instanceof DocumentClientException) {
+            return (DocumentClientException) e;
+        } else {
+            return new DocumentClientException(500, e);
+        }
+    }
+
+    private int getDocumentSizeOrThrow(String document) {
+        int documentSize = document.getBytes(Charset.forName("UTF-8")).length;
+        if (documentSize > maxMiniBatchSize) {
+            logger.error("Document size {} larger than script payload limit. {}", documentSize, maxMiniBatchSize);
+            throw new UnsupportedOperationException("Cannot import a document whose size is larger than script payload limit.");
+        }
+        return documentSize;
+    }
+    
     private CollectionRoutingMap getCollectionRoutingMap(DocumentClient client) {
         List<ImmutablePair<PartitionKeyRange, Boolean>> ranges = new ArrayList<>();
 

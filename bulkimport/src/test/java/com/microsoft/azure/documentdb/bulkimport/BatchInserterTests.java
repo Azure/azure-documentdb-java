@@ -63,7 +63,7 @@ public class BatchInserterTests {
         String partitionIndex = "0";
         BatchInserter bi = new BatchInserter(partitionIndex, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);
@@ -88,7 +88,7 @@ public class BatchInserterTests {
         String partitionIndex = "0";
         BatchInserter bi = new BatchInserter(partitionIndex, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);
@@ -139,7 +139,7 @@ public class BatchInserterTests {
         String partitionIndex = "0";
         BatchInserter bi = new BatchInserter(partitionIndex, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);
@@ -199,7 +199,7 @@ public class BatchInserterTests {
         String partitionIndex = "0";
         BatchInserter bi = new BatchInserter(partitionIndex, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);

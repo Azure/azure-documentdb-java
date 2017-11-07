@@ -25,7 +25,7 @@ package com.microsoft.azure.documentdb.bulkimport;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 
-class ExceptionUtils {
+public class ExceptionUtils {
     public static boolean isThrottled(DocumentClientException e) {
         return e.getStatusCode() == HttpConstants.StatusCodes.TOO_MANY_REQUESTS;
     }
