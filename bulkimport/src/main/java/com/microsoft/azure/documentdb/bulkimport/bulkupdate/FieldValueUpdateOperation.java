@@ -32,9 +32,9 @@ class UpdateOperation<TValue> extends UpdateOperationBase {
 		this.value = value;
 	}
 
-    @JsonProperty("field")
-    String field;
+	@JsonProperty("field")
+	String field;
 
-    @JsonProperty("value")
-    TValue value;
+	@JsonProperty("value")
+	TValue value;
 }

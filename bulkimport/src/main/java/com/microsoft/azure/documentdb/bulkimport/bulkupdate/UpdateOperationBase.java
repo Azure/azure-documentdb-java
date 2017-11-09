@@ -25,12 +25,12 @@ package com.microsoft.azure.documentdb.bulkimport.bulkupdate;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public abstract class UpdateOperationBase {
-	
-    @JsonProperty("type")
+
+	@JsonProperty("type")
 	public UpdateOperationType type;
-    
-    protected UpdateOperationBase(UpdateOperationType type)
-    {
-    	this.type = type;
-    }
+
+	protected UpdateOperationBase(UpdateOperationType type)
+	{
+		this.type = type;
+	}
 }

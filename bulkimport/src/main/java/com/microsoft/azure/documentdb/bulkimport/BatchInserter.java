@@ -36,6 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -48,204 +50,209 @@ import com.microsoft.azure.documentdb.StoredProcedureResponse;
 
 class BatchInserter extends BatchOperator {
 
-    /**
-     *  The count of documents bulk inserted by this batch inserter.
-     */
-    public AtomicInteger numberOfDocumentsImported;
+	/**
+	 *  The count of documents bulk inserted by this batch inserter.
+	 */
+	public AtomicInteger numberOfDocumentsImported;
 
-    /**
-     * The total request units consumed by this batch inserter.
-     */
-    public AtomicDouble totalRequestUnitsConsumed;
-    
-    /**
-     * The list of mini-batches this batch inserter is responsible to import.
-     */
-    private final List<List<String>> batchesToInsert;
+	/**
+	 * The total request units consumed by this batch inserter.
+	 */
+	public AtomicDouble totalRequestUnitsConsumed;
 
-    /**
-     * The link to the system bulk import stored procedure.
-     */
-    private final String bulkImportSprocLink;
+	/**
+	 * The list of mini-batches this batch inserter is responsible to import.
+	 */
+	private final List<List<String>> batchesToInsert;
 
-    /**
-     *  The options passed to the system bulk import stored procedure.
-     */
-    private final BulkImportStoredProcedureOptions storedProcOptions;
+	/**
+	 * The link to the system bulk import stored procedure.
+	 */
+	private final String bulkImportSprocLink;
 
-    public BatchInserter(String partitionKeyRangeId, List<List<String>> batchesToInsert, DocumentClient client, String bulkImportSprocLink,
-            BulkImportStoredProcedureOptions options) {
+	/**
+	 *  The options passed to the system bulk import stored procedure.
+	 */
+	private final BulkImportStoredProcedureOptions storedProcOptions;
 
-        this.partitionKeyRangeId = partitionKeyRangeId;
-        this.batchesToInsert = batchesToInsert;
-        this.client = client;
-        this.bulkImportSprocLink = bulkImportSprocLink;
-        this.storedProcOptions = options;
-        this.numberOfDocumentsImported = new AtomicInteger();
-        this.totalRequestUnitsConsumed = new AtomicDouble();
+	/**
+	 * The logger instance.
+	 */
+	private final Logger logger = LoggerFactory.getLogger(BatchInserter.class);
 
-        class RequestOptionsInternal extends RequestOptions {
-            RequestOptionsInternal(String partitionKeyRangeId) {
-                setPartitionKeyRengeId(partitionKeyRangeId);
-            }
-        }
+	public BatchInserter(String partitionKeyRangeId, List<List<String>> batchesToInsert, DocumentClient client, String bulkImportSprocLink,
+			BulkImportStoredProcedureOptions options) {
 
-        this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
-    }
+		this.partitionKeyRangeId = partitionKeyRangeId;
+		this.batchesToInsert = batchesToInsert;
+		this.client = client;
+		this.bulkImportSprocLink = bulkImportSprocLink;
+		this.storedProcOptions = options;
+		this.numberOfDocumentsImported = new AtomicInteger();
+		this.totalRequestUnitsConsumed = new AtomicDouble();
 
-    public int getNumberOfDocumentsImported() {
-        return numberOfDocumentsImported.get();
-    }
+		class RequestOptionsInternal extends RequestOptions {
+			RequestOptionsInternal(String partitionKeyRangeId) {
+				setPartitionKeyRengeId(partitionKeyRangeId);
+			}
+		}
 
-    public double getTotalRequestUnitsConsumed() {
-        return totalRequestUnitsConsumed.get();
-    }
+		this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
+	}
 
-    public Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator() {
+	public int getNumberOfDocumentsImported() {
+		return numberOfDocumentsImported.get();
+	}
 
-        Stream<Callable<InsertMetrics>> stream = batchesToInsert.stream().map(miniBatch -> {
-            return new Callable<InsertMetrics>() {
+	public double getTotalRequestUnitsConsumed() {
+		return totalRequestUnitsConsumed.get();
+	}
 
-                @Override
-                public InsertMetrics call() throws Exception {
+	public Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator() {
 
-                    try {
-                        logger.debug("pki {} importing mini batch started", partitionKeyRangeId);
-                        Stopwatch stopwatch = Stopwatch.createStarted();
-                        double requestUnitsCounsumed = 0;
-                        int numberOfThrottles = 0;
-                        StoredProcedureResponse response;
-                        boolean timedOut = false;
+		Stream<Callable<InsertMetrics>> stream = batchesToInsert.stream().map(miniBatch -> {
+			return new Callable<InsertMetrics>() {
 
-                        int currentDocumentIndex = 0;
+				@Override
+				public InsertMetrics call() throws Exception {
 
-                        while (currentDocumentIndex < miniBatch.size() && !cancel) {
-                            logger.debug("pki {} inside for loop, currentDocumentIndex", partitionKeyRangeId, currentDocumentIndex);
+					try {
+						logger.debug("pki {} importing mini batch started", partitionKeyRangeId);
+						Stopwatch stopwatch = Stopwatch.createStarted();
+						double requestUnitsCounsumed = 0;
+						int numberOfThrottles = 0;
+						StoredProcedureResponse response;
+						boolean timedOut = false;
 
-                            String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
+						int currentDocumentIndex = 0;
 
-                            boolean isThrottled = false;
-                            Duration retryAfter = Duration.ZERO;
+						while (currentDocumentIndex < miniBatch.size() && !cancel) {
+							logger.debug("pki {} inside for loop, currentDocumentIndex", partitionKeyRangeId, currentDocumentIndex);
 
-                            try {
+							String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
 
-                                logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
+							boolean isThrottled = false;
+							Duration retryAfter = Duration.ZERO;
 
-                                if (!timedOut) {
-                                    response = client.executeStoredProcedure(bulkImportSprocLink, requestOptions, new Object[] { docBatch, storedProcOptions,  null });
-                                } else {
-                                    BulkImportStoredProcedureOptions modifiedStoredProcOptions = new BulkImportStoredProcedureOptions(
-                                            storedProcOptions.disableAutomaticIdGeneration,
-                                            storedProcOptions.softStopOnConflict,
-                                            storedProcOptions.systemCollectionId,
-                                            storedProcOptions.enableBsonSchema,
-                                            true);
+							try {
 
-                                    response = client.executeStoredProcedure(
-                                            bulkImportSprocLink, requestOptions,
-                                            new Object[] { docBatch, modifiedStoredProcOptions, null });
-                                }
+								logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
 
-                                BulkImportStoredProcedureResponse bulkImportResponse = parseFrom(response);
+								if (!timedOut) {
+									response = client.executeStoredProcedure(bulkImportSprocLink, requestOptions, new Object[] { docBatch, storedProcOptions,  null });
+								} else {
+									BulkImportStoredProcedureOptions modifiedStoredProcOptions = new BulkImportStoredProcedureOptions(
+											storedProcOptions.disableAutomaticIdGeneration,
+											storedProcOptions.softStopOnConflict,
+											storedProcOptions.systemCollectionId,
+											storedProcOptions.enableBsonSchema,
+											true);
 
-                                if (bulkImportResponse != null) {
-                                    if (bulkImportResponse.errorCode != 0) {
-                                        logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
-                                        if (bulkImportResponse.count == 0) {
-                                            throw new RuntimeException(
-                                                    String.format("Stored proc returned failure %s", bulkImportResponse.errorCode));
-                                        }
-                                    }
+									response = client.executeStoredProcedure(
+											bulkImportSprocLink, requestOptions,
+											new Object[] { docBatch, modifiedStoredProcOptions, null });
+								}
 
-                                    double requestCharge = response.getRequestCharge();
-                                    currentDocumentIndex += bulkImportResponse.count;
-                                    numberOfDocumentsImported.addAndGet(bulkImportResponse.count);
-                                    requestUnitsCounsumed += requestCharge;
-                                    totalRequestUnitsConsumed.addAndGet(requestCharge);
-                                }
-                                else {
-                                    logger.warn("pki {} Failed to receive response", partitionKeyRangeId);
-                                }
+								BulkImportStoredProcedureResponse bulkImportResponse = parseFrom(response);
 
-                            } catch (DocumentClientException e) {
+								if (bulkImportResponse != null) {
+									if (bulkImportResponse.errorCode != 0) {
+										logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
+										if (bulkImportResponse.count == 0) {
+											throw new RuntimeException(
+													String.format("Stored proc returned failure %s", bulkImportResponse.errorCode));
+										}
+									}
 
-                                logger.debug("pki {} Importing minibatch failed", partitionKeyRangeId, e);
+									double requestCharge = response.getRequestCharge();
+									currentDocumentIndex += bulkImportResponse.count;
+									numberOfDocumentsImported.addAndGet(bulkImportResponse.count);
+									requestUnitsCounsumed += requestCharge;
+									totalRequestUnitsConsumed.addAndGet(requestCharge);
+								}
+								else {
+									logger.warn("pki {} Failed to receive response", partitionKeyRangeId);
+								}
 
-                                if (isThrottled(e)) {
-                                    logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
-                                    numberOfThrottles++;
-                                    isThrottled = true;
-                                    retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
-                                    // will retry again
+							} catch (DocumentClientException e) {
 
-                                } else if (isTimedOut(e)) {
-                                    logger.debug("pki {} Request timed out", partitionKeyRangeId);
-                                    timedOut = true;
-                                    // will retry again
+								logger.debug("pki {} Importing minibatch failed", partitionKeyRangeId, e);
 
-                                } else if (isGone(e)) {
-                                    // there is no value in retrying
-                                    if (isSplit(e)) {
-                                        String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
-                                        logger.error(errorMessage);
-                                        throw new RuntimeException(errorMessage);
-                                    } else {
-                                        String errorMessage = String.format("pki %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
-                                        logger.error(errorMessage);
-                                        throw new RuntimeException(errorMessage);
-                                    }
+								if (isThrottled(e)) {
+									logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
+									numberOfThrottles++;
+									isThrottled = true;
+									retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
+									// will retry again
 
-                                } else {
-                                    // there is no value in retrying
-                                    String errorMessage = String.format("pki %s failed to import mini-batch. Exception was %s. Status code was %s",
-                                            partitionKeyRangeId,
-                                            e.getMessage(),
-                                            e.getStatusCode());
-                                    logger.error(errorMessage, e);
-                                    throw new RuntimeException(e);
-                                }
+								} else if (isTimedOut(e)) {
+									logger.debug("pki {} Request timed out", partitionKeyRangeId);
+									timedOut = true;
+									// will retry again
 
-                            } catch (Exception e) {
-                                String errorMessage = String.format("pki %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
-                                        e.getMessage());
-                                logger.error(errorMessage, e);
-                                throw new RuntimeException(errorMessage, e);
-                            }
+								} else if (isGone(e)) {
+									// there is no value in retrying
+									if (isSplit(e)) {
+										String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+										logger.error(errorMessage);
+										throw new RuntimeException(errorMessage);
+									} else {
+										String errorMessage = String.format("pki %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+										logger.error(errorMessage);
+										throw new RuntimeException(errorMessage);
+									}
 
-                            if (isThrottled) {
-                                try {
-                                    logger.debug("pki {} throttled going to sleep for {} millis ", partitionKeyRangeId, retryAfter.toMillis());
-                                    Thread.sleep(retryAfter.toMillis());
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
-                        }
+								} else {
+									// there is no value in retrying
+									String errorMessage = String.format("pki %s failed to import mini-batch. Exception was %s. Status code was %s",
+											partitionKeyRangeId,
+											e.getMessage(),
+											e.getStatusCode());
+									logger.error(errorMessage, e);
+									throw new RuntimeException(e);
+								}
 
-                        logger.debug("pki {} completed", partitionKeyRangeId);
+							} catch (Exception e) {
+								String errorMessage = String.format("pki %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
+										e.getMessage());
+								logger.error(errorMessage, e);
+								throw new RuntimeException(errorMessage, e);
+							}
 
-                        stopwatch.stop();
-                        InsertMetrics insertMetrics = new InsertMetrics(currentDocumentIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
+							if (isThrottled) {
+								try {
+									logger.debug("pki {} throttled going to sleep for {} millis ", partitionKeyRangeId, retryAfter.toMillis());
+									Thread.sleep(retryAfter.toMillis());
+								} catch (InterruptedException e) {
+									throw new RuntimeException(e);
+								}
+							}
+						}
 
-                        return insertMetrics;
-                    } catch (Exception e) {
-                        cancel = true;
-                        throw e;
-                    }
-                }
-            };
-        });
+						logger.debug("pki {} completed", partitionKeyRangeId);
 
-        return stream.iterator();
-    }
+						stopwatch.stop();
+						InsertMetrics insertMetrics = new InsertMetrics(currentDocumentIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
 
-    private BulkImportStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
-        String res = storedProcResponse.getResponseAsString();
-        logger.debug("MiniBatch Insertion for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
+						return insertMetrics;
+					} catch (Exception e) {
+						cancel = true;
+						throw e;
+					}
+				}
+			};
+		});
 
-        if (StringUtils.isEmpty(res))
-            return null;
+		return stream.iterator();
+	}
 
-        return objectMapper.readValue(res, BulkImportStoredProcedureResponse.class);
-    }
+	private BulkImportStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
+		String res = storedProcResponse.getResponseAsString();
+		logger.debug("MiniBatch Insertion for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
+
+		if (StringUtils.isEmpty(res))
+			return null;
+
+		return objectMapper.readValue(res, BulkImportStoredProcedureResponse.class);
+	}
 }

@@ -28,24 +28,24 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class UpdateItem {
 
-    @JsonProperty("id")
-    private String id;
+	@JsonProperty("id")
+	private String id;
 
-    @JsonProperty("pk")
-    private String partitionKey;
-    
-    @JsonProperty("updates")
-    private List<UpdateOperationBase> updateOperations;
-    
-    public UpdateItem(String id, String partitionKey, List<UpdateOperationBase> list)
-    {
-    	this.id = id;
-    	this.partitionKey = partitionKey;
-    	this.updateOperations = list;
-    }
-    
-    public String getPartitionKeyValue()
-    {
-    	return this.partitionKey;
-    }
+	@JsonProperty("pk")
+	private String partitionKey;
+
+	@JsonProperty("updates")
+	private List<UpdateOperationBase> updateOperations;
+
+	public UpdateItem(String id, String partitionKey, List<UpdateOperationBase> list)
+	{
+		this.id = id;
+		this.partitionKey = partitionKey;
+		this.updateOperations = list;
+	}
+
+	public String getPartitionKeyValue()
+	{
+		return this.partitionKey;
+	}
 }

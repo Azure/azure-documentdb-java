@@ -33,34 +33,32 @@ import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.RequestOptions;
 
 public abstract class BatchOperator {
-	
-    protected final Logger logger = LoggerFactory.getLogger(BatchInserter.class);
 
-    protected final ObjectMapper objectMapper = new ObjectMapper();
+	protected static final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * The index of the physical partition this batch operator is responsible for.
-     */
-    protected String partitionKeyRangeId;
-    
-    /**
-     * The document client to use.
-     */
-    protected DocumentClient client;
+	/**
+	 * The index of the physical partition this batch operator is responsible for.
+	 */
+	protected String partitionKeyRangeId;
 
-    /**
-     * Provides a mean to cancel Batch Operator from doing any more work.
-     */
-    protected volatile boolean cancel = false;
-    
-    /**
-     * Request options specifying the underlying partition key range id.
-     */
-    protected RequestOptions requestOptions;
-    
-    /**
-     * Gets a stream of tasks that return InsertMetrics that when awaited on operate on the next mini-batch to the document collection.
-     * @return stream of operator tasks
-     */
+	/**
+	 * The document client to use.
+	 */
+	protected DocumentClient client;
+
+	/**
+	 * Provides a mean to cancel Batch Operator from doing any more work.
+	 */
+	protected volatile boolean cancel = false;
+
+	/**
+	 * Request options specifying the underlying partition key range id.
+	 */
+	protected RequestOptions requestOptions;
+
+	/**
+	 * Gets a stream of tasks that return InsertMetrics that when awaited on operate on the next mini-batch to the document collection.
+	 * @return stream of operator tasks
+	 */
 	abstract protected Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator();
 }

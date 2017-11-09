@@ -53,191 +53,196 @@ import com.microsoft.azure.documentdb.bulkimport.InsertMetrics;
 
 public class BatchUpdater extends BatchOperator {
 
-    /**
-     *  The count of documents bulk updated by this batch updater.
-     */
-    public AtomicInteger numberOfDocumentsUpdated;
+	/**
+	 *  The count of documents bulk updated by this batch updater.
+	 */
+	public AtomicInteger numberOfDocumentsUpdated;
 
-    /**
-     * The total request units consumed by this batch updater.
-     */
-    public AtomicDouble totalRequestUnitsConsumed;
-    
-    /**
-     * The list of mini-batches this batch updater is responsible to updates.
-     */
-    private final List<List<UpdateItem>> batchesToUpdate;
+	/**
+	 * The total request units consumed by this batch updater.
+	 */
+	public AtomicDouble totalRequestUnitsConsumed;
 
-    /**
-     * The link to the system bulk update stored procedure.
-     */
-    private final String bulkUpdateSprocLink;
-    
-    /**
-     * The partition key property.
-     */
-    private final String partitionKeyProperty;
+	/**
+	 * The list of mini-batches this batch updater is responsible to updates.
+	 */
+	private final List<List<UpdateItem>> batchesToUpdate;
 
-    public BatchUpdater(String partitionKeyRangeId, List<List<UpdateItem>> batchesToUpdate, DocumentClient client,
-    		String bulkUpdateSprocLink, String partitionKeyProperty) {
+	/**
+	 * The link to the system bulk update stored procedure.
+	 */
+	private final String bulkUpdateSprocLink;
 
-        this.partitionKeyRangeId = partitionKeyRangeId;
-        this.batchesToUpdate = batchesToUpdate;
-        this.client = client;
-        this.bulkUpdateSprocLink = bulkUpdateSprocLink;
-        this.partitionKeyProperty = partitionKeyProperty;
-        this.numberOfDocumentsUpdated = new AtomicInteger();
-        this.totalRequestUnitsConsumed = new AtomicDouble();
+	/**
+	 * The partition key property.
+	 */
+	private final String partitionKeyProperty;
 
-        class RequestOptionsInternal extends RequestOptions {
-            RequestOptionsInternal(String partitionKeyRangeId) {
-                setPartitionKeyRengeId(partitionKeyRangeId);
-            }
-        }
+	/**
+	 * The logger instance.
+	 */
+	private final Logger logger = LoggerFactory.getLogger(BatchUpdater.class);
 
-        this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
-    }
+	public BatchUpdater(String partitionKeyRangeId, List<List<UpdateItem>> batchesToUpdate, DocumentClient client,
+			String bulkUpdateSprocLink, String partitionKeyProperty) {
 
-    public int getNumberOfDocumentsUpdated() {
-        return numberOfDocumentsUpdated.get();
-    }
+		this.partitionKeyRangeId = partitionKeyRangeId;
+		this.batchesToUpdate = batchesToUpdate;
+		this.client = client;
+		this.bulkUpdateSprocLink = bulkUpdateSprocLink;
+		this.partitionKeyProperty = partitionKeyProperty;
+		this.numberOfDocumentsUpdated = new AtomicInteger();
+		this.totalRequestUnitsConsumed = new AtomicDouble();
 
-    public double getTotalRequestUnitsConsumed() {
-        return totalRequestUnitsConsumed.get();
-    }
+		class RequestOptionsInternal extends RequestOptions {
+			RequestOptionsInternal(String partitionKeyRangeId) {
+				setPartitionKeyRengeId(partitionKeyRangeId);
+			}
+		}
 
-    public Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator() {
+		this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
+	}
 
-        Stream<Callable<InsertMetrics>> stream = batchesToUpdate.stream().map(miniBatch -> {
-            return new Callable<InsertMetrics>() {
+	public int getNumberOfDocumentsUpdated() {
+		return numberOfDocumentsUpdated.get();
+	}
 
-                @Override
-                public InsertMetrics call() throws Exception {
+	public double getTotalRequestUnitsConsumed() {
+		return totalRequestUnitsConsumed.get();
+	}
 
-                    try {
-                        logger.debug("pki {} updating mini batch started", partitionKeyRangeId);
-                        Stopwatch stopwatch = Stopwatch.createStarted();
-                        double requestUnitsCounsumed = 0;
-                        int numberOfThrottles = 0;
-                        StoredProcedureResponse response;
-                        boolean timedOut = false;
+	public Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator() {
 
-                        int currentUpdateItemIndex = 0;
+		Stream<Callable<InsertMetrics>> stream = batchesToUpdate.stream().map(miniBatch -> {
+			return new Callable<InsertMetrics>() {
 
-                        while (currentUpdateItemIndex < miniBatch.size() && !cancel) {
-                            logger.debug("pki {} inside for loop, currentUpdateItemIndex", partitionKeyRangeId, currentUpdateItemIndex);
+				@Override
+				public InsertMetrics call() throws Exception {
 
-                            List<UpdateItem> updateItemBatch = miniBatch.subList(currentUpdateItemIndex, miniBatch.size());
+					try {
+						logger.debug("pki {} updating mini batch started", partitionKeyRangeId);
+						Stopwatch stopwatch = Stopwatch.createStarted();
+						double requestUnitsCounsumed = 0;
+						int numberOfThrottles = 0;
+						StoredProcedureResponse response;
+						boolean timedOut = false;
 
-                            boolean isThrottled = false;
-                            Duration retryAfter = Duration.ZERO;
+						int currentUpdateItemIndex = 0;
 
-                            try {
+						while (currentUpdateItemIndex < miniBatch.size() && !cancel) {
+							logger.debug("pki {} inside for loop, currentUpdateItemIndex", partitionKeyRangeId, currentUpdateItemIndex);
 
-                                logger.debug("pki {}, Trying to update minibatch of {} update items", partitionKeyRangeId, updateItemBatch.size());
+							List<UpdateItem> updateItemBatch = miniBatch.subList(currentUpdateItemIndex, miniBatch.size());
 
-                                response = client.executeStoredProcedure(bulkUpdateSprocLink, requestOptions, new Object[] { updateItemBatch, partitionKeyProperty,  null });
+							boolean isThrottled = false;
+							Duration retryAfter = Duration.ZERO;
 
-                                BulkUpdateStoredProcedureResponse bulkUpdateResponse = parseFrom(response);
+							try {
 
-                                if (bulkUpdateResponse != null) {
-                                    if (bulkUpdateResponse.errorCode != 0) {
-                                        logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkUpdateResponse.errorCode);
-                                        if (bulkUpdateResponse.count == 0) {
-                                            throw new RuntimeException(
-                                                    String.format("Stored proc returned failure %s", bulkUpdateResponse.errorCode));
-                                        }
-                                    }
+								logger.debug("pki {}, Trying to update minibatch of {} update items", partitionKeyRangeId, updateItemBatch.size());
 
-                                    double requestCharge = response.getRequestCharge();
-                                    currentUpdateItemIndex += bulkUpdateResponse.count;
-                                    numberOfDocumentsUpdated.addAndGet(bulkUpdateResponse.count);
-                                    requestUnitsCounsumed += requestCharge;
-                                    totalRequestUnitsConsumed.addAndGet(requestCharge);
-                                }
-                                else {
-                                    logger.warn("pki {} Failed to receive response", partitionKeyRangeId);
-                                }
+								response = client.executeStoredProcedure(bulkUpdateSprocLink, requestOptions, new Object[] { updateItemBatch, partitionKeyProperty,  null });
 
-                            } catch (DocumentClientException e) {
+								BulkUpdateStoredProcedureResponse bulkUpdateResponse = parseFrom(response);
 
-                                logger.debug("pki {} Updating minibatch failed", partitionKeyRangeId, e);
+								if (bulkUpdateResponse != null) {
+									if (bulkUpdateResponse.errorCode != 0) {
+										logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkUpdateResponse.errorCode);
+										if (bulkUpdateResponse.count == 0) {
+											throw new RuntimeException(
+													String.format("Stored proc returned failure %s", bulkUpdateResponse.errorCode));
+										}
+									}
 
-                                if (isThrottled(e)) {
-                                    logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
-                                    numberOfThrottles++;
-                                    isThrottled = true;
-                                    retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
-                                    // will retry again
+									double requestCharge = response.getRequestCharge();
+									currentUpdateItemIndex += bulkUpdateResponse.count;
+									numberOfDocumentsUpdated.addAndGet(bulkUpdateResponse.count);
+									requestUnitsCounsumed += requestCharge;
+									totalRequestUnitsConsumed.addAndGet(requestCharge);
+								}
+								else {
+									logger.warn("pki {} Failed to receive response", partitionKeyRangeId);
+								}
 
-                                } else if (isTimedOut(e)) {
-                                    logger.debug("pki {} Request timed out", partitionKeyRangeId);
-                                    timedOut = true;
-                                    // will retry again
+							} catch (DocumentClientException e) {
 
-                                } else if (isGone(e)) {
-                                    // there is no value in retrying
-                                    if (isSplit(e)) {
-                                        String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
-                                        logger.error(errorMessage);
-                                        throw new RuntimeException(errorMessage);
-                                    } else {
-                                        String errorMessage = String.format("pki %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
-                                        logger.error(errorMessage);
-                                        throw new RuntimeException(errorMessage);
-                                    }
+								logger.debug("pki {} Updating minibatch failed", partitionKeyRangeId, e);
 
-                                } else {
-                                    // there is no value in retrying
-                                    String errorMessage = String.format("pki %s failed to update mini-batch. Exception was %s. Status code was %s",
-                                            partitionKeyRangeId,
-                                            e.getMessage(),
-                                            e.getStatusCode());
-                                    logger.error(errorMessage, e);
-                                    throw new RuntimeException(e);
-                                }
+								if (isThrottled(e)) {
+									logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
+									numberOfThrottles++;
+									isThrottled = true;
+									retryAfter = Duration.ofMillis(e.getRetryAfterInMilliseconds());
+									// will retry again
 
-                            } catch (Exception e) {
-                                String errorMessage = String.format("pki %s Failed to update mini-batch. Exception was %s", partitionKeyRangeId,
-                                        e.getMessage());
-                                logger.error(errorMessage, e);
-                                throw new RuntimeException(errorMessage, e);
-                            }
+								} else if (isTimedOut(e)) {
+									logger.debug("pki {} Request timed out", partitionKeyRangeId);
+									timedOut = true;
+									// will retry again
 
-                            if (isThrottled) {
-                                try {
-                                    logger.debug("pki {} throttled going to sleep for {} millis ", partitionKeyRangeId, retryAfter.toMillis());
-                                    Thread.sleep(retryAfter.toMillis());
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
-                        }
+								} else if (isGone(e)) {
+									// there is no value in retrying
+									if (isSplit(e)) {
+										String errorMessage = String.format("pki %s is undergoing split, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+										logger.error(errorMessage);
+										throw new RuntimeException(errorMessage);
+									} else {
+										String errorMessage = String.format("pki %s is gone, please retry shortly after re-initializing BulkImporter object", partitionKeyRangeId);
+										logger.error(errorMessage);
+										throw new RuntimeException(errorMessage);
+									}
 
-                        logger.debug("pki {} completed", partitionKeyRangeId);
+								} else {
+									// there is no value in retrying
+									String errorMessage = String.format("pki %s failed to update mini-batch. Exception was %s. Status code was %s",
+											partitionKeyRangeId,
+											e.getMessage(),
+											e.getStatusCode());
+									logger.error(errorMessage, e);
+									throw new RuntimeException(e);
+								}
 
-                        stopwatch.stop();
-                        InsertMetrics insertMetrics = new InsertMetrics(currentUpdateItemIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
+							} catch (Exception e) {
+								String errorMessage = String.format("pki %s Failed to update mini-batch. Exception was %s", partitionKeyRangeId,
+										e.getMessage());
+								logger.error(errorMessage, e);
+								throw new RuntimeException(errorMessage, e);
+							}
 
-                        return insertMetrics;
-                    } catch (Exception e) {
-                        cancel = true;
-                        throw e;
-                    }
-                }
-            };
-        });
+							if (isThrottled) {
+								try {
+									logger.debug("pki {} throttled going to sleep for {} millis ", partitionKeyRangeId, retryAfter.toMillis());
+									Thread.sleep(retryAfter.toMillis());
+								} catch (InterruptedException e) {
+									throw new RuntimeException(e);
+								}
+							}
+						}
 
-        return stream.iterator();
-    }
+						logger.debug("pki {} completed", partitionKeyRangeId);
 
-    private BulkUpdateStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
-        String res = storedProcResponse.getResponseAsString();
-        logger.debug("MiniBatch Update for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
+						stopwatch.stop();
+						InsertMetrics insertMetrics = new InsertMetrics(currentUpdateItemIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
 
-        if (StringUtils.isEmpty(res))
-            return null;
+						return insertMetrics;
+					} catch (Exception e) {
+						cancel = true;
+						throw e;
+					}
+				}
+			};
+		});
 
-        return objectMapper.readValue(res, BulkUpdateStoredProcedureResponse.class);
-    }
+		return stream.iterator();
+	}
+
+	private BulkUpdateStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
+		String res = storedProcResponse.getResponseAsString();
+		logger.debug("MiniBatch Update for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
+
+		if (StringUtils.isEmpty(res))
+			return null;
+
+		return objectMapper.readValue(res, BulkUpdateStoredProcedureResponse.class);
+	}
 }

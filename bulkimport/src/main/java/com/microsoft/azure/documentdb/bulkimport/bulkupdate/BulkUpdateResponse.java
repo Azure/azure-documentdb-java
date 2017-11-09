@@ -27,64 +27,64 @@ import java.util.Collections;
 import java.util.List;
 
 public class BulkUpdateResponse {
-    /**
-     * Total number of documents updated.
-     */
-    final private int numberOfDocumentsUpdated;
+	/**
+	 * Total number of documents updated.
+	 */
+	final private int numberOfDocumentsUpdated;
 
-    /**
-     * Total request units consumed.
-     */
-    final private double totalRequestUnitsConsumed;
+	/**
+	 * Total request units consumed.
+	 */
+	final private double totalRequestUnitsConsumed;
 
-    /**
-     * Total bulk update time.
-     */
-    final private Duration totalTimeTaken;
+	/**
+	 * Total bulk update time.
+	 */
+	final private Duration totalTimeTaken;
 
-    /**
-     * Keeps failures which surfaced out during execution.
-     */
-    final private List<Exception> failures;
+	/**
+	 * Keeps failures which surfaced out during execution.
+	 */
+	final private List<Exception> failures;
 
-    public BulkUpdateResponse(int numberOfDocumentsUpdated, double totalRequestUnitsConsumed, Duration totalTimeTaken, List<Exception> failures) {
-        this.numberOfDocumentsUpdated = numberOfDocumentsUpdated;
-        this.totalRequestUnitsConsumed = totalRequestUnitsConsumed;
-        this.totalTimeTaken = totalTimeTaken;
-        this.failures = failures;
-    }
+	public BulkUpdateResponse(int numberOfDocumentsUpdated, double totalRequestUnitsConsumed, Duration totalTimeTaken, List<Exception> failures) {
+		this.numberOfDocumentsUpdated = numberOfDocumentsUpdated;
+		this.totalRequestUnitsConsumed = totalRequestUnitsConsumed;
+		this.totalTimeTaken = totalTimeTaken;
+		this.failures = failures;
+	}
 
-    /**
-     * Gets failure list if some documents failed to get updated.
-     *
-     * @return list of errors or empty list if no error.
-     */
-    public List<Exception> getErrors() {
-        return Collections.unmodifiableList(failures);
-    }
+	/**
+	 * Gets failure list if some documents failed to get updated.
+	 *
+	 * @return list of errors or empty list if no error.
+	 */
+	public List<Exception> getErrors() {
+		return Collections.unmodifiableList(failures);
+	}
 
-    /**
-     * Gets number of documents successfully updated.
-     *
-     * <p> If this number is less than actual batch size (meaning some documents failed to get updated),
-     * use {@link #getErrors()} to get the failure cause.
-     * @return the numberOfDocumentsUpdated
-     */
-    public int getNumberOfDocumentsUpdated() {
-        return numberOfDocumentsUpdated;
-    }
+	/**
+	 * Gets number of documents successfully updated.
+	 *
+	 * <p> If this number is less than actual batch size (meaning some documents failed to get updated),
+	 * use {@link #getErrors()} to get the failure cause.
+	 * @return the numberOfDocumentsUpdated
+	 */
+	public int getNumberOfDocumentsUpdated() {
+		return numberOfDocumentsUpdated;
+	}
 
-    /**
-     * @return the totalRequestUnitsConsumed
-     */
-    public double getTotalRequestUnitsConsumed() {
-        return totalRequestUnitsConsumed;
-    }
+	/**
+	 * @return the totalRequestUnitsConsumed
+	 */
+	public double getTotalRequestUnitsConsumed() {
+		return totalRequestUnitsConsumed;
+	}
 
-    /**
-     * @return the totalTimeTaken
-     */
-    public Duration getTotalTimeTaken() {
-        return totalTimeTaken;
-    }
+	/**
+	 * @return the totalTimeTaken
+	 */
+	public Duration getTotalTimeTaken() {
+		return totalTimeTaken;
+	}
 }

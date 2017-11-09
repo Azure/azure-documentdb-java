@@ -26,15 +26,15 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 class BulkUpdateStoredProcedureResponse {
 
-    /**
-     * Represents the bulk update progress index.
-     */
-    @JsonProperty("count")
-    public int count;
+	/**
+	 * Represents the bulk update progress index.
+	 */
+	@JsonProperty("count")
+	public int count;
 
-    /**
-     * Represents the specific error which occurred during bulk update execution.
-     */
-    @JsonProperty("errorCode")
-    public int errorCode;
+	/**
+	 * Represents the specific error which occurred during bulk update execution.
+	 */
+	@JsonProperty("errorCode")
+	public int errorCode;
 }
