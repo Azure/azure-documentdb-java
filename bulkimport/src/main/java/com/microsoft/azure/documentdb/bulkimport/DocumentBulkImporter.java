@@ -645,6 +645,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 				if ((currentMiniBatchIndex + 1 <= maxUpdateMiniBatchCount)) {
 					// add the update item to current batch
 					currentMiniBatch.add(currentUpdateItem);
+					currentMiniBatchIndex++;
 				} else {
 					// this batch has reached its max size
 					miniBatchesToUpdateByPartition.get(partitionRangeId).add(currentMiniBatch);

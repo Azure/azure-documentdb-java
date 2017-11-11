@@ -22,23 +22,9 @@
  */
 package com.microsoft.azure.documentdb.bulkimport.bulkupdate;
 
-public enum UpdateOperationType {
-    AddToSet,
-    Bit,
-    CurrentDate,
-    Inc,
-    Max,
-    Min,
-    Mul,
-    Pop,
-    Pull,
-    PullAll,
-    Push,
-    PushAll,
-    Rename,
-    Replace,
-    Set,
-    SetOnInsert,
-    Unset,
-    Remove,
+public final class RemoveUpdateOperation<TValue> extends UpdateOperation<TValue> {
+
+	public RemoveUpdateOperation(String field, TValue value) {
+		super(UpdateOperationType.Remove, field, value);
+	} 
 }

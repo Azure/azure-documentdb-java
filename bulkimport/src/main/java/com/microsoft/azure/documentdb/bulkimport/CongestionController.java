@@ -47,7 +47,7 @@ class CongestionController {
 	/**
 	 * The degree of concurrency to start at.
 	 */
-	private static final int STARTING_DEGREE_OF_CONCURRENCY = 3;
+	private static final int STARTING_DEGREE_OF_CONCURRENCY = 1;
 
 	/**
 	 * The maximum degree of concurrency to go upto for a single physical partition.

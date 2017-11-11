@@ -22,9 +22,15 @@
  */
 package com.microsoft.azure.documentdb.bulkimport.bulkupdate;
 
-public final class PushUpdateOperation extends UpdateOperation<Object[]> {
+import java.util.List;
+
+public final class PushUpdateOperation extends UpdateOperationWithModifier<Object[]> {
+
+	public PushUpdateOperation(String field, Object[] value, List<UpdateModifier> modifiers) {
+		super(UpdateOperationType.Push, field, value, modifiers);
+	}
 
 	public PushUpdateOperation(String field, Object[] value) {
-		super(UpdateOperationType.Push, field, value);
-	} 
+		this(field, value, null);
+	}
 }
