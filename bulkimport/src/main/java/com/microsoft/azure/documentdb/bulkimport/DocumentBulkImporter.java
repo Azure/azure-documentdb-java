@@ -50,6 +50,7 @@ import com.google.common.util.concurrent.Futures.FutureCombiner;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.DocumentCollection;
@@ -59,7 +60,9 @@ import com.microsoft.azure.documentdb.PartitionKeyRange;
 import com.microsoft.azure.documentdb.RetryOptions;
 import com.microsoft.azure.documentdb.bulkimport.bulkupdate.BatchUpdater;
 import com.microsoft.azure.documentdb.bulkimport.bulkupdate.BulkUpdateResponse;
+import com.microsoft.azure.documentdb.bulkimport.bulkupdate.SetUpdateOperation;
 import com.microsoft.azure.documentdb.bulkimport.bulkupdate.UpdateItem;
+import com.microsoft.azure.documentdb.bulkimport.bulkupdate.UpdateOperationBase;
 import com.microsoft.azure.documentdb.internal.HttpConstants;
 import com.microsoft.azure.documentdb.internal.routing.CollectionRoutingMap;
 import com.microsoft.azure.documentdb.internal.routing.InMemoryCollectionRoutingMap;
@@ -67,7 +70,7 @@ import com.microsoft.azure.documentdb.internal.routing.PartitionKeyInternal;
 import com.microsoft.azure.documentdb.internal.routing.Range;
 
 public class DocumentBulkImporter implements AutoCloseable {
-
+	
 	public static class Builder {
 
 		private DocumentClient client;
@@ -451,6 +454,10 @@ public class DocumentBulkImporter implements AutoCloseable {
 	public BulkUpdateResponse updateAll(Collection<UpdateItem> updateItems) throws DocumentClientException {
 		return executeBulkUpdateInternal(updateItems);
 	}
+	
+	public BulkUpdateResponse updateAllWithPatch(Collection<Document> patchDocuments) throws DocumentClientException {
+		return executeBulkUpdateWithPatchInternal(patchDocuments);
+	}
 
 	private BulkImportResponse executeBulkImportInternal(Collection<String> input,
 			boolean isUpsert) throws DocumentClientException {
@@ -477,6 +484,26 @@ public class DocumentBulkImporter implements AutoCloseable {
 		Preconditions.checkNotNull(updateItems, "update items cannot be null");
 		try {
 			return executeBulkUpdateAsyncImpl(updateItems).get();
+
+		} catch (ExecutionException e) {
+			logger.debug("Failed to update documents", e);
+			Throwable cause = e.getCause();
+			if (cause instanceof Exception) {
+				throw toDocumentClientException((Exception) cause);
+			} else {
+				throw toDocumentClientException(e);
+			}
+		} catch(Exception e) {
+			logger.error("Failed to update documents", e);
+			throw toDocumentClientException(e);
+		}
+	}
+	
+	private BulkUpdateResponse executeBulkUpdateWithPatchInternal(Collection<Document> patchDocuments)
+			throws DocumentClientException {
+		Preconditions.checkNotNull(patchDocuments, "patch documents cannot be null");
+		try {
+			return executeBulkUpdateWithPatchAsyncImpl(patchDocuments).get();
 
 		} catch (ExecutionException e) {
 			logger.debug("Failed to update documents", e);
@@ -723,6 +750,174 @@ public class DocumentBulkImporter implements AutoCloseable {
 		return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
 	}
 
+	private ListenableFuture<BulkUpdateResponse> executeBulkUpdateWithPatchAsyncImpl(Collection<Document> patchDocuments) {
+		Stopwatch watch = Stopwatch.createStarted();
+
+		logger.debug("Bucketing patch documents ...");
+
+		ConcurrentHashMap<String, Set<UpdateItem>> updateItemsByPartition = new ConcurrentHashMap<String, Set<UpdateItem>>();
+		ConcurrentHashMap<String, List<List<UpdateItem>>> miniBatchesToUpdateByPartition = new ConcurrentHashMap<String, List<List<UpdateItem>>>();
+
+		for (String partitionKeyRangeId: partitionKeyRangeIds) {
+			updateItemsByPartition.put(partitionKeyRangeId,  ConcurrentHashMap.newKeySet(patchDocuments.size() / partitionKeyRangeIds.size()));
+			miniBatchesToUpdateByPartition.put(partitionKeyRangeId, new ArrayList<List<UpdateItem>>(1000));
+		}
+
+		// Note: we handle only simple partition key path at the moment.
+		Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
+		String partitionKeyProperty = partitionKeyPath.iterator().next().replaceFirst("^/", "");
+		
+		patchDocuments.parallelStream().forEach(patchDocument -> {			
+			UpdateItem updateItem = getUpdateItemFromPatchDocument(patchDocument, partitionKeyProperty);
+			PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.fromPartitionKeyvalue(updateItem.getPartitionKeyValue());
+			String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
+			String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
+			updateItemsByPartition.get(partitionRangeId).add(updateItem);
+		});
+
+		logger.trace("Creating mini batches within each partition bucket");
+
+		updateItemsByPartition.entrySet().parallelStream().forEach(entry -> {
+
+			String partitionRangeId = entry.getKey();
+			Set<UpdateItem> updateItemsInPartition =  entry.getValue();
+
+			Iterator<UpdateItem> it = updateItemsInPartition.iterator();
+			ArrayList<UpdateItem> currentMiniBatch = new ArrayList<UpdateItem>(500);
+			int currentMiniBatchIndex = 0;
+
+			while (it.hasNext()) {
+				UpdateItem currentUpdateItem = it.next();
+
+				if ((currentMiniBatchIndex + 1 <= maxUpdateMiniBatchCount)) {
+					// add the update item to current batch
+					currentMiniBatch.add(currentUpdateItem);
+					currentMiniBatchIndex++;
+				} else {
+					// this batch has reached its max size
+					miniBatchesToUpdateByPartition.get(partitionRangeId).add(currentMiniBatch);
+					currentMiniBatch = new ArrayList<UpdateItem>(500);
+					currentMiniBatch.add(currentUpdateItem);
+					currentMiniBatchIndex = 1;
+				}
+			}
+
+			if (currentMiniBatch.size() > 0) {
+				// add mini batch
+				miniBatchesToUpdateByPartition.get(partitionRangeId).add(currentMiniBatch);
+			}
+		});
+
+		logger.debug("Beginning bulk update within each partition bucket");
+		Map<String, BatchUpdater> batchUpdaters = new HashMap<String, BatchUpdater>();
+		Map<String, CongestionController> congestionControllers = new HashMap<String, CongestionController>();
+
+		logger.debug("Preprocessing took: " + watch.elapsed().toMillis() + " millis");
+		List<ListenableFuture<Void>> futures = new ArrayList<>();
+
+		for (String partitionKeyRangeId: this.partitionKeyRangeIds) {
+
+			BatchUpdater batchUpdater = new BatchUpdater(
+					partitionKeyRangeId,
+					miniBatchesToUpdateByPartition.get(partitionKeyRangeId),
+					this.client,
+					bulkUpdateStoredProcLink,
+					partitionKeyProperty);
+			batchUpdaters.put(partitionKeyRangeId, batchUpdater);
+
+			CongestionController cc = new CongestionController(listeningExecutorService,
+					collectionThroughput / partitionKeyRangeIds.size(),
+					partitionKeyRangeId,
+					batchUpdater,
+					partitionKeyRangeIdToInferredDegreeOfParallelism.get(partitionKeyRangeId));
+
+			congestionControllers.put(partitionKeyRangeId,cc);
+
+			// starting
+			futures.add(cc.executeAllAsync());
+		}
+
+		FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
+		AsyncCallable<BulkUpdateResponse> completeAsyncCallback = new AsyncCallable<BulkUpdateResponse>() {
+
+			@Override
+			public ListenableFuture<BulkUpdateResponse> call() throws Exception {
+
+				List<Exception> failures = new ArrayList<>();
+
+				for(String partitionKeyRangeId: partitionKeyRangeIds) {
+					CongestionController cc = congestionControllers.get(partitionKeyRangeId);
+					failures.addAll(cc.getFailures());
+					partitionKeyRangeIdToInferredDegreeOfParallelism.put(partitionKeyRangeId, cc.getDegreeOfConcurrency());
+				}
+
+				int numberOfDocumentsImported = batchUpdaters.values().stream().mapToInt(b -> b.getNumberOfDocumentsUpdated()).sum();
+				double totalRequestUnitsConsumed = batchUpdaters.values().stream().mapToDouble(b -> b.getTotalRequestUnitsConsumed()).sum();
+
+				watch.stop();
+
+				BulkUpdateResponse bulkUpdateResponse = new
+						BulkUpdateResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed(), failures);
+
+				return Futures.immediateFuture(bulkUpdateResponse);
+			}
+		};
+
+		return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
+	}
+
+	public UpdateItem getUpdateItemFromPatchDocument(Document patchDocument, String partitionKeyProperty) {
+		
+		String idValue = null;
+		String pkValue = null;
+		List<UpdateOperationBase> updateOperations = new ArrayList<UpdateOperationBase>();
+				
+		HashMap<String, Object> patchDocumentMap = patchDocument.getHashMap();
+		
+		for (Map.Entry<String, Object> entry : patchDocumentMap.entrySet()) {
+			if (entry.getKey().matches("id")) {
+				idValue = (String)entry.getValue();
+			}
+			else if (entry.getKey().matches(partitionKeyProperty)) {
+				pkValue = (String)entry.getValue();
+			}
+			else {
+				updateOperations.addAll(getUpdateOperations("", entry.getKey(), entry.getValue()));
+			}
+		}
+		return new UpdateItem(idValue, pkValue, updateOperations);
+	}
+	
+	@SuppressWarnings("unchecked")
+	private List<UpdateOperationBase> getUpdateOperations(String propertyKeyPrefix, String propertyKey, Object propertyValue) {
+		
+		List<UpdateOperationBase> updateOperations = new ArrayList<UpdateOperationBase>();
+		String propertyKeyToSet = propertyKeyPrefix.matches("") ? propertyKey : propertyKeyPrefix+"."+propertyKey;
+		
+		if (propertyValue instanceof String) {
+			updateOperations.add(new SetUpdateOperation<String>(propertyKeyToSet, (String)propertyValue));
+		}
+		else if (propertyValue instanceof Integer) {
+			updateOperations.add(new SetUpdateOperation<Integer>(propertyKeyToSet, (Integer)propertyValue));
+		}
+		else if (propertyValue instanceof Double) {
+			updateOperations.add(new SetUpdateOperation<Double>(propertyKeyToSet, (Double)propertyValue));
+		}
+		else if (propertyValue instanceof Boolean) {
+			updateOperations.add(new SetUpdateOperation<Boolean>(propertyKeyToSet, (Boolean)propertyValue));
+		}
+		else if (propertyValue instanceof List) {
+			updateOperations.add(new SetUpdateOperation<List<Object>>(propertyKeyToSet, (List<Object>)propertyValue));
+		}
+		else if (propertyValue instanceof Map) {
+			HashMap<String, Object> propertyHashMap = (HashMap<String, Object>)propertyValue;
+			for (Map.Entry<String, Object> entry : propertyHashMap.entrySet()) {
+				updateOperations.addAll(getUpdateOperations(propertyKeyToSet, entry.getKey(), entry.getValue()));
+			}
+		}
+		return updateOperations;
+	}
+	
 	private DocumentClientException toDocumentClientException(Exception e) {
 		if (e instanceof DocumentClientException) {
 			return (DocumentClientException) e;
