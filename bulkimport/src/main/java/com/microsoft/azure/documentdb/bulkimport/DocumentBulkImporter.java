@@ -76,7 +76,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 		private DocumentClient client;
 		private String collectionLink;
 		private int maxMiniBatchSize = (int) Math.floor(MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE * FRACTION_OF_MAX_BULK_IMPORT_SCRIPT_INPUT_SIZE_ALLOWED);
-		private int maxUpdateMiniBatchCount = 10000;
+		private int maxUpdateMiniBatchCount = 500;
 		private final static int DEFAULT_RETRY_ATTEMPT_ON_THROTTLING_FOR_INIT = 200;
 		private final static int DEFAULT_WAIT_TIME_ON_THROTTLING_FOR_INIT_IN_SECONDS = 60;
 
@@ -866,7 +866,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 		return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
 	}
 
-	public UpdateItem getUpdateItemFromPatchDocument(Document patchDocument, String partitionKeyProperty) {
+	private UpdateItem getUpdateItemFromPatchDocument(Document patchDocument, String partitionKeyProperty) {
 		
 		String idValue = null;
 		String pkValue = null;
