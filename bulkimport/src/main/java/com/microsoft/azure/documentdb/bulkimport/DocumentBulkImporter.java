@@ -135,7 +135,7 @@ public class DocumentBulkImporter implements AutoCloseable {
 		 * use the given count to configure max update mini batch count.
 		 *
 		 * If not specified will use the default.
-		 * @param size specifies the count of update mini batch.
+		 * @param count specifies the count of update mini batch.
 		 * @return {@link Builder}
 		 */
 		public Builder withMaxUpdateMiniBatchCount(int count) {
