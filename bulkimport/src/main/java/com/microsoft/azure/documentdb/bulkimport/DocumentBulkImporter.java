@@ -455,8 +455,19 @@ public class DocumentBulkImporter implements AutoCloseable {
 		return executeBulkUpdateInternal(updateItems);
 	}
 	
+	/**
+	 * Executes a bulk update in the Azure Cosmos DB database service with given set of patch documents.
+	 * 
+	 * @param patchDocuments which are documents containing id, partition key and fields to set with corresponding values.
+	 * @return an instance of {@link BulkImportResponse}
+	 * @throws DocumentClientException if any failure happens
+	 */
 	public BulkUpdateResponse updateAllWithPatch(Collection<Document> patchDocuments) throws DocumentClientException {
 		return executeBulkUpdateWithPatchInternal(patchDocuments);
+	}
+	
+	public BulkUpdateResponse updateDocument(String partitionKey, String id, List<UpdateOperationBase> updateOperations) throws DocumentClientException {
+		return executeUpdateDocumentInternal(partitionKey, id, updateOperations);
 	}
 
 	private BulkImportResponse executeBulkImportInternal(Collection<String> input,
@@ -515,6 +526,28 @@ public class DocumentBulkImporter implements AutoCloseable {
 			}
 		} catch(Exception e) {
 			logger.error("Failed to update documents", e);
+			throw toDocumentClientException(e);
+		}
+	}
+	
+	private BulkUpdateResponse executeUpdateDocumentInternal(String partitionKey, String id, List<UpdateOperationBase> updateOperations)
+			throws DocumentClientException {
+		Preconditions.checkNotNull(partitionKey, "partitionKey cannot be null");
+		Preconditions.checkNotNull(id, "id cannot be null");
+		Preconditions.checkNotNull(updateOperations, "update operations cannot be null");
+		try {
+			return executeUpdateDocumentAsyncImpl(partitionKey, id, updateOperations).get();
+
+		} catch (ExecutionException e) {
+			logger.debug("Failed to update document", e);
+			Throwable cause = e.getCause();
+			if (cause instanceof Exception) {
+				throw toDocumentClientException((Exception) cause);
+			} else {
+				throw toDocumentClientException(e);
+			}
+		} catch(Exception e) {
+			logger.error("Failed to update document", e);
 			throw toDocumentClientException(e);
 		}
 	}
@@ -916,6 +949,64 @@ public class DocumentBulkImporter implements AutoCloseable {
 			}
 		}
 		return updateOperations;
+	}
+	
+	private ListenableFuture<BulkUpdateResponse> executeUpdateDocumentAsyncImpl(String partitionKey, String id, List<UpdateOperationBase> updateOperations) {
+
+		Stopwatch watch = Stopwatch.createStarted();
+		
+		PartitionKeyInternal partitionKeyValue = DocumentAnalyzer.fromPartitionKeyvalue(partitionKey);
+		String effectivePartitionKey = partitionKeyValue.getEffectivePartitionKeyString(partitionKeyDefinition, true);
+		String partitionRangeId = collectionRoutingMap.getRangeByEffectivePartitionKey(effectivePartitionKey).getId();
+		
+		List<List<UpdateItem>> miniBatchesToUpdate = new ArrayList<List<UpdateItem>>(1);
+		List<UpdateItem> currentMiniBatch = new ArrayList<UpdateItem>(1);
+		UpdateItem currentItem = new UpdateItem(id, partitionKey, updateOperations);
+		currentMiniBatch.add(currentItem);
+		miniBatchesToUpdate.add(currentMiniBatch);
+		
+		// Note: we handle only simple partition key path at the moment.
+		Collection<String> partitionKeyPath = partitionKeyDefinition.getPaths();
+		String partitionKeyProperty = partitionKeyPath.iterator().next().replaceFirst("^/", "");
+		
+		BatchUpdater batchUpdater = new BatchUpdater(
+				partitionRangeId,
+				miniBatchesToUpdate,
+				this.client,
+				bulkUpdateStoredProcLink,
+				partitionKeyProperty);
+		
+		CongestionController cc = new CongestionController(listeningExecutorService,
+				collectionThroughput / partitionKeyRangeIds.size(),
+				partitionRangeId,
+				batchUpdater,
+				null);
+		
+		List<ListenableFuture<Void>> futures = new ArrayList<>();
+		futures.add(cc.executeAllAsync());
+		
+		FutureCombiner<Void> futureContainer = Futures.whenAllComplete(futures);
+		AsyncCallable<BulkUpdateResponse> completeAsyncCallback = new AsyncCallable<BulkUpdateResponse>() {
+
+			@Override
+			public ListenableFuture<BulkUpdateResponse> call() throws Exception {
+
+				List<Exception> failures = new ArrayList<>();
+				failures.addAll(cc.getFailures());			
+
+				int numberOfDocumentsImported = batchUpdater.getNumberOfDocumentsUpdated();
+				double totalRequestUnitsConsumed = batchUpdater.getTotalRequestUnitsConsumed();
+
+				watch.stop();
+
+				BulkUpdateResponse bulkUpdateResponse = new
+						BulkUpdateResponse(numberOfDocumentsImported, totalRequestUnitsConsumed, watch.elapsed(), failures);
+
+				return Futures.immediateFuture(bulkUpdateResponse);
+			}
+		};
+
+		return futureContainer.callAsync(completeAsyncCallback, listeningExecutorService);
 	}
 	
 	private DocumentClientException toDocumentClientException(Exception e) {
