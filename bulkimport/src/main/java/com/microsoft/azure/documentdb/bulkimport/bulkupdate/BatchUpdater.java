@@ -20,7 +20,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.microsoft.azure.documentdb.bulkimport;
+package com.microsoft.azure.documentdb.bulkimport.bulkupdate;
 
 import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isGone;
 import static com.microsoft.azure.documentdb.bulkimport.ExceptionUtils.isSplit;
@@ -41,54 +41,57 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.AtomicDouble;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
 import com.microsoft.azure.documentdb.RequestOptions;
 import com.microsoft.azure.documentdb.StoredProcedureResponse;
+import com.microsoft.azure.documentdb.bulkimport.BatchOperator;
+import com.microsoft.azure.documentdb.bulkimport.InsertMetrics;
 
-class BatchInserter extends BatchOperator {
+public class BatchUpdater extends BatchOperator {
 
 	/**
-	 *  The count of documents bulk inserted by this batch inserter.
+	 *  The count of documents bulk updated by this batch updater.
 	 */
-	public AtomicInteger numberOfDocumentsImported;
+	public AtomicInteger numberOfDocumentsUpdated;
 
 	/**
-	 * The total request units consumed by this batch inserter.
+	 * The total request units consumed by this batch updater.
 	 */
 	public AtomicDouble totalRequestUnitsConsumed;
 
 	/**
-	 * The list of mini-batches this batch inserter is responsible to import.
+	 * The list of mini-batches this batch updater is responsible to updates.
 	 */
-	private final List<List<String>> batchesToInsert;
+	private final List<List<UpdateItem>> batchesToUpdate;
 
 	/**
-	 * The link to the system bulk import stored procedure.
+	 * The link to the system bulk update stored procedure.
 	 */
-	private final String bulkImportSprocLink;
+	private final String bulkUpdateSprocLink;
 
 	/**
-	 *  The options passed to the system bulk import stored procedure.
+	 * The partition key property.
 	 */
-	private final BulkImportStoredProcedureOptions storedProcOptions;
+	private final String partitionKeyProperty;
 
 	/**
 	 * The logger instance.
 	 */
-	private final Logger logger = LoggerFactory.getLogger(BatchInserter.class);
+	private final Logger logger = LoggerFactory.getLogger(BatchUpdater.class);
 
-	public BatchInserter(String partitionKeyRangeId, List<List<String>> batchesToInsert, DocumentClient client, String bulkImportSprocLink,
-			BulkImportStoredProcedureOptions options) {
+	public BatchUpdater(String partitionKeyRangeId, List<List<UpdateItem>> batchesToUpdate, DocumentClient client,
+			String bulkUpdateSprocLink, String partitionKeyProperty) {
 
 		this.partitionKeyRangeId = partitionKeyRangeId;
-		this.batchesToInsert = batchesToInsert;
+		this.batchesToUpdate = batchesToUpdate;
 		this.client = client;
-		this.bulkImportSprocLink = bulkImportSprocLink;
-		this.storedProcOptions = options;
-		this.numberOfDocumentsImported = new AtomicInteger();
+		this.bulkUpdateSprocLink = bulkUpdateSprocLink;
+		this.partitionKeyProperty = partitionKeyProperty;
+		this.numberOfDocumentsUpdated = new AtomicInteger();
 		this.totalRequestUnitsConsumed = new AtomicDouble();
 
 		class RequestOptionsInternal extends RequestOptions {
@@ -100,8 +103,8 @@ class BatchInserter extends BatchOperator {
 		this.requestOptions = new RequestOptionsInternal(partitionKeyRangeId);
 	}
 
-	public int getNumberOfDocumentsImported() {
-		return numberOfDocumentsImported.get();
+	public int getNumberOfDocumentsUpdated() {
+		return numberOfDocumentsUpdated.get();
 	}
 
 	public double getTotalRequestUnitsConsumed() {
@@ -110,63 +113,50 @@ class BatchInserter extends BatchOperator {
 
 	public Iterator<Callable<InsertMetrics>> miniBatchExecutionCallableIterator() {
 
-		Stream<Callable<InsertMetrics>> stream = batchesToInsert.stream().map(miniBatch -> {
+		Stream<Callable<InsertMetrics>> stream = batchesToUpdate.stream().map(miniBatch -> {
 			return new Callable<InsertMetrics>() {
 
 				@Override
 				public InsertMetrics call() throws Exception {
 
 					try {
-						logger.debug("pki {} importing mini batch started", partitionKeyRangeId);
+						logger.debug("pki {} updating mini batch started", partitionKeyRangeId);
 						Stopwatch stopwatch = Stopwatch.createStarted();
 						double requestUnitsCounsumed = 0;
 						int numberOfThrottles = 0;
 						StoredProcedureResponse response;
 						boolean timedOut = false;
 
-						int currentDocumentIndex = 0;
+						int currentUpdateItemIndex = 0;
 
-						while (currentDocumentIndex < miniBatch.size() && !cancel) {
-							logger.debug("pki {} inside for loop, currentDocumentIndex", partitionKeyRangeId, currentDocumentIndex);
+						while (currentUpdateItemIndex < miniBatch.size() && !cancel) {
+							logger.debug("pki {} inside for loop, currentUpdateItemIndex", partitionKeyRangeId, currentUpdateItemIndex);
 
-							String[] docBatch = miniBatch.subList(currentDocumentIndex, miniBatch.size()).toArray(new String[0]);
+							List<UpdateItem> updateItemBatch = miniBatch.subList(currentUpdateItemIndex, miniBatch.size());
 
 							boolean isThrottled = false;
 							Duration retryAfter = Duration.ZERO;
 
 							try {
 
-								logger.debug("pki {}, Trying to import minibatch of {} documenents", partitionKeyRangeId, docBatch.length);
+								logger.debug("pki {}, Trying to update minibatch of {} update items", partitionKeyRangeId, updateItemBatch.size());
 
-								if (!timedOut) {
-									response = client.executeStoredProcedure(bulkImportSprocLink, requestOptions, new Object[] { docBatch, storedProcOptions,  null });
-								} else {
-									BulkImportStoredProcedureOptions modifiedStoredProcOptions = new BulkImportStoredProcedureOptions(
-											storedProcOptions.disableAutomaticIdGeneration,
-											storedProcOptions.softStopOnConflict,
-											storedProcOptions.systemCollectionId,
-											storedProcOptions.enableBsonSchema,
-											true);
+								response = client.executeStoredProcedure(bulkUpdateSprocLink, requestOptions, new Object[] { updateItemBatch, partitionKeyProperty,  null });
 
-									response = client.executeStoredProcedure(
-											bulkImportSprocLink, requestOptions,
-											new Object[] { docBatch, modifiedStoredProcOptions, null });
-								}
+								BulkUpdateStoredProcedureResponse bulkUpdateResponse = parseFrom(response);
 
-								BulkImportStoredProcedureResponse bulkImportResponse = parseFrom(response);
-
-								if (bulkImportResponse != null) {
-									if (bulkImportResponse.errorCode != 0) {
-										logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkImportResponse.errorCode);
-										if (bulkImportResponse.count == 0) {
+								if (bulkUpdateResponse != null) {
+									if (bulkUpdateResponse.errorCode != 0) {
+										logger.warn("pki {} Received response error code {}", partitionKeyRangeId, bulkUpdateResponse.errorCode);
+										if (bulkUpdateResponse.count == 0) {
 											throw new RuntimeException(
-													String.format("Stored proc returned failure %s", bulkImportResponse.errorCode));
+													String.format("Stored proc returned failure %s", bulkUpdateResponse.errorCode));
 										}
 									}
 
 									double requestCharge = response.getRequestCharge();
-									currentDocumentIndex += bulkImportResponse.count;
-									numberOfDocumentsImported.addAndGet(bulkImportResponse.count);
+									currentUpdateItemIndex += bulkUpdateResponse.count;
+									numberOfDocumentsUpdated.addAndGet(bulkUpdateResponse.count);
 									requestUnitsCounsumed += requestCharge;
 									totalRequestUnitsConsumed.addAndGet(requestCharge);
 								}
@@ -176,7 +166,7 @@ class BatchInserter extends BatchOperator {
 
 							} catch (DocumentClientException e) {
 
-								logger.debug("pki {} Importing minibatch failed", partitionKeyRangeId, e);
+								logger.debug("pki {} Updating minibatch failed", partitionKeyRangeId, e);
 
 								if (isThrottled(e)) {
 									logger.debug("pki {} Throttled on partition range id", partitionKeyRangeId);
@@ -204,7 +194,7 @@ class BatchInserter extends BatchOperator {
 
 								} else {
 									// there is no value in retrying
-									String errorMessage = String.format("pki %s failed to import mini-batch. Exception was %s. Status code was %s",
+									String errorMessage = String.format("pki %s failed to update mini-batch. Exception was %s. Status code was %s",
 											partitionKeyRangeId,
 											e.getMessage(),
 											e.getStatusCode());
@@ -213,7 +203,7 @@ class BatchInserter extends BatchOperator {
 								}
 
 							} catch (Exception e) {
-								String errorMessage = String.format("pki %s Failed to import mini-batch. Exception was %s", partitionKeyRangeId,
+								String errorMessage = String.format("pki %s Failed to update mini-batch. Exception was %s", partitionKeyRangeId,
 										e.getMessage());
 								logger.error(errorMessage, e);
 								throw new RuntimeException(errorMessage, e);
@@ -232,7 +222,7 @@ class BatchInserter extends BatchOperator {
 						logger.debug("pki {} completed", partitionKeyRangeId);
 
 						stopwatch.stop();
-						InsertMetrics insertMetrics = new InsertMetrics(currentDocumentIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
+						InsertMetrics insertMetrics = new InsertMetrics(currentUpdateItemIndex, stopwatch.elapsed(), requestUnitsCounsumed, numberOfThrottles);
 
 						return insertMetrics;
 					} catch (Exception e) {
@@ -246,13 +236,13 @@ class BatchInserter extends BatchOperator {
 		return stream.iterator();
 	}
 
-	private BulkImportStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
+	private BulkUpdateStoredProcedureResponse parseFrom(StoredProcedureResponse storedProcResponse) throws JsonParseException, JsonMappingException, IOException {
 		String res = storedProcResponse.getResponseAsString();
-		logger.debug("MiniBatch Insertion for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
+		logger.debug("MiniBatch Update for Partition Key Range Id {}: Stored Proc Response as String {}", partitionKeyRangeId, res);
 
 		if (StringUtils.isEmpty(res))
 			return null;
 
-		return objectMapper.readValue(res, BulkImportStoredProcedureResponse.class);
+		return objectMapper.readValue(res, BulkUpdateStoredProcedureResponse.class);
 	}
 }

@@ -84,7 +84,7 @@ public class CongestionControllerTests {
         String paritionKeyRangeId = "0";
         BatchInserter bi = new BatchInserter(paritionKeyRangeId, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);
@@ -153,7 +153,7 @@ public class CongestionControllerTests {
         String paritionKeyRangeId = "0";
         BatchInserter bi = new BatchInserter(paritionKeyRangeId, batchesToInsert, client, bulkImportSproc, options);
 
-        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchInsertExecutionCallableIterator();
+        Iterator<Callable<InsertMetrics>> callbackIterator = bi.miniBatchExecutionCallableIterator();
 
         List<Callable<InsertMetrics>> list = new ArrayList<>();
         Iterators.addAll(list, callbackIterator);

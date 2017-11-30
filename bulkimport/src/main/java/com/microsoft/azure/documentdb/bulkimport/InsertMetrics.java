@@ -26,7 +26,8 @@ import java.time.Duration;
 
 import com.google.common.base.Preconditions;
 
-class InsertMetrics {
+// TODO: Rename to OperationMetrics and rename 'numberOfDocumentsInserted' to 'numberOfDocumentsOperated'
+public class InsertMetrics {
 
     final long numberOfDocumentsInserted;
     final Duration timeTaken;
@@ -60,8 +61,8 @@ class InsertMetrics {
 
     /**
      * Sums two {@link InsertMetrics} instances
-     * @param m1
-     * @param m2
+     * @param m1 The first {@link InsertMetrics} instance
+     * @param m2 The second {@link InsertMetrics} instance
      * @return the sum aggregate result
      */
     public static InsertMetrics sum(InsertMetrics m1, InsertMetrics m2) {
