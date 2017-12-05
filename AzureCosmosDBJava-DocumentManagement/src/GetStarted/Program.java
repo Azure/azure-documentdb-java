@@ -60,8 +60,11 @@ public class Program
         this.createExampleDocumentIfNotExists("ExampleDB", "ExampleCollection", WorldWideSchool);
 
         this.executeSimpleQuery("ExampleDB", "ExampleCollection");
+        
+        this.replaceExampleDocument("ExampleDB", "ExampleCollection", "Hyderabad", WorldWideSchool);
 
-        this.client.deleteDatabase("/dbs/ExampleDB", null);
+        //this.client.deleteDatabase("/dbs/ExampleDB", null);
+        
     }
 
     private School getInternationalSchoolDocument() {
@@ -103,10 +106,12 @@ public class Program
         School WorldWideSchool = new School();
         WorldWideSchool.setId("Pandu Public School");
         WorldWideSchool.setLastName("Pandu");
+        WorldWideSchool.setDistrict("Rangareddy");
 
         Teacher teacher1 = new Teacher();
         teacher1.setLastName("Yakkali");
         teacher1.setFirstName("Madhavi");
+        
 
         Teacher teacher2 = new Teacher();
         teacher2.setLastName("Yakkali");
@@ -252,20 +257,23 @@ public class Program
     }
 
     @SuppressWarnings("unused")
-    private void replaceFamilyDocument(String databaseName, String collectionName, String LastName, School updatedSchool)
+    private void replaceExampleDocument(String databaseName, String collectionName, String lastName, School updatedSchool)
             throws IOException, DocumentClientException {
         try {
+        	updatedSchool.setLastName("Mavuri");
             this.client.replaceDocument(
                     String.format("/dbs/%s/colls/%s/docs/%s", databaseName, collectionName, updatedSchool.getId()), updatedSchool,
                     null);
             writeToConsoleAndPromptToContinue(String.format("Replaced School %s", updatedSchool.getId()));
+            writeToConsoleAndPromptToContinue(String.format("Replaced %s", updatedSchool.getLastName()));
         } catch (DocumentClientException de) {
             throw de;
         }
     }
 
+
     @SuppressWarnings("unused")
-    private void deleteFamilyDocument(String databaseName, String collectionName, String documentName) throws IOException,
+    private void deleteExampleDocument(String databaseName, String collectionName, String documentName) throws IOException,
             DocumentClientException {
         try {
             this.client.deleteDocument(String.format("/dbs/%s/colls/%s/docs/%s", databaseName, collectionName, documentName), null);
