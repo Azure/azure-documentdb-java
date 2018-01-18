@@ -25,6 +25,28 @@ To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK a
 ### Dependencies
 Dependencies will be added automatically if Maven is used. Otherwise, please download the dependencies from the pom.xml file and add them to your build path. 
 
+## Samples
+We have some samples in form of small executable unit tests in [documentdb-examples](https://github.com/Azure/azure-documentdb-java/tree/master/documentdb-examples/src/test/java/com/microsoft/azure/documentdb/examples) sub project.
+
+
+### How To Run Samples
+#### Eclipse
+You can use Eclipse to load documentdb-examples (You can load the parent project and eclipse will load documentdb-examples sub project).
+The src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java uses Azure Cosmos DB Emulator. If you want to run this against your prod Azure Cosmos DB endpoint modify the file.
+Now you can run the samples as junit tests in Eclipse.
+
+#### Command line
+The other way of running this is through maven. Just put your prod endpoint in AccountCredentials.java and run the following command:
+
+git clone https://github.com/Azure/azure-documentdb-java.git
+cd azure-documentdb-java
+
+Then modify the endpoint in documentdb-examples/src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java
+
+Now run maven:
+mvn clean package
+
+
 ## Usage
 
 To use this SDK to call Azure DocumentDB, you need to first [create an account](http://azure.microsoft.com/en-us/documentation/articles/documentdb-create-account/).
