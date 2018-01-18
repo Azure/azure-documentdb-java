@@ -40,18 +40,18 @@ You can run the samples either using Eclipse or from Command Line using Maven:
 
 * Load the main parent project pom file in Eclipse (That should automatically load documentdb-examples).
 * For running the samples you need a proper Azure Cosmos DB Endpoint. The endpoints are picked up from [src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java](https://github.com/Azure/azure-documentdb-java/blob/master/documentdb-examples/src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java). 
-** You can pass your endpoint credentials as VM Arguments in Eclipse JUnit Run Config:
+* You can pass your endpoint credentials as VM Arguments in Eclipse JUnit Run Config:
+```bash
  -DACCOUNT_HOST="https://REPLACE_ME.documents.azure.com:443/" -DACCOUNT_KEY="REPLACE_ME"
-** or you can simply put your endpoint credentials in AccountCredentials.java
+ ```
+* or you can simply put your endpoint credentials in AccountCredentials.java
 * Now you can run the samples as JUnit tests in Eclipse.
 
 ### Command line
 
 The other way for running samples is to use maven:
 
-* Replace Emulator's endpoint in [src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java](https://github.com/Azure/azure-documentdb-java/blob/master/documentdb-examples/src/test/java/com/microsoft/azure/documentdb/examples/AccountCredentials.java) with your own Azure Cosmos DB Prod Endpoint.
-
-* Now Run Maven:
+* Run Maven and pass your Azure Cosmos DB Endpoint credentials:
 ```bash
 mvn test -DACCOUNT_HOST="https://REPLACE_ME_WITH_YOURS.documents.azure.com:443/" -DACCOUNT_KEY="REPLACE_ME_WITH_YOURS"
 ```
