@@ -22,7 +22,6 @@
 				<configuration>
 					<includes>
 						<include>**/*Test*.java</include>
-						<include>**/*Samples*.java</include>
 						<include>**/*Sample*.java</include>
 					</includes>
 				</configuration>
