@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.equalTo;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.UUID;
 
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.After;
@@ -52,7 +53,7 @@ import com.microsoft.azure.documentdb.RequestOptions;
 public class DocumentQuerySamples
 {
     private final String databaseId = "exampleDB";
-    private final String collectionId = "testCollection";
+    private final String collectionId = UUID.randomUUID().toString();
     private final String partitionKeyFieldName = "city";
     private final String partitionKeyPath = "/" + partitionKeyFieldName;
     private final String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
