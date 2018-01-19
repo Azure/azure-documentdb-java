@@ -44,7 +44,7 @@
 		<dependency>
 			<groupId>com.microsoft.azure</groupId>
 			<artifactId>azure-documentdb</artifactId>
-			<version>1.15.0</version>
+			<version>LATEST</version>
 		</dependency>
 		<dependency>
 			<groupId>org.hamcrest</groupId>

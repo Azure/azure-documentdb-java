@@ -15,7 +15,7 @@ To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK a
     <dependency>
     	<groupId>com.microsoft.azure</groupId>
     	<artifactId>azure-documentdb</artifactId>
-    	<version>1.15.0</version>
+    	<version>LATEST</version>
     </dependency>
 
 ## Minimum Requirements
