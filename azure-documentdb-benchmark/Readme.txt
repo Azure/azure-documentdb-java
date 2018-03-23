@@ -10,4 +10,4 @@ Then you can run the tool from command line to insert documents to an existing d
 sample invocation:
 java -jar target/azure-documentdb-benchmark-0.0.1-SNAPSHOT-jar-with-dependencies.jar -serviceEndpoint "YOUR-ACCOUNT-ENDPOINT" -masterKey "YOUR-MASTER-KEY" -databaseId mydb -collectionId mycol -numberOfDocumentsToInsert 400000 -maxConnectionPoolSize 1000 -partitionKey 'mypk'
  
-Just note if you want the insert benchmark reaches its max without throttling failure you should provision a collection with a large throughput otherwise your inserts will be throttled from server side.
+Note: If you want the document insert benchmark to reach its max throughput without throttling failures, you should provision a collection with a large throughput. Otherwise your inserts will be throttled from the server side.
