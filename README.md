@@ -1,4 +1,4 @@
-# Microsoft Azure Cosmos DB Java SDK
+# Microsoft Azure Cosmos DB Sync Java SDK
 
 ![](https://img.shields.io/maven-central/v/com.microsoft.azure/azure-documentdb.svg)
 ![](https://img.shields.io/github/issues/azure/azure-documentdb-java.svg)
