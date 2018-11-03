@@ -476,6 +476,8 @@ public class SimpleTests {
 
         reporter.report();
         reporter.close();
-        client.close();
+        if (client != null) {
+            client.close();
+        }
     }
 }
