@@ -1,3 +1,5 @@
+## Please refer Microsoft doc [here](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-api-sdk-java) for updated changelog ##
+
 ## Changes in 1.13.0 : ##
 
 - Fixed an issue in reading single partition key ranges
