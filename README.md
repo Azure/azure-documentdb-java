@@ -18,6 +18,10 @@ To get the binaries of the latest official Microsoft Azure DocumentDB Java SDK a
     	<version>LATEST</version>
     </dependency>
 
+
+## Note
+Version 2.4.4 have an important fix for the scenario where the SDK doesn't entertain partition split hint from server and results in incorrect client side routing caches refresh. 
+
 ## Minimum Requirements
 * Java Development Kit 7
 * (Optional) Maven
