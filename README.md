@@ -5,8 +5,12 @@
 
 This project provides a client tools or utilities in Java that makes it easy to interact with Azure CosmosDB. For documentation please see the Microsoft Azure [Java Developer Center](http://azure.microsoft.com/en-us/develop/java/) and the [JavaDocs](http://dl.windowsazure.com/documentdb/javadoc).
 
+## Note - Microsoft Azure Cosmos DB Java V4 SDK is GA now.
+Please try out our new Java V4 SDK which has support for both synchronous and asynchronous APIs - [V4 SDK](https://github.com/Azure/azure-sdk-for-java/tree/main/sdk/cosmos/azure-cosmos)
+
+
 ## Disclaimer
-The implementation in this project is intended for reference purpose only. 
+The implementation in this project is intended for reference purpose only.
 
 ## Consuming the official Microsoft Azure DocumentDB Java SDK
 
