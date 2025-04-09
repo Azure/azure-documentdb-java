@@ -191,19 +191,10 @@ public class DocumentQuerySamples
                 // Edit: _rid ordering guarantee doesn't hold across pages leading to missing records
                 // No in-built way to detect last processed document in the v2 SDK like OFFSET
 
-                if (currentPkRangeId == null) {
-                    System.out.println("currentPkRangeId is null");
-                    docs.add(doc);
-
-                    lastResourceId = doc.getResourceId();
-                    lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
-
-                    remainingPageSize.decrementAndGet();
-                }
-                else if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
+                if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
                     || skipDocumentsIncludingResourceId == null
-                    //|| uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())
-                    || doc.getResourceId().compareTo(skipDocumentsIncludingResourceId) > 0) {
+                    || uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())
+                    /*|| doc.getResourceId().compareTo(skipDocumentsIncludingResourceId*) > 0*/) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
@@ -222,6 +213,10 @@ public class DocumentQuerySamples
                     lastResourceId = doc.getResourceId();
                     lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
                 } else {
+
+                    // If relied on _rid ordering, unprocessed documents also get skipped as _rid ordering is not guaranteed
+                    // docs.add(doc);
+
                     System.out.println(
                         "Skipping doc " + doc.getId() + "("
                             + currentPkRangeId + "|" + doc.getResourceId()
