@@ -23,53 +23,41 @@
 
 package com.microsoft.azure.documentdb.examples;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 import com.microsoft.azure.documentdb.ConnectionMode;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.internal.GatewayProxy;
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.microsoft.azure.documentdb.DataType;
-import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.IncludedPath;
-import com.microsoft.azure.documentdb.Index;
-import com.microsoft.azure.documentdb.IndexingPolicy;
-import com.microsoft.azure.documentdb.PartitionKeyDefinition;
-import com.microsoft.azure.documentdb.RequestOptions;
 
 
 public class DocumentQuerySamples
 {
     private final String databaseId = "CRI";
     private final String collectionId = "AdobeQuery";
-    private final String partitionKeyFieldName = "id";
-    private final String partitionKeyPath = "/" + partitionKeyFieldName;
     private final String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
 
     private DocumentClient client;
@@ -79,7 +67,7 @@ public class DocumentQuerySamples
         // create client
         ConnectionPolicy policy = new ConnectionPolicy();
         policy.setConnectionMode(ConnectionMode.Gateway);
-        client = new DocumentClient(AccountCredentials.HOST, AccountCredentials.MASTER_KEY, policy, null);
+        client = new DocumentClient(AccountCredentialsNew.HOST, AccountCredentialsNew.MASTER_KEY, policy, null);
 
         // removes the database "exampleDB" (if exists)
         //deleteDatabase();
@@ -143,7 +131,10 @@ public class DocumentQuerySamples
     private Page queryCosmosWithPagination(
         String whereClause,
         String ct, // Format: <CosmosContinuation>|PKRangeIdOfLastDocOnPreviousPage|_rid-OfLastDocOnPreviousPage
-        int pageSize) {
+        int pageSize,
+        ConcurrentHashMap<String, Set<String>> uniqueResourceIds) /* 33 */ {
+
+        System.out.println("------------Inside queryCosmosWithPagination-----------");
 
         List<Document> docs = new ArrayList<>();
         final AtomicInteger remainingPageSize = new AtomicInteger(pageSize);
@@ -176,31 +167,46 @@ public class DocumentQuerySamples
         while (remainingPageSize.get() > 0) {
             if (docIterator.hasNext()) {
                 String activityId = queryResults.getActivityId();
+                String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
+                Document doc = docIterator.next();
+
                 // If activityId changed it means we are on the first document of a new page
                 // If so, updating the continuations and logging ActivityId and headers
-                if (activityId != previousActivityId) {
+                if (!Objects.equals(activityId, previousActivityId)) {
                     previousActivityId = activityId;
                     System.out.println("New FeedResponse ActivityId " + activityId);
                     currentPageContinuation = nextPageContinuation;
                     nextPageContinuation = queryResults.getResponseContinuation();
-                    System.out.println("New FeedResponse Continuation " + currentPageContinuation);
-                    System.out.println("New FeedResponse CurrentContinuation " + nextPageContinuation);
+                    System.out.println("New FeedResponse Continuation " + nextPageContinuation);
+                    System.out.println("New FeedResponse CurrentContinuation " + currentPageContinuation);
                     System.out.println("New FeedResponse Headers " + queryResults.getResponseHeaders());
                     System.out.println("-------------");
                 }
 
-                Document doc = docIterator.next();
-                String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
-
                 // If we are still on the same PKRangeId from which documents were served
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
+
+                // Edit: _rid ordering guarantee doesn't hold across pages leading to missing records
+                // No in-built way to detect last processed document in the v2 SDK like OFFSET
                 if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
                     || skipDocumentsIncludingResourceId == null
-                    || skipDocumentsIncludingResourceId.compareTo(doc.getResourceId()) < 0) {
+                    || uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
+
+                    uniqueResourceIds.compute(currentPkRangeId, (k, v) -> {
+
+                        if (v == null) {
+                            v = new HashSet<>();
+                        }
+
+                        v.add(doc.getResourceId());
+
+                        return v;
+                    });
+
                     lastResourceId = doc.getResourceId();
                     lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
                 } else {
@@ -208,6 +214,7 @@ public class DocumentQuerySamples
                         "Skipping doc " + doc.getId() + "("
                             + currentPkRangeId + "|" + doc.getResourceId()
                             + ") because it was returned on previous page already");
+
                 }
             } else {
                 // Query has been fully drained - just return the docs collected so far
@@ -224,11 +231,15 @@ public class DocumentQuerySamples
             + "|"
             + lastResourceIdPkRangeId;
 
+
+        System.out.println("------------Exit queryCosmosWithPagination-----------");
+
+
         return new Page(docs, returnContinuation);
     }
 
     @Test
-    public void simpleDocumentQuery() throws DocumentClientException {
+    public void simpleDocumentQuery() {
 
         applyCorrelatedActivityIdViaReflection(UUID.randomUUID().toString());
         String ct = null;
@@ -237,18 +248,25 @@ public class DocumentQuerySamples
         int totalCount = 0;
         Set<String> uniqueDocCount = new java.util.HashSet<>();
 
+        // WARNING: Can grow in an unbounded manner
+        ConcurrentHashMap<String, Set<String>> uniqueResourceIds = new ConcurrentHashMap<>();
+
         do {
-            Page page = queryCosmosWithPagination(whereClause, ct, 33);
+
+            Page page = queryCosmosWithPagination(whereClause, ct, 20, uniqueResourceIds);
             System.out.println("CONTINUATION: " + page.getContinuation());
             System.out.println(page.getDocs().size() + " docs");
             totalCount += page.getDocs().size();
             for (Document doc : page.getDocs()) {
-                System.out.println("  - " + doc.getId());
+                System.out.println("  - " + "(" + doc.getId() + ", " + doc.getResourceId() + ")");
                 uniqueDocCount.add(doc.getId());
             }
 
             ct = page.getContinuation();
+            System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
         } while (ct != null );
+
+        uniqueResourceIds.clear();
 
         System.out.println("TOTAL DOC COUNT: " + totalCount);
         System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
