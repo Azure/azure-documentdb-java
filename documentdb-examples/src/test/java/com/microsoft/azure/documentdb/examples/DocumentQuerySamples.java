@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -67,7 +68,7 @@ public class DocumentQuerySamples
 {
     private final String databaseId = "CRI";
     private final String collectionId = "AdobeQuery";
-    private final String partitionKeyFieldName = "city";
+    private final String partitionKeyFieldName = "id";
     private final String partitionKeyPath = "/" + partitionKeyFieldName;
     private final String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
 
@@ -231,21 +232,26 @@ public class DocumentQuerySamples
 
         applyCorrelatedActivityIdViaReflection(UUID.randomUUID().toString());
         String ct = null;
+        String whereClause = "c.expectedProcessTime >= '2019-06-01T00:00' AND c.expectedProcessTime <= '2039-06-01T00:00'";
 
         int totalCount = 0;
+        Set<String> uniqueDocCount = new java.util.HashSet<>();
+
         do {
-            Page page = queryCosmosWithPagination(null, ct, 2);
+            Page page = queryCosmosWithPagination(whereClause, ct, 33);
             System.out.println("CONTINUATION: " + page.getContinuation());
             System.out.println(page.getDocs().size() + " docs");
             totalCount += page.getDocs().size();
             for (Document doc : page.getDocs()) {
                 System.out.println("  - " + doc.getId());
+                uniqueDocCount.add(doc.getId());
             }
 
             ct = page.getContinuation();
         } while (ct != null );
 
         System.out.println("TOTAL DOC COUNT: " + totalCount);
+        System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
     }
 
     private static class Page {
