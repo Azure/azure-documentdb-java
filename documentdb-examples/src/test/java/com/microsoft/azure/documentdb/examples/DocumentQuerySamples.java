@@ -167,8 +167,6 @@ public class DocumentQuerySamples
         while (remainingPageSize.get() > 0) {
             if (docIterator.hasNext()) {
                 String activityId = queryResults.getActivityId();
-                String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
-                Document doc = docIterator.next();
 
                 // If activityId changed it means we are on the first document of a new page
                 // If so, updating the continuations and logging ActivityId and headers
@@ -183,15 +181,29 @@ public class DocumentQuerySamples
                     System.out.println("-------------");
                 }
 
+                Document doc = docIterator.next();
+                String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
+
                 // If we are still on the same PKRangeId from which documents were served
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
 
                 // Edit: _rid ordering guarantee doesn't hold across pages leading to missing records
                 // No in-built way to detect last processed document in the v2 SDK like OFFSET
-                if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
+
+                if (currentPkRangeId == null) {
+                    System.out.println("currentPkRangeId is null");
+                    docs.add(doc);
+
+                    lastResourceId = doc.getResourceId();
+                    lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
+
+                    remainingPageSize.decrementAndGet();
+                }
+                else if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
                     || skipDocumentsIncludingResourceId == null
-                    || uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())) {
+                    //|| uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())
+                    || doc.getResourceId().compareTo(skipDocumentsIncludingResourceId) > 0) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
@@ -271,6 +283,8 @@ public class DocumentQuerySamples
         uniqueResourceIds.clear();
 
         System.out.println("TOTAL DOC COUNT: " + totalCount);
+
+        // DISCLAIMER: uniqueDocCount is only used for testing purposes
         System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
     }
 
