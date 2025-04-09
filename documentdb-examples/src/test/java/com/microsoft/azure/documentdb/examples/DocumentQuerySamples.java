@@ -67,7 +67,7 @@ public class DocumentQuerySamples
         // create client
         ConnectionPolicy policy = new ConnectionPolicy();
         policy.setConnectionMode(ConnectionMode.Gateway);
-        client = new DocumentClient(AccountCredentialsNew.HOST, AccountCredentialsNew.MASTER_KEY, policy, null);
+        client = new DocumentClient(AccountCredentials.HOST, AccountCredentials.MASTER_KEY, policy, null);
 
         // removes the database "exampleDB" (if exists)
         //deleteDatabase();
