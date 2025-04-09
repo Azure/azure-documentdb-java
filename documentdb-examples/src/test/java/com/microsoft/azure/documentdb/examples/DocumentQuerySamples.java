@@ -243,6 +243,8 @@ public class DocumentQuerySamples
 
         applyCorrelatedActivityIdViaReflection(UUID.randomUUID().toString());
         String ct = null;
+
+        // DISCLAIMER: Sample query used for testing purposes only - modify as needed
         String whereClause = "c.expectedProcessTime >= '2019-06-01T00:00' AND c.expectedProcessTime <= '2039-06-01T00:00'";
 
         int totalCount = 0;
