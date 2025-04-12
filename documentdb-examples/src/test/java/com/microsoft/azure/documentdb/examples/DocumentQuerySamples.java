@@ -132,7 +132,7 @@ public class DocumentQuerySamples
 
         List<Document> docs = new ArrayList<>();
         final AtomicInteger remainingPageSize = new AtomicInteger(pageSize);
-        String skipDocumentsIncludingResourceId = null;
+        String skipDocumentsIncludingResourceIdBigIntStr = null;
         BigInteger skipDocumentsIncludingResourceIdBigInt = null;
         String skipDocumentsPkRangeId = null;
         FeedOptions options = new FeedOptions();
@@ -146,9 +146,9 @@ public class DocumentQuerySamples
             String cosmosContinuationToken = parseCosmosContinuation(continuationFragments[0]);
             nextPageContinuation = cosmosContinuationToken;
             options.setRequestContinuation(cosmosContinuationToken);
-            skipDocumentsIncludingResourceId = continuationFragments.length == 3 ? continuationFragments[1] : null;
-            skipDocumentsIncludingResourceIdBigInt = skipDocumentsIncludingResourceId != null
-                    ? new BigInteger(skipDocumentsIncludingResourceId)
+            skipDocumentsIncludingResourceIdBigIntStr = continuationFragments.length == 3 ? continuationFragments[1] : null;
+            skipDocumentsIncludingResourceIdBigInt = skipDocumentsIncludingResourceIdBigIntStr != null
+                    ? new BigInteger(skipDocumentsIncludingResourceIdBigIntStr)
                     : null;
             skipDocumentsPkRangeId = continuationFragments.length == 3 ? continuationFragments[2] : null;
         }
@@ -189,7 +189,7 @@ public class DocumentQuerySamples
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
                 if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
-                    || skipDocumentsIncludingResourceId == null
+                    || skipDocumentsIncludingResourceIdBigIntStr == null
                     || skipDocumentsIncludingResourceIdBigInt.compareTo(currentDocumentRidAsBigInt) < 0) {
 
                     remainingPageSize.decrementAndGet();
