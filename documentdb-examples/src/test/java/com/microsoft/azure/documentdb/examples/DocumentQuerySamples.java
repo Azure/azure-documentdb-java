@@ -24,19 +24,16 @@
 package com.microsoft.azure.documentdb.examples;
 
 import java.lang.reflect.Field;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -131,14 +128,12 @@ public class DocumentQuerySamples
     private Page queryCosmosWithPagination(
         String whereClause,
         String ct, // Format: <CosmosContinuation>|PKRangeIdOfLastDocOnPreviousPage|_rid-OfLastDocOnPreviousPage
-        int pageSize,
-        ConcurrentHashMap<String, Set<String>> uniqueResourceIds) /* 33 */ {
-
-        System.out.println("------------Inside queryCosmosWithPagination-----------");
+        int pageSize) {
 
         List<Document> docs = new ArrayList<>();
         final AtomicInteger remainingPageSize = new AtomicInteger(pageSize);
         String skipDocumentsIncludingResourceId = null;
+        BigInteger skipDocumentsIncludingResourceIdBigInt = null;
         String skipDocumentsPkRangeId = null;
         FeedOptions options = new FeedOptions();
         options.setEnableCrossPartitionQuery(true);
@@ -152,6 +147,9 @@ public class DocumentQuerySamples
             nextPageContinuation = cosmosContinuationToken;
             options.setRequestContinuation(cosmosContinuationToken);
             skipDocumentsIncludingResourceId = continuationFragments.length == 3 ? continuationFragments[1] : null;
+            skipDocumentsIncludingResourceIdBigInt = skipDocumentsIncludingResourceId != null
+                    ? new BigInteger(skipDocumentsIncludingResourceId)
+                    : null;
             skipDocumentsPkRangeId = continuationFragments.length == 3 ? continuationFragments[2] : null;
         }
         String sqlQuery = whereClause != null
@@ -167,16 +165,15 @@ public class DocumentQuerySamples
         while (remainingPageSize.get() > 0) {
             if (docIterator.hasNext()) {
                 String activityId = queryResults.getActivityId();
-
                 // If activityId changed it means we are on the first document of a new page
                 // If so, updating the continuations and logging ActivityId and headers
-                if (!Objects.equals(activityId, previousActivityId)) {
+                if (activityId != previousActivityId) {
                     previousActivityId = activityId;
                     System.out.println("New FeedResponse ActivityId " + activityId);
                     currentPageContinuation = nextPageContinuation;
                     nextPageContinuation = queryResults.getResponseContinuation();
-                    System.out.println("New FeedResponse Continuation " + nextPageContinuation);
-                    System.out.println("New FeedResponse CurrentContinuation " + currentPageContinuation);
+                    System.out.println("New FeedResponse Continuation " + currentPageContinuation);
+                    System.out.println("New FeedResponse CurrentContinuation " + nextPageContinuation);
                     System.out.println("New FeedResponse Headers " + queryResults.getResponseHeaders());
                     System.out.println("-------------");
                 }
@@ -184,44 +181,26 @@ public class DocumentQuerySamples
                 Document doc = docIterator.next();
                 String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
 
+                String documentRid = doc.getResourceId();
+                BigInteger currentDocumentRidAsBigInt = parseAsBigInt(documentRid);
+                String currentDocumentRidAsBigIntString = currentDocumentRidAsBigInt.toString();
+
                 // If we are still on the same PKRangeId from which documents were served
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
-
-                // Edit: _rid ordering guarantee doesn't hold across pages leading to missing records
-                // No in-built way to detect last processed document in the v2 SDK like OFFSET
-
                 if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
                     || skipDocumentsIncludingResourceId == null
-                    || uniqueResourceIds.get(currentPkRangeId) != null && !uniqueResourceIds.get(currentPkRangeId).contains(doc.getResourceId())
-                    /*|| doc.getResourceId().compareTo(skipDocumentsIncludingResourceId*) > 0*/) {
+                    || skipDocumentsIncludingResourceIdBigInt.compareTo(currentDocumentRidAsBigInt) < 0) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
-
-                    uniqueResourceIds.compute(currentPkRangeId, (k, v) -> {
-
-                        if (v == null) {
-                            v = new HashSet<>();
-                        }
-
-                        v.add(doc.getResourceId());
-
-                        return v;
-                    });
-
-                    lastResourceId = doc.getResourceId();
+                    lastResourceId = currentDocumentRidAsBigIntString;
                     lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
                 } else {
-
-                    // If relied on _rid ordering, unprocessed documents also get skipped as _rid ordering is not guaranteed
-                    // docs.add(doc);
-
                     System.out.println(
                         "Skipping doc " + doc.getId() + "("
-                            + currentPkRangeId + "|" + doc.getResourceId()
-                            + ") because it was returned on previous page already");
-
+                            + currentPkRangeId + "|" + doc.getResourceId() + "|" + currentDocumentRidAsBigIntString +
+                            ") because it was returned on previous page already");
                 }
             } else {
                 // Query has been fully drained - just return the docs collected so far
@@ -238,10 +217,6 @@ public class DocumentQuerySamples
             + "|"
             + lastResourceIdPkRangeId;
 
-
-        System.out.println("------------Exit queryCosmosWithPagination-----------");
-
-
         return new Page(docs, returnContinuation);
     }
 
@@ -257,25 +232,20 @@ public class DocumentQuerySamples
         int totalCount = 0;
         Set<String> uniqueDocCount = new java.util.HashSet<>();
 
-        // WARNING: Can grow in an unbounded manner
-        ConcurrentHashMap<String, Set<String>> uniqueResourceIds = new ConcurrentHashMap<>();
-
         do {
 
-            Page page = queryCosmosWithPagination(whereClause, ct, 20, uniqueResourceIds);
+            Page page = queryCosmosWithPagination(whereClause, ct, 10);
             System.out.println("CONTINUATION: " + page.getContinuation());
             System.out.println(page.getDocs().size() + " docs");
             totalCount += page.getDocs().size();
             for (Document doc : page.getDocs()) {
-                System.out.println("  - " + "(" + doc.getId() + ", " + doc.getResourceId() + ")");
+                System.out.println("  - " + "(" + doc.getId() + ", " + doc.getResourceId() + ")");;
                 uniqueDocCount.add(doc.getId());
             }
 
             ct = page.getContinuation();
             System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
         } while (ct != null );
-
-        uniqueResourceIds.clear();
 
         System.out.println("TOTAL DOC COUNT: " + totalCount);
 
@@ -294,5 +264,28 @@ public class DocumentQuerySamples
 
         public List<Document> getDocs() { return this.docs; }
         public String getContinuation() { return this.continuation; }
+    }
+
+    private static BigInteger parseAsBigInt(String documentRid) {
+
+        try {
+
+            documentRid = documentRid.replace('-', '/');
+
+            byte[] decodedBytes = Base64.getDecoder().decode(documentRid);
+
+            // Convert bytes to BigInteger
+            BigInteger bigInteger = new BigInteger(1, decodedBytes);
+
+            // Convert BigInteger to unsigned long string
+            String unsignedLongString = bigInteger.toString();
+
+            System.out.println("Unsigned long representation: " + unsignedLongString);
+
+            return bigInteger;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Could not parse big int representation: " + documentRid);
+            throw e;
+        }
     }
 }
