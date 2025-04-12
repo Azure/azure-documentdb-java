@@ -23,18 +23,16 @@
 
 package com.microsoft.azure.documentdb.examples;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-
 import java.lang.reflect.Field;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
@@ -42,33 +40,21 @@ import java.util.regex.Pattern;
 import com.microsoft.azure.documentdb.ConnectionMode;
 import com.microsoft.azure.documentdb.ConnectionPolicy;
 import com.microsoft.azure.documentdb.FeedResponse;
-import com.microsoft.azure.documentdb.QueryIterable;
 import com.microsoft.azure.documentdb.internal.GatewayProxy;
-import org.apache.commons.lang3.RandomUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.microsoft.azure.documentdb.DataType;
-import com.microsoft.azure.documentdb.Database;
 import com.microsoft.azure.documentdb.Document;
 import com.microsoft.azure.documentdb.DocumentClient;
 import com.microsoft.azure.documentdb.DocumentClientException;
-import com.microsoft.azure.documentdb.DocumentCollection;
 import com.microsoft.azure.documentdb.FeedOptions;
-import com.microsoft.azure.documentdb.IncludedPath;
-import com.microsoft.azure.documentdb.Index;
-import com.microsoft.azure.documentdb.IndexingPolicy;
-import com.microsoft.azure.documentdb.PartitionKeyDefinition;
-import com.microsoft.azure.documentdb.RequestOptions;
 
 
 public class DocumentQuerySamples
 {
     private final String databaseId = "CRI";
     private final String collectionId = "AdobeQuery";
-    private final String partitionKeyFieldName = "city";
-    private final String partitionKeyPath = "/" + partitionKeyFieldName;
     private final String collectionLink = String.format("/dbs/%s/colls/%s", databaseId, collectionId);
 
     private DocumentClient client;
@@ -146,7 +132,8 @@ public class DocumentQuerySamples
 
         List<Document> docs = new ArrayList<>();
         final AtomicInteger remainingPageSize = new AtomicInteger(pageSize);
-        String skipDocumentsIncludingResourceId = null;
+        String skipDocumentsIncludingResourceIdBigIntStr = null;
+        BigInteger skipDocumentsIncludingResourceIdBigInt = null;
         String skipDocumentsPkRangeId = null;
         FeedOptions options = new FeedOptions();
         options.setEnableCrossPartitionQuery(true);
@@ -159,7 +146,10 @@ public class DocumentQuerySamples
             String cosmosContinuationToken = parseCosmosContinuation(continuationFragments[0]);
             nextPageContinuation = cosmosContinuationToken;
             options.setRequestContinuation(cosmosContinuationToken);
-            skipDocumentsIncludingResourceId = continuationFragments.length == 3 ? continuationFragments[1] : null;
+            skipDocumentsIncludingResourceIdBigIntStr = continuationFragments.length == 3 ? continuationFragments[1] : null;
+            skipDocumentsIncludingResourceIdBigInt = skipDocumentsIncludingResourceIdBigIntStr != null
+                    ? new BigInteger(skipDocumentsIncludingResourceIdBigIntStr)
+                    : null;
             skipDocumentsPkRangeId = continuationFragments.length == 3 ? continuationFragments[2] : null;
         }
         String sqlQuery = whereClause != null
@@ -191,22 +181,26 @@ public class DocumentQuerySamples
                 Document doc = docIterator.next();
                 String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
 
+                String documentRid = doc.getResourceId();
+                BigInteger currentDocumentRidAsBigInt = parseAsBigInt(documentRid);
+                String currentDocumentRidAsBigIntString = currentDocumentRidAsBigInt.toString();
+
                 // If we are still on the same PKRangeId from which documents were served
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
                 if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
-                    || skipDocumentsIncludingResourceId == null
-                    || skipDocumentsIncludingResourceId.compareTo(doc.getResourceId()) < 0) {
+                    || skipDocumentsIncludingResourceIdBigIntStr == null
+                    || skipDocumentsIncludingResourceIdBigInt.compareTo(currentDocumentRidAsBigInt) < 0) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
-                    lastResourceId = doc.getResourceId();
+                    lastResourceId = currentDocumentRidAsBigIntString;
                     lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
                 } else {
                     System.out.println(
                         "Skipping doc " + doc.getId() + "("
-                            + currentPkRangeId + "|" + doc.getResourceId()
-                            + ") because it was returned on previous page already");
+                            + currentPkRangeId + "|" + doc.getResourceId() + "|" + currentDocumentRidAsBigIntString +
+                            ") because it was returned on previous page already");
                 }
             } else {
                 // Query has been fully drained - just return the docs collected so far
@@ -227,25 +221,36 @@ public class DocumentQuerySamples
     }
 
     @Test
-    public void simpleDocumentQuery() throws DocumentClientException {
+    public void simpleDocumentQuery() {
 
         applyCorrelatedActivityIdViaReflection(UUID.randomUUID().toString());
         String ct = null;
 
+        // DISCLAIMER: Sample query used for testing purposes only - modify as needed
+        String whereClause = "c.expectedProcessTime >= '2019-06-01T00:00' AND c.expectedProcessTime <= '2039-06-01T00:00'";
+
         int totalCount = 0;
+        Set<String> uniqueDocCount = new java.util.HashSet<>();
+
         do {
-            Page page = queryCosmosWithPagination(null, ct, 2);
+
+            Page page = queryCosmosWithPagination(whereClause, ct, 10);
             System.out.println("CONTINUATION: " + page.getContinuation());
             System.out.println(page.getDocs().size() + " docs");
             totalCount += page.getDocs().size();
             for (Document doc : page.getDocs()) {
-                System.out.println("  - " + doc.getId());
+                System.out.println("  - " + "(" + doc.getId() + ", " + doc.getResourceId() + ")");;
+                uniqueDocCount.add(doc.getId());
             }
 
             ct = page.getContinuation();
+            System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
         } while (ct != null );
 
         System.out.println("TOTAL DOC COUNT: " + totalCount);
+
+        // DISCLAIMER: uniqueDocCount is only used for testing purposes
+        System.out.println("TOTAL UNIQUE DOC COUNT: " + uniqueDocCount.size());
     }
 
     private static class Page {
@@ -259,5 +264,28 @@ public class DocumentQuerySamples
 
         public List<Document> getDocs() { return this.docs; }
         public String getContinuation() { return this.continuation; }
+    }
+
+    private static BigInteger parseAsBigInt(String documentRid) {
+
+        try {
+
+            documentRid = documentRid.replace('-', '/');
+
+            byte[] decodedBytes = Base64.getDecoder().decode(documentRid);
+
+            // Convert bytes to BigInteger
+            BigInteger bigInteger = new BigInteger(1, decodedBytes);
+
+            // Convert BigInteger to unsigned long string
+            String unsignedLongString = bigInteger.toString();
+
+            System.out.println("Unsigned long representation: " + unsignedLongString);
+
+            return bigInteger;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Could not parse big int representation: " + documentRid);
+            throw e;
+        }
     }
 }
