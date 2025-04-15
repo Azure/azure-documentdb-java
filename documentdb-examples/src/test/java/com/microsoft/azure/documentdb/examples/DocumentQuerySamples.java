@@ -24,7 +24,8 @@
 package com.microsoft.azure.documentdb.examples;
 
 import java.lang.reflect.Field;
-import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -132,8 +133,7 @@ public class DocumentQuerySamples
 
         List<Document> docs = new ArrayList<>();
         final AtomicInteger remainingPageSize = new AtomicInteger(pageSize);
-        String skipDocumentsIncludingResourceIdBigIntStr = null;
-        BigInteger skipDocumentsIncludingResourceIdBigInt = null;
+        DocumentResourceId skipDocumentsIncludingResourceId = null;
         String skipDocumentsPkRangeId = null;
         FeedOptions options = new FeedOptions();
         options.setEnableCrossPartitionQuery(true);
@@ -146,10 +146,11 @@ public class DocumentQuerySamples
             String cosmosContinuationToken = parseCosmosContinuation(continuationFragments[0]);
             nextPageContinuation = cosmosContinuationToken;
             options.setRequestContinuation(cosmosContinuationToken);
-            skipDocumentsIncludingResourceIdBigIntStr = continuationFragments.length == 3 ? continuationFragments[1] : null;
-            skipDocumentsIncludingResourceIdBigInt = skipDocumentsIncludingResourceIdBigIntStr != null
-                    ? new BigInteger(skipDocumentsIncludingResourceIdBigIntStr)
-                    : null;
+
+            String skipDocumentsIncludingResourceIdText = continuationFragments.length == 3 ? continuationFragments[1] : null;
+            skipDocumentsIncludingResourceId = skipDocumentsIncludingResourceIdText != null
+                ? DocumentResourceId.parse(skipDocumentsIncludingResourceIdText)
+                : null;
             skipDocumentsPkRangeId = continuationFragments.length == 3 ? continuationFragments[2] : null;
         }
         String sqlQuery = whereClause != null
@@ -182,24 +183,23 @@ public class DocumentQuerySamples
                 String currentPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
 
                 String documentRid = doc.getResourceId();
-                BigInteger currentDocumentRidAsBigInt = parseAsBigInt(documentRid);
-                String currentDocumentRidAsBigIntString = currentDocumentRidAsBigInt.toString();
+                DocumentResourceId currentDocumentRid = DocumentResourceId.parse(documentRid);
 
                 // If we are still on the same PKRangeId from which documents were served
                 // on the previous page (part of Continuation) then  skip all
                 // docs with _rid <= the rid of the last document returned on the previous page
                 if (!currentPkRangeId.equals(skipDocumentsPkRangeId)
-                    || skipDocumentsIncludingResourceIdBigIntStr == null
-                    || skipDocumentsIncludingResourceIdBigInt.compareTo(currentDocumentRidAsBigInt) < 0) {
+                    || skipDocumentsIncludingResourceId == null
+                    || DocumentResourceId.compareTo(skipDocumentsIncludingResourceId, currentDocumentRid) < 0) {
 
                     remainingPageSize.decrementAndGet();
                     docs.add(doc);
-                    lastResourceId = currentDocumentRidAsBigIntString;
+                    lastResourceId = documentRid;
                     lastResourceIdPkRangeId = queryResults.getResponseHeaders().get("x-ms-documentdb-partitionkeyrangeid");
                 } else {
                     System.out.println(
                         "Skipping doc " + doc.getId() + "("
-                            + currentPkRangeId + "|" + doc.getResourceId() + "|" + currentDocumentRidAsBigIntString +
+                            + currentPkRangeId + "|" + doc.getResourceId() + "|" + documentRid +
                             ") because it was returned on previous page already");
                 }
             } else {
@@ -266,26 +266,127 @@ public class DocumentQuerySamples
         public String getContinuation() { return this.continuation; }
     }
 
-    private static BigInteger parseAsBigInt(String documentRid) {
+    private static class DocumentResourceId {
+        private final int database;
+        private final int documentCollection;
+        private final long document;
 
-        try {
+        private DocumentResourceId(int database, int documentCollection, long document) {
+            this.database = database;
+            this.documentCollection = documentCollection;
+            this.document = document;
+        }
 
-            documentRid = documentRid.replace('-', '/');
+        private static byte[] verifyAndConvert(String id) {
+            byte[] buffer = null;
 
-            byte[] decodedBytes = Base64.getDecoder().decode(documentRid);
+            try {
+                buffer = org.apache.commons.codec.binary.Base64.decodeBase64(id.replace('-', '/'));
+            } catch (Exception e) {
+                System.out.println("Unable to parse ResourceId from id '" + id + "', Exception: " + e);
+                return null;
+            }
 
-            // Convert bytes to BigInteger
-            BigInteger bigInteger = new BigInteger(1, decodedBytes);
+            if (buffer == null) {
+                return null;
+            }
 
-            // Convert BigInteger to unsigned long string
-            String unsignedLongString = bigInteger.toString();
+            if (buffer.length != 16) {
+                System.out.println("Buffer should have size of exactly 16 bytes.");
+                return null;
+            }
 
-            System.out.println("Unsigned long representation: " + unsignedLongString);
+            return buffer;
+        }
 
-            return bigInteger;
-        } catch (IllegalArgumentException e) {
-            System.out.println("Could not parse big int representation: " + documentRid);
-            throw e;
+        // Copy the bytes provided with a for loop, faster when there are only a few
+        // bytes to copy
+        private static void blockCopy(byte[] src, int srcOffset, byte[] dst, int dstOffset, int count) {
+            int stop = srcOffset + count;
+            for (int i = srcOffset; i < stop; i++)
+                dst[dstOffset++] = src[i];
+        }
+
+        public static int compareTo(DocumentResourceId left, DocumentResourceId right) {
+            if (left == null) {
+                throw new IllegalArgumentException("Argument 'left' must not be null.");
+            }
+
+            if (right == null) {
+                throw new IllegalArgumentException("Argument 'right' must not be null.");
+            }
+
+            if (left.database != right.database) {
+                throw new IllegalArgumentException(
+                    "Both resource ids must be for the same database to allow comparing them.");
+            }
+
+            if (left.documentCollection != right.documentCollection) {
+                throw new IllegalArgumentException(
+                    "Both resource ids must be for the same collection to allow comparing them.");
+            }
+
+            return Long.compare(left.document, right.document);
+        }
+
+        public static DocumentResourceId parse(String id) {
+            DocumentResourceId rid = null;
+
+            try {
+                if (id == null || id.isBlank()) {
+                    return null;
+                }
+
+                if (id.length() % 4 != 0) {
+                    // our ResourceId string is always padded
+                    return null;
+                }
+
+                byte[] buffer = DocumentResourceId.verifyAndConvert(id);
+
+                if (buffer == null) {
+                    return null;
+                }
+
+                int database;
+                int collection;
+                long document;
+
+                database = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).getInt();
+
+                byte[] temp = new byte[4];
+                DocumentResourceId.blockCopy(buffer, 4, temp, 0, 4);
+
+                boolean isCollection = (temp[0] & (128)) > 0;
+
+                if (!isCollection) {
+                    System.out.println("Wrong resourceId - the resource id should be for a collection sub-resource.");
+                    return null;
+                }
+
+                collection = ByteBuffer.wrap(temp).order(ByteOrder.LITTLE_ENDIAN).getInt();
+
+                byte[] subCollRes = new byte[8];
+                DocumentResourceId.blockCopy(buffer, 8, subCollRes, 0, 8);
+
+                long subCollectionResource = ByteBuffer
+                    .wrap(buffer, 8, 8)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .getLong();
+
+                // if it is not for a document resource fail
+                if ((subCollRes[7] >> 4) != (byte) 0x0) {
+                    System.out.println("Wrong resourceId - the resource id should be for a document.");
+                    return null;
+                }
+
+                document = subCollectionResource;
+
+                return new DocumentResourceId(database, collection, document);
+            } catch (Exception e) {
+                System.out.println("Unable to parse ResourceId '" + id + "' - Exception: " + e);
+                return null;
+            }
         }
     }
 }
